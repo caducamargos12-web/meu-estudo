@@ -87,31 +87,42 @@ Responda APENAS JSON válido sem markdown:
       max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }]
     }),
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(45000)
   });
   const data = await res.json();
   const raw = data.content?.map(i => i.text || '').join('').replace(/```json|```/g, '').trim();
   return JSON.parse(raw);
 }
 
-// ── rota API ────────────────────────────────────────────────────────────────
+// ── rota API – streaming de resultados ───────────────────────────────────────
 app.get('/api/today', async (req, res) => {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const dayKey = req.query.day || dayMap[new Date().getDay()] || 'seg';
   const materias = GRADE[dayKey];
   if (!materias) return res.json({ error: 'Dia inválido' });
 
-  const results = await Promise.all(materias.map(async (item) => {
+  // SSE para enviar cada matéria conforme fica pronta
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  res.write(`data: ${JSON.stringify({ type:'start', day:dayKey, dayLabel:DIAS_PT[dayKey], total:materias.length })}\n\n`);
+
+  for (let i = 0; i < materias.length; i++) {
+    const item = materias[i];
+    res.write(`data: ${JSON.stringify({ type:'loading', index:i, materia:item.m })}\n\n`);
     const blogText = await fetchBlog(item.url);
     try {
       const ai = await processWithAI(item.m, item.p, blogText);
-      return { ...item, ...ai, ok: true };
-    } catch (e) {
-      return { ...item, ok: false, ultima_aula: '—', deveres: [], resumo: 'Erro ao processar.', questoes: [] };
+      res.write(`data: ${JSON.stringify({ type:'result', index:i, item:{ ...item, ...ai, ok:true } })}\n\n`);
+    } catch {
+      res.write(`data: ${JSON.stringify({ type:'result', index:i, item:{ ...item, ok:false, ultima_aula:'—', deveres:[], resumo:'Erro ao processar.', questoes:[] } })}\n\n`);
     }
-  }));
+  }
 
-  res.json({ day: dayKey, dayLabel: DIAS_PT[dayKey], materias: results });
+  res.write(`data: ${JSON.stringify({ type:'done' })}\n\n`);
+  res.end();
 });
 
 const PORT = process.env.PORT || 3000;

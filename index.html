@@ -64,6 +64,8 @@
   .section-title{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
   .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
   .bottom-note{text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:24px;letter-spacing:1px}
+  .loading-card{background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:18px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px}
+  .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
   .error-box{background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid color-mix(in srgb,var(--red) 25%,transparent);border-radius:10px;padding:14px 16px;text-align:center;font-size:13px;color:var(--red)}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
@@ -188,31 +190,60 @@ function renderCard(item, idx){
   </div>`;
 }
 
-async function loadDay(dayKey){
+function loadDay(dayKey){
   selectedDay=dayKey;
   setActiveBtn(dayKey);
-  document.getElementById('main').innerHTML=`
-    <div class="loading-screen">
-      <div class="big-spinner"></div>
-      <div class="loading-text">Lendo blogs dos professores<br>e gerando resumos com IA…<br><br>Pode levar 20–30 segundos</div>
-    </div>`;
   document.getElementById('subtitle').textContent='Carregando…';
+  const main=document.getElementById('main');
+  main.innerHTML=`<div class="section-title" id="sec-title">Carregando…</div><div id="cards"></div>`;
 
-  try{
-    const res=await fetch(`/api/today?day=${dayKey}`);
-    const data=await res.json();
-    if(data.error)throw new Error(data.error);
+  const evtSource=new EventSource(`/api/today?day=${dayKey}`);
+  let total=0;let done=0;
 
-    document.getElementById('subtitle').textContent=`${data.dayLabel} — ${data.materias.length} matérias`;
-    const dayLabel=DIAS.find(d=>d.k===dayKey)?.l||'';
-    document.getElementById('main').innerHTML=
-      `<div class="section-title">Matérias — ${dayLabel}</div>`+
-      data.materias.map((item,i)=>renderCard(item,i)).join('')+
-      `<div class="bottom-note">CNS Anglo · atualizado ${new Date().toLocaleString('pt-BR')}</div>`;
-  }catch(e){
-    document.getElementById('main').innerHTML=
-      `<div class="error-box">Erro ao carregar: ${e.message}<br><br><button onclick="loadDay('${dayKey}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Tentar novamente</button></div>`;
-  }
+  evtSource.onmessage=function(e){
+    const msg=JSON.parse(e.data);
+
+    if(msg.type==='start'){
+      total=msg.total;
+      document.getElementById('sec-title').textContent=`Matérias — ${msg.dayLabel}`;
+      document.getElementById('subtitle').textContent=`${msg.dayLabel} — carregando…`;
+      // cria placeholders
+      const cards=document.getElementById('cards');
+      cards.innerHTML='';
+      for(let i=0;i<total;i++){
+        const div=document.createElement('div');
+        div.id=`card-slot-${i}`;
+        div.innerHTML=`<div class="loading-card"><div class="spinner"></div><span>Aguardando…</span></div>`;
+        cards.appendChild(div);
+      }
+    }
+
+    if(msg.type==='loading'){
+      const slot=document.getElementById(`card-slot-${msg.index}`);
+      if(slot)slot.innerHTML=`<div class="loading-card"><div class="spinner"></div><span>Gerando ${msg.materia}…</span></div>`;
+    }
+
+    if(msg.type==='result'){
+      done++;
+      const slot=document.getElementById(`card-slot-${msg.index}`);
+      if(slot)slot.innerHTML=renderCard(msg.item,msg.index);
+      document.getElementById('subtitle').textContent=`${done}/${total} matérias prontas`;
+    }
+
+    if(msg.type==='done'){
+      evtSource.close();
+      document.getElementById('subtitle').textContent=`${total} matérias carregadas`;
+      document.getElementById('cards').insertAdjacentHTML('beforeend',
+        `<div class="bottom-note">CNS Anglo · atualizado ${new Date().toLocaleString('pt-BR')}</div>`);
+    }
+  };
+
+  evtSource.onerror=function(){
+    evtSource.close();
+    if(done===0){
+      main.innerHTML=`<div class="error-box">Erro ao carregar.<br><br><button onclick="loadDay('${dayKey}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Tentar novamente</button></div>`;
+    }
+  };
 }
 
 buildNav();
