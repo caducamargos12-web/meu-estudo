@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu Estudo – 3º Ano CNS Anglo</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0c0f1a;--surface:#131929;--card:#1a2236;--border:#243050;--accent:#4f9eff;--accent2:#7c5cfc;--green:#2ecc8a;--yellow:#f5c842;--red:#ff5f6d;--text:#e4eaf8;--muted:#6a7a9b;--mono:'Space Mono',monospace;--sans:'Syne',sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+  header{background:linear-gradient(135deg,#131929,#0c0f1a);border-bottom:1px solid var(--border);padding:18px 20px 14px;position:sticky;top:0;z-index:100}
+  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .logo{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:2px;text-transform:uppercase}
+  #clock{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  h1{font-size:20px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+  .day-nav{display:flex;gap:6px;overflow-x:auto;padding:12px 20px;scrollbar-width:none;border-bottom:1px solid var(--border)}
+  .day-nav::-webkit-scrollbar{display:none}
+  .day-btn{flex-shrink:0;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+  .day-btn:hover{border-color:var(--accent);color:var(--text)}
+  .day-btn.active{background:var(--accent);border-color:var(--accent);color:#0c0f1a}
+  .day-btn.today{border-color:var(--green);color:var(--green)}
+  .day-btn.today.active{background:var(--green);color:#0c0f1a}
+  main{padding:18px 20px 80px;max-width:680px;margin:0 auto}
+  .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:16px}
+  .big-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  .loading-text{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+  .subject-card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .card-top{height:3px;background:var(--color,var(--accent))}
+  .card-body{padding:16px}
+  .card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .card-icon{width:38px;height:38px;border-radius:9px;background:color-mix(in srgb,var(--color,var(--accent)) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .card-meta{flex:1}
+  .card-subject{font-size:16px;font-weight:700}
+  .card-teacher{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+  .section{border-radius:9px;padding:12px 14px;margin-bottom:10px}
+  .section-label{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+  .section-text{font-size:13px;line-height:1.65}
+  .sec-aula{background:var(--surface);border:1px solid var(--border)}
+  .sec-aula .section-label{color:var(--muted)}
+  .sec-deveres{background:color-mix(in srgb,var(--yellow) 7%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 22%,transparent)}
+  .sec-deveres .section-label{color:var(--yellow)}
+  .sec-resumo{background:color-mix(in srgb,var(--accent2) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent2) 22%,transparent)}
+  .sec-resumo .section-label{color:var(--accent2)}
+  .sec-quiz{background:color-mix(in srgb,var(--green) 7%,transparent);border:1px solid color-mix(in srgb,var(--green) 22%,transparent)}
+  .sec-quiz .section-label{color:var(--green)}
+  .dever-item{display:flex;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.4}
+  .dever-dot{color:var(--yellow);flex-shrink:0;margin-top:1px}
+  .quiz-q{margin-bottom:13px}
+  .quiz-enunciado{font-size:13px;font-weight:600;margin-bottom:7px;line-height:1.4}
+  .quiz-opts{display:flex;flex-direction:column;gap:5px}
+  .quiz-opt{padding:7px 11px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;text-align:left;color:var(--text);font-family:var(--sans);transition:all .12s}
+  .quiz-opt:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  .quiz-opt.correct{background:color-mix(in srgb,var(--green) 14%,transparent);border-color:var(--green);color:var(--green)}
+  .quiz-opt.wrong{background:color-mix(in srgb,var(--red) 14%,transparent);border-color:var(--red);color:var(--red)}
+  .quiz-opt:disabled{cursor:default}
+  .quiz-feedback{font-size:12px;margin-top:5px;padding:7px 10px;border-radius:6px;line-height:1.4}
+  .quiz-feedback.correct{background:color-mix(in srgb,var(--green) 9%,transparent);color:var(--green)}
+  .quiz-feedback.wrong{background:color-mix(in srgb,var(--red) 9%,transparent);color:var(--red)}
+  .score-row{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface);border-radius:8px;margin-top:8px;font-size:12px}
+  .score-label{color:var(--muted)}
+  .score-val{font-weight:700;font-size:14px;color:var(--green);margin-left:4px}
+  .section-title{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+  .bottom-note{text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:24px;letter-spacing:1px}
+  .error-box{background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid color-mix(in srgb,var(--red) 25%,transparent);border-radius:10px;padding:14px 16px;text-align:center;font-size:13px;color:var(--red)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-top">
+    <span class="logo">CNS Anglo · 3º Ano</span>
+    <span id="clock"></span>
+  </div>
+  <h1>Meu Estudo</h1>
+  <div class="subtitle" id="subtitle">Carregando matérias do dia…</div>
+</header>
+<div class="day-nav" id="dayNav"></div>
+<main id="main">
+  <div class="loading-screen">
+    <div class="big-spinner"></div>
+    <div class="loading-text">Lendo blogs dos professores<br>e gerando resumos com IA…<br><br>Pode levar 20–30 segundos</div>
+  </div>
+</main>
+
+<script>
+const DIAS=[{k:'seg',l:'Seg'},{k:'ter',l:'Ter'},{k:'qua',l:'Qua'},{k:'qui',l:'Qui'},{k:'sex',l:'Sex'}];
+const CORES=['#4f9eff','#7c5cfc','#2ecc8a','#f59e0b','#f472b6','#38bdf8','#a3e635','#fb923c'];
+const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','História':'📜','Química A':'⚗️','Física':'🔭','Linguística':'📝','Matemática A':'📐','Matemática B':'📊','Inglês':'🇺🇸','Biologia':'🧬','Química B':'🔬','Práticas/Red.':'✍️','Literatura':'📚','Sociologia':'🏛️'};
+const scores={};
+let selectedDay=null;
+
+function getTodayKey(){const d=new Date().getDay();return{1:'seg',2:'ter',3:'qua',4:'qui',5:'sex'}[d]||'seg'}
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+
+function buildNav(){
+  const today=getTodayKey();
+  const nav=document.getElementById('dayNav');
+  nav.innerHTML='';
+  DIAS.forEach(({k,l})=>{
+    const btn=document.createElement('button');
+    btn.className='day-btn'+(k===today?' today':'');
+    btn.textContent=l;btn.onclick=()=>loadDay(k);btn.id='btn-'+k;
+    nav.appendChild(btn);
+  });
+}
+
+function setActiveBtn(k){
+  document.querySelectorAll('.day-btn').forEach(b=>{
+    const isT=getTodayKey()===b.id.replace('btn-','');
+    b.className='day-btn'+(isT?' today':'');
+  });
+  document.getElementById('btn-'+k)?.classList.add('active');
+}
+
+function checkAnswer(cardId,qi,chosen,correta,explicacao){
+  document.querySelectorAll(`[id^="opt-${cardId}-${qi}-"]`).forEach(o=>{
+    o.disabled=true;
+    const k=o.id.split('-').pop();
+    if(k===correta)o.classList.add('correct');
+    else if(k===chosen&&chosen!==correta)o.classList.add('wrong');
+  });
+  const ok=chosen===correta;
+  document.getElementById(`fb-${cardId}-${qi}`).innerHTML=
+    `<div class="quiz-feedback ${ok?'correct':'wrong'}">${ok?'✅ Correto!':'❌ Errado.'} ${explicacao}</div>`;
+  if(!scores[cardId])scores[cardId]={a:0,t:0,v:new Set()};
+  if(!scores[cardId].v.has(qi)){scores[cardId].v.add(qi);scores[cardId].t++;if(ok)scores[cardId].a++;}
+  const el=document.getElementById('score-'+cardId);
+  if(el){const s=scores[cardId];el.innerHTML=`<span class="score-label">Placar:</span><span class="score-val">${s.a}/${s.t}</span>`;}
+}
+
+function renderCard(item, idx){
+  const cardId=`${selectedDay}-${idx}`;
+  const cor=CORES[idx%CORES.length];
+  const emoji=EMOJIS[item.m]||'📖';
+
+  const deveresHtml=item.deveres?.length
+    ?item.deveres.map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')
+    :`<div style="font-size:13px;color:var(--muted)">Nenhum dever registrado.</div>`;
+
+  const quizHtml=item.questoes?.length
+    ?item.questoes.map((q,qi)=>`
+      <div class="quiz-q">
+        <div class="quiz-enunciado">${qi+1}. ${q.enunciado}</div>
+        <div class="quiz-opts">
+          ${Object.entries(q.opcoes).map(([k,v])=>`
+            <button class="quiz-opt" id="opt-${cardId}-${qi}-${k}"
+              onclick="checkAnswer('${cardId}',${qi},'${k}','${q.correta}',\`${q.explicacao.replace(/`/g,"'")}\`)">
+              <strong>${k})</strong> ${v}
+            </button>`).join('')}
+        </div>
+        <div id="fb-${cardId}-${qi}"></div>
+      </div>`).join('')
+    :`<div style="font-size:13px;color:var(--muted)">Simulado não disponível.</div>`;
+
+  return `<div class="subject-card" style="--color:${cor}">
+    <div class="card-top"></div>
+    <div class="card-body">
+      <div class="card-header">
+        <div class="card-icon">${emoji}</div>
+        <div class="card-meta">
+          <div class="card-subject">${item.m}</div>
+          <div class="card-teacher">${item.p}</div>
+        </div>
+      </div>
+      <div class="section sec-aula">
+        <div class="section-label">📅 Última aula</div>
+        <div class="section-text">${item.ultima_aula||'—'}</div>
+      </div>
+      <div class="section sec-deveres">
+        <div class="section-label">⚡ Deveres</div>
+        ${deveresHtml}
+      </div>
+      <div class="section sec-resumo">
+        <div class="section-label">🤖 Resumo para o teste</div>
+        <div class="section-text">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
+      </div>
+      <div class="section sec-quiz">
+        <div class="section-label">📝 Simulado – 4 questões</div>
+        ${quizHtml}
+        <div class="score-row" id="score-${cardId}">
+          <span class="score-label">Responda as questões acima</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadDay(dayKey){
+  selectedDay=dayKey;
+  setActiveBtn(dayKey);
+  document.getElementById('main').innerHTML=`
+    <div class="loading-screen">
+      <div class="big-spinner"></div>
+      <div class="loading-text">Lendo blogs dos professores<br>e gerando resumos com IA…<br><br>Pode levar 20–30 segundos</div>
+    </div>`;
+  document.getElementById('subtitle').textContent='Carregando…';
+
+  try{
+    const res=await fetch(`/api/today?day=${dayKey}`);
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+
+    document.getElementById('subtitle').textContent=`${data.dayLabel} — ${data.materias.length} matérias`;
+    const dayLabel=DIAS.find(d=>d.k===dayKey)?.l||'';
+    document.getElementById('main').innerHTML=
+      `<div class="section-title">Matérias — ${dayLabel}</div>`+
+      data.materias.map((item,i)=>renderCard(item,i)).join('')+
+      `<div class="bottom-note">CNS Anglo · atualizado ${new Date().toLocaleString('pt-BR')}</div>`;
+  }catch(e){
+    document.getElementById('main').innerHTML=
+      `<div class="error-box">Erro ao carregar: ${e.message}<br><br><button onclick="loadDay('${dayKey}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Tentar novamente</button></div>`;
+  }
+}
+
+buildNav();
+updateClock();
+setInterval(updateClock,1000);
+loadDay(getTodayKey());
+</script>
+</body>
+</html>
