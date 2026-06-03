@@ -39,6 +39,15 @@ const GRADE = {
 
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
 
+// ── modelos em ordem de preferência ────────────────────────────────────────
+const MODELS = [
+  'claude-3-5-haiku-20241022',
+  'claude-3-haiku-20240307',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-sonnet-20240229',
+  'claude-3-opus-20240229',
+];
+
 // ── busca blog ──────────────────────────────────────────────────────────────
 async function fetchBlog(url) {
   try {
@@ -58,23 +67,12 @@ async function fetchBlog(url) {
   } catch { return null; }
 }
 
-// ── chama Anthropic API ─────────────────────────────────────────────────────
-async function processWithAI(materia, professor, blogText) {
-  const temConteudo = blogText && blogText.length > 50;
-  const prompt = `Você é um tutor do ensino médio brasileiro. Analise o conteúdo do blog do professor ${professor} de ${materia}.
-
-${temConteudo ? `CONTEÚDO DO BLOG:\n${blogText}` : `Sem conteúdo disponível. Use conhecimento geral de ${materia} para o 3º ano do EM.`}
-
-Responda APENAS JSON válido sem markdown:
-{
-  "ultima_aula": "data e conteúdo da última aula em 1-2 linhas",
-  "deveres": ["dever 1", "dever 2"],
-  "resumo": "resumo didático da última aula em 3-4 parágrafos para estudar para o teste",
-  "questoes": [
-    {"enunciado":"texto","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":"texto"}
-  ]
-}`;
-
+// ── chama Anthropic com fallback de modelos ─────────────────────────────────
+async function callAnthropic(prompt, modelIndex) {
+  modelIndex = modelIndex || 0;
+  if (modelIndex >= MODELS.length) throw new Error('Nenhum modelo disponível');
+  const model = MODELS[modelIndex];
+  console.log(`Tentando modelo: ${model}`);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -82,48 +80,57 @@ Responda APENAS JSON válido sem markdown:
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
-      messages: [{ role: 'user', content: prompt }]
-    }),
+    body: JSON.stringify({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
     signal: AbortSignal.timeout(45000)
   });
   const data = await res.json();
-  const raw = data.content?.map(i => i.text || '').join('').replace(/```json|```/g, '').trim();
+  if (data.type === 'error' && data.error && data.error.type === 'not_found_error') {
+    console.log(`Modelo ${model} indisponível, tentando próximo...`);
+    return callAnthropic(prompt, modelIndex + 1);
+  }
+  const raw = data.content.map(function(i){ return i.text || ''; }).join('').replace(/```json|```/g, '').trim();
   return JSON.parse(raw);
 }
 
-// ── rota API – streaming de resultados ───────────────────────────────────────
-app.get('/api/today', async (req, res) => {
+async function processWithAI(materia, professor, blogText) {
+  const temConteudo = blogText && blogText.length > 50;
+  const prompt = 'Você é um tutor do ensino médio brasileiro. Analise o conteúdo do blog do professor ' + professor + ' de ' + materia + '.\n\n' +
+    (temConteudo ? 'CONTEÚDO DO BLOG:\n' + blogText : 'Sem conteúdo disponível. Use conhecimento geral de ' + materia + ' para o 3º ano do EM.') +
+    '\n\nResponda APENAS JSON válido sem markdown:\n{"ultima_aula":"data e conteúdo da última aula em 1-2 linhas","deveres":["dever 1"],"resumo":"resumo didático em 3-4 parágrafos para estudar para o teste","questoes":[{"enunciado":"texto","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":"texto"}]}';
+  return callAnthropic(prompt, 0);
+}
+
+// ── rota SSE ────────────────────────────────────────────────────────────────
+app.get('/api/today', async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const dayKey = req.query.day || dayMap[new Date().getDay()] || 'seg';
   const materias = GRADE[dayKey];
   if (!materias) return res.json({ error: 'Dia inválido' });
 
-  // SSE para enviar cada matéria conforme fica pronta
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  res.write(`data: ${JSON.stringify({ type:'start', day:dayKey, dayLabel:DIAS_PT[dayKey], total:materias.length })}\n\n`);
+  res.write('data: ' + JSON.stringify({ type:'start', day:dayKey, dayLabel:DIAS_PT[dayKey], total:materias.length }) + '\n\n');
 
   for (let i = 0; i < materias.length; i++) {
     const item = materias[i];
-    res.write(`data: ${JSON.stringify({ type:'loading', index:i, materia:item.m })}\n\n`);
+    res.write('data: ' + JSON.stringify({ type:'loading', index:i, materia:item.m }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
       const ai = await processWithAI(item.m, item.p, blogText);
-      res.write(`data: ${JSON.stringify({ type:'result', index:i, item:{ ...item, ...ai, ok:true } })}\n\n`);
-    } catch {
-      res.write(`data: ${JSON.stringify({ type:'result', index:i, item:{ ...item, ok:false, ultima_aula:'—', deveres:[], resumo:'Erro ao processar.', questoes:[] } })}\n\n`);
+      const result = Object.assign({}, item, ai, { ok: true });
+      res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
+    } catch(e) {
+      console.log('Erro em ' + item.m + ': ' + e.message);
+      res.write('data: ' + JSON.stringify({ type:'result', index:i, item: Object.assign({}, item, { ok:false, ultima_aula:'—', deveres:[], resumo:'Erro: ' + e.message, questoes:[] }) }) + '\n\n');
     }
   }
 
-  res.write(`data: ${JSON.stringify({ type:'done' })}\n\n`);
+  res.write('data: ' + JSON.stringify({ type:'done' }) + '\n\n');
   res.end();
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Rodando na porta ${PORT}`));
+app.listen(PORT, function(){ console.log('Rodando na porta ' + PORT); });
