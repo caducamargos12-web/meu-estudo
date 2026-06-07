@@ -6,7 +6,6 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 // ── grade ──────────────────────────────────────────────────────────────────
-// filtro: quando 2 matérias dividem o mesmo blog, "filtro" diz qual pegar
 const GRADE = {
   seg: [
     { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html' },
@@ -46,7 +45,6 @@ const MODELS = [
   'claude-opus-4-8',
 ];
 
-// ── busca blog — agora pega o FIM da página (aulas recentes) ────────────────
 async function fetchBlog(url) {
   try {
     const res = await fetch(url, {
@@ -61,18 +59,15 @@ async function fetchBlog(url) {
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
       .replace(/\s{3,}/g, '\n').trim();
-    // pega os ÚLTIMOS 5000 caracteres — é onde ficam as aulas mais recentes
-    return texto.length > 5000 ? texto.slice(texto.length - 5000) : texto;
+    return texto.length > 6000 ? texto.slice(texto.length - 6000) : texto;
   } catch { return null; }
 }
 
-// ── data de hoje em DD/MM ───────────────────────────────────────────────────
 function hojeStr() {
   const d = new Date();
   return ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
 }
 
-// ── Anthropic com fallback ──────────────────────────────────────────────────
 async function callAnthropic(prompt, modelIndex) {
   modelIndex = modelIndex || 0;
   if (modelIndex >= MODELS.length) throw new Error('Nenhum modelo disponível');
@@ -84,7 +79,7 @@ async function callAnthropic(prompt, modelIndex) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] }),
     signal: AbortSignal.timeout(45000)
   });
   const data = await res.json();
@@ -101,23 +96,33 @@ async function processWithAI(materia, professor, blogText, filtro) {
 
   let instrucaoFiltro = '';
   if (filtro) {
-    instrucaoFiltro = '\n\nIMPORTANTE: Este blog contém DUAS disciplinas misturadas. Considere SOMENTE as aulas marcadas como "' + filtro + '". Ignore completamente as aulas da outra disciplina.';
+    instrucaoFiltro = '\n\nIMPORTANTE: Este blog mistura DUAS disciplinas. Considere SOMENTE as aulas de "' + filtro + '". Ignore a outra disciplina completamente.';
   }
 
-  const prompt = 'Você é um tutor do ensino médio brasileiro. Hoje é ' + hoje + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
+  const prompt = 'Você é um tutor do ensino médio brasileiro. Hoje é ' + hoje + ' (formato DD/MM/AAAA). Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
-    '\n\nREGRAS CRÍTICAS para identificar a última aula:\n' +
-    '1. Considere APENAS aulas com data IGUAL OU ANTERIOR a hoje (' + hoje + '). IGNORE aulas com datas futuras (planejamento do bimestre).\n' +
-    '2. Entre as aulas válidas, pegue a de data MAIS RECENTE (mais próxima de hoje).\n' +
-    '3. As datas podem aparecer como DD/MM ou DD/MM/AAAA. Assuma o ano atual se não houver ano.\n' +
-    (filtro ? '4. A última aula deve ser da disciplina "' + filtro + '", não da outra.\n' : '') +
-    '\n' + (temConteudo ? 'REGISTRO DE AULAS:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
-    '\n\nResponda APENAS JSON válido sem markdown:\n{"ultima_aula":"data e conteúdo da aula mais recente válida","deveres":["dever pendente"],"resumo":"resumo didático em 3-4 parágrafos para estudar para o teste, baseado NA ÚLTIMA AULA","questoes":[{"enunciado":"texto","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":"texto"}]}';
+    '\n\nIdentifique DUAS aulas:\n' +
+    '• ULTIMA AULA = a aula de data MAIS RECENTE que seja IGUAL OU ANTERIOR a hoje (' + hoje + '). É a matéria que cai no teste.\n' +
+    '• PROXIMA AULA = a primeira aula com data POSTERIOR a hoje, SE já estiver registrada no blog. Se não houver aula futura registrada, deixe os campos da próxima aula vazios.\n' +
+    '\nREGRAS:\n' +
+    '1. Datas podem ser DD/MM ou DD/MM/AAAA. Assuma o ano atual (2026) se faltar ano.\n' +
+    '2. NUNCA use uma aula futura como "última aula".\n' +
+    (filtro ? '3. Ambas as aulas devem ser de "' + filtro + '".\n' : '') +
+    '\n' + (temConteudo ? 'REGISTRO DE AULAS:\n' + blogText : 'Sem conteúdo disponível. Use conhecimento geral de ' + materia + ' para o 3º ano EM.') +
+    '\n\nResponda APENAS JSON válido sem markdown:\n' +
+    '{' +
+    '"ultima_aula":"data e conteúdo da última aula",' +
+    '"ultima_deveres":["dever da última aula"],' +
+    '"resumo":"resumo didático em 3-4 parágrafos da ÚLTIMA aula, para estudar para o teste",' +
+    '"questoes":[{"enunciado":"texto","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":"texto"}],' +
+    '"proxima_aula":"data e conteúdo da próxima aula, ou string vazia se não houver",' +
+    '"proxima_resumo":"breve resumo de 1-2 frases da próxima aula, ou vazio",' +
+    '"proxima_deveres":["dever da próxima aula, se houver"]' +
+    '}';
 
   return callAnthropic(prompt, 0);
 }
 
-// ── rota SSE ────────────────────────────────────────────────────────────────
 app.get('/api/today', async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const dayKey = req.query.day || dayMap[new Date().getDay()] || 'seg';
@@ -140,7 +145,7 @@ app.get('/api/today', async function(req, res) {
       const result = Object.assign({}, item, ai, { ok: true });
       res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
     } catch(e) {
-      res.write('data: ' + JSON.stringify({ type:'result', index:i, item: Object.assign({}, item, { ok:false, ultima_aula:'—', deveres:[], resumo:'Erro: ' + e.message, questoes:[] }) }) + '\n\n');
+      res.write('data: ' + JSON.stringify({ type:'result', index:i, item: Object.assign({}, item, { ok:false, ultima_aula:'—', ultima_deveres:[], resumo:'Erro: ' + e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] }) }) + '\n\n');
     }
   }
 

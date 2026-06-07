@@ -45,6 +45,8 @@
   .sec-resumo .section-label{color:var(--accent2)}
   .sec-quiz{background:color-mix(in srgb,var(--green) 7%,transparent);border:1px solid color-mix(in srgb,var(--green) 22%,transparent)}
   .sec-quiz .section-label{color:var(--green)}
+  .sec-proxima{background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
+  .sec-proxima .section-label{color:var(--accent)}
   .dever-item{display:flex;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.4}
   .dever-dot{color:var(--yellow);flex-shrink:0;margin-top:1px}
   .quiz-q{margin-bottom:13px}
@@ -138,8 +140,8 @@ function renderCard(item, idx){
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
 
-  const deveresHtml=item.deveres?.length
-    ?item.deveres.map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')
+  const deveresHtml=item.ultima_deveres?.length
+    ?item.ultima_deveres.map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')
     :`<div style="font-size:13px;color:var(--muted)">Nenhum dever registrado.</div>`;
 
   const quizHtml=item.questoes?.length
@@ -157,6 +159,19 @@ function renderCard(item, idx){
       </div>`).join('')
     :`<div style="font-size:13px;color:var(--muted)">Simulado não disponível.</div>`;
 
+  // próxima aula — só renderiza se existir
+  const temProxima = item.proxima_aula && item.proxima_aula.trim().length > 2;
+  const proxDeveresHtml = item.proxima_deveres?.length
+    ?item.proxima_deveres.map(d=>`<div class="dever-item"><span class="dever-dot" style="color:var(--accent)">▸</span><span>${d}</span></div>`).join('')
+    :'';
+  const proximaSection = temProxima ? `
+      <div class="section sec-proxima">
+        <div class="section-label">🔜 Próxima aula</div>
+        <div class="section-text"><strong>${item.proxima_aula}</strong></div>
+        ${item.proxima_resumo?`<div class="section-text" style="margin-top:6px;color:var(--muted)">${item.proxima_resumo}</div>`:''}
+        ${proxDeveresHtml?`<div style="margin-top:8px"><div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:4px">DEVERES DA PRÓXIMA</div>${proxDeveresHtml}</div>`:''}
+      </div>` : '';
+
   return `<div class="subject-card" style="--color:${cor}">
     <div class="card-top"></div>
     <div class="card-body">
@@ -168,11 +183,11 @@ function renderCard(item, idx){
         </div>
       </div>
       <div class="section sec-aula">
-        <div class="section-label">📅 Última aula</div>
+        <div class="section-label">📅 Última aula (cai no teste)</div>
         <div class="section-text">${item.ultima_aula||'—'}</div>
       </div>
       <div class="section sec-deveres">
-        <div class="section-label">⚡ Deveres</div>
+        <div class="section-label">⚡ Deveres da última aula</div>
         ${deveresHtml}
       </div>
       <div class="section sec-resumo">
@@ -186,6 +201,7 @@ function renderCard(item, idx){
           <span class="score-label">Responda as questões acima</span>
         </div>
       </div>
+      ${proximaSection}
     </div>
   </div>`;
 }
