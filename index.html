@@ -73,6 +73,29 @@
 </style>
 </head>
 <body>
+
+<!-- ═══ TELA DE LOGIN ═══ -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="width:100%;max-width:340px">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">CNS Anglo · 3º Ano</div>
+      <h1 style="font-size:26px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Meu Estudo</h1>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px">Entre com seu login para acessar</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px">
+      <label style="font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px">Usuário</label>
+      <input id="loginUser" type="text" autocomplete="username" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:11px 13px;margin-bottom:14px;outline:none" placeholder="seu usuário">
+      <label style="font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px">Senha</label>
+      <input id="loginPass" type="password" autocomplete="current-password" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:11px 13px;margin-bottom:18px;outline:none" placeholder="sua senha">
+      <button id="loginBtn" onclick="fazerLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer">Entrar</button>
+      <div id="loginErro" style="font-size:12px;color:var(--red);margin-top:12px;text-align:center;min-height:16px"></div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5">Não tem acesso? Faça o Pix e<br>chame o administrador para liberar.</div>
+  </div>
+</div>
+
+<!-- ═══ APP PRINCIPAL ═══ -->
+<div id="appScreen" style="display:none">
 <header>
   <div class="header-top">
     <span class="logo">CNS Anglo · 3º Ano</span>
@@ -81,13 +104,13 @@
   <h1>Meu Estudo</h1>
   <div class="subtitle" id="subtitle">Carregando matérias do dia…</div>
 </header>
-<div class="day-nav" id="dayNav"></div>
 <main id="main">
   <div class="loading-screen">
     <div class="big-spinner"></div>
     <div class="loading-text">Lendo blogs dos professores<br>e gerando resumos com IA…<br><br>Pode levar 20–30 segundos</div>
   </div>
 </main>
+</div>
 
 <script>
 const DIAS=[{k:'seg',l:'Seg'},{k:'ter',l:'Ter'},{k:'qua',l:'Qua'},{k:'qui',l:'Qui'},{k:'sex',l:'Sex'}];
@@ -96,28 +119,7 @@ const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','Hist�
 const scores={};
 let selectedDay=null;
 
-function getTodayKey(){const d=new Date().getDay();return{1:'seg',2:'ter',3:'qua',4:'qui',5:'sex'}[d]||'seg'}
 function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
-
-function buildNav(){
-  const today=getTodayKey();
-  const nav=document.getElementById('dayNav');
-  nav.innerHTML='';
-  DIAS.forEach(({k,l})=>{
-    const btn=document.createElement('button');
-    btn.className='day-btn'+(k===today?' today':'');
-    btn.textContent=l;btn.onclick=()=>loadDay(k);btn.id='btn-'+k;
-    nav.appendChild(btn);
-  });
-}
-
-function setActiveBtn(k){
-  document.querySelectorAll('.day-btn').forEach(b=>{
-    const isT=getTodayKey()===b.id.replace('btn-','');
-    b.className='day-btn'+(isT?' today':'');
-  });
-  document.getElementById('btn-'+k)?.classList.add('active');
-}
 
 function checkAnswer(cardId,qi,chosen,correta,explicacao){
   document.querySelectorAll(`[id^="opt-${cardId}-${qi}-"]`).forEach(o=>{
@@ -206,14 +208,13 @@ function renderCard(item, idx){
   </div>`;
 }
 
-function loadDay(dayKey){
-  selectedDay=dayKey;
-  setActiveBtn(dayKey);
+function loadDay(){
   document.getElementById('subtitle').textContent='Carregando…';
   const main=document.getElementById('main');
   main.innerHTML=`<div class="section-title" id="sec-title">Carregando…</div><div id="cards"></div>`;
 
-  const evtSource=new EventSource(`/api/today?day=${dayKey}`);
+  const token=localStorage.getItem('sessionToken');
+  const evtSource=new EventSource(`/api/today?token=${encodeURIComponent(token)}`);
   let total=0;let done=0;
 
   evtSource.onmessage=function(e){
@@ -222,8 +223,7 @@ function loadDay(dayKey){
     if(msg.type==='start'){
       total=msg.total;
       document.getElementById('sec-title').textContent=`Matérias — ${msg.dayLabel}`;
-      document.getElementById('subtitle').textContent=`${msg.dayLabel} — carregando…`;
-      // cria placeholders
+      document.getElementById('subtitle').textContent=`${msg.dayLabel}`;
       const cards=document.getElementById('cards');
       cards.innerHTML='';
       for(let i=0;i<total;i++){
@@ -232,6 +232,10 @@ function loadDay(dayKey){
         div.innerHTML=`<div class="loading-card"><div class="spinner"></div><span>Aguardando…</span></div>`;
         cards.appendChild(div);
       }
+    }
+
+    if(msg.type==='weekend'){
+      main.innerHTML=`<div class="error-box" style="color:var(--muted);border-color:var(--border)">🎉 Fim de semana!<br><br>Não há aulas hoje. Volte na segunda-feira para ver as matérias do dia.</div>`;
     }
 
     if(msg.type==='loading'){
@@ -243,29 +247,95 @@ function loadDay(dayKey){
       done++;
       const slot=document.getElementById(`card-slot-${msg.index}`);
       if(slot)slot.innerHTML=renderCard(msg.item,msg.index);
-      document.getElementById('subtitle').textContent=`${done}/${total} matérias prontas`;
+      document.getElementById('subtitle').textContent=`${done}/${total} matérias`;
     }
 
     if(msg.type==='done'){
       evtSource.close();
-      document.getElementById('subtitle').textContent=`${total} matérias carregadas`;
-      document.getElementById('cards').insertAdjacentHTML('beforeend',
-        `<div class="bottom-note">CNS Anglo · atualizado ${new Date().toLocaleString('pt-BR')}</div>`);
+      if(total>0){
+        document.getElementById('subtitle').textContent=`${total} matérias`+(msg.fromCache?' · atualizado hoje':'');
+        document.getElementById('cards').insertAdjacentHTML('beforeend',
+          `<div class="bottom-note">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}${msg.fromCache?' · do cache':''}</div>`);
+      }
     }
   };
 
   evtSource.onerror=function(){
     evtSource.close();
     if(done===0){
-      main.innerHTML=`<div class="error-box">Erro ao carregar.<br><br><button onclick="loadDay('${dayKey}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Tentar novamente</button></div>`;
+      main.innerHTML=`<div class="error-box">Sessão expirada ou erro ao carregar.<br><br><button onclick="sair()" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Entrar de novo</button></div>`;
     }
   };
 }
 
-buildNav();
-updateClock();
-setInterval(updateClock,1000);
-loadDay(getTodayKey());
+// ── fingerprint do dispositivo (identifica o aparelho de forma estável) ──────
+function getDeviceId(){
+  let id=localStorage.getItem('deviceId');
+  if(!id){
+    // gera um id único e persistente para este dispositivo/navegador
+    id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+    localStorage.setItem('deviceId',id);
+  }
+  return id;
+}
+
+// ── login ─────────────────────────────────────────────────────────────────────
+async function fazerLogin(){
+  const user=document.getElementById('loginUser').value.trim();
+  const pass=document.getElementById('loginPass').value;
+  const erro=document.getElementById('loginErro');
+  const btn=document.getElementById('loginBtn');
+  if(!user||!pass){erro.textContent='Preencha usuário e senha.';return;}
+  btn.disabled=true;btn.textContent='Entrando…';erro.textContent='';
+  try{
+    const res=await fetch('/api/login',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user,pass,device:getDeviceId()})
+    });
+    const data=await res.json();
+    if(data.error){erro.textContent=data.error;btn.disabled=false;btn.textContent='Entrar';return;}
+    localStorage.setItem('sessionToken',data.token);
+    localStorage.setItem('sessionUser',data.user);
+    iniciarApp();
+  }catch(e){
+    erro.textContent='Erro de conexão. Tente novamente.';
+    btn.disabled=false;btn.textContent='Entrar';
+  }
+}
+
+function sair(){
+  localStorage.removeItem('sessionToken');
+  localStorage.removeItem('sessionUser');
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  const btn=document.getElementById('loginBtn');
+  btn.disabled=false;btn.textContent='Entrar';
+}
+
+function iniciarApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  updateClock();
+  setInterval(updateClock,1000);
+  loadDay();
+}
+
+// permite Enter para logar
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&document.getElementById('loginScreen').style.display!=='none'){
+    fazerLogin();
+  }
+});
+
+// ── inicialização: tem token salvo? entra direto. senão mostra login ─────────
+(function init(){
+  const token=localStorage.getItem('sessionToken');
+  if(token){
+    iniciarApp();
+  }else{
+    document.getElementById('loginScreen').style.display='flex';
+  }
+})();
 </script>
 </body>
 </html>
