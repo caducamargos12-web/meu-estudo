@@ -62,6 +62,16 @@ function auth(req, res, next) {
   next();
 }
 
+// ── rota de diagnóstico (temporária) ────────────────────────────────────────
+app.get('/api/diag', (req, res) => {
+  res.json({
+    alunos_carregados: Object.keys(ALUNOS).length,
+    usuarios: Object.keys(ALUNOS),
+    tem_session_secret: !!process.env.SESSION_SECRET,
+    tem_api_key: !!process.env.ANTHROPIC_API_KEY
+  });
+});
+
 // ── rota de login ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) => {
   const { user, pass, device } = req.body;
