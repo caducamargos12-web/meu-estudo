@@ -5,122 +5,258 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meu Estudo – 3º Ano CNS Anglo</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0c0f1a;--surface:#131929;--card:#1a2236;--border:#243050;--accent:#4f9eff;--accent2:#7c5cfc;--green:#2ecc8a;--yellow:#f5c842;--red:#ff5f6d;--text:#e4eaf8;--muted:#6a7a9b;--mono:'Space Mono',monospace;--sans:'Syne',sans-serif}
+  :root{
+    --bg:#1a1611;
+    --bg-elev:#211c15;
+    --surface:#2a241b;
+    --surface-2:#332c21;
+    --border:#3a3225;
+    --border-bright:#4d4332;
+    --accent:#d9a865;
+    --accent-dim:#a87d44;
+    --accent-glow:rgba(217,168,101,.18);
+    --green:#a8c08a;
+    --amber:#e0b876;
+    --red:#d99080;
+    --text:#f4ede0;
+    --text-2:#c4b8a4;
+    --text-3:#8a7d68;
+    --sans:'Inter',system-ui,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
-  header{background:linear-gradient(135deg,#131929,#0c0f1a);border-bottom:1px solid var(--border);padding:18px 20px 14px;position:sticky;top:0;z-index:100}
-  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-  .logo{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:2px;text-transform:uppercase}
-  #clock{font-family:var(--mono);font-size:12px;color:var(--muted)}
-  h1{font-size:20px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-  .subtitle{font-size:12px;color:var(--muted);margin-top:2px}
-  .day-nav{display:flex;gap:6px;overflow-x:auto;padding:12px 20px;scrollbar-width:none;border-bottom:1px solid var(--border)}
-  .day-nav::-webkit-scrollbar{display:none}
-  .day-btn{flex-shrink:0;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
-  .day-btn:hover{border-color:var(--accent);color:var(--text)}
-  .day-btn.active{background:var(--accent);border-color:var(--accent);color:#0c0f1a}
-  .day-btn.today{border-color:var(--green);color:var(--green)}
-  .day-btn.today.active{background:var(--green);color:#0c0f1a}
-  main{padding:18px 20px 80px;max-width:680px;margin:0 auto}
-  .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:16px}
-  .big-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-  .loading-text{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
-  .subject-card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden}
-  .card-top{height:3px;background:var(--color,var(--accent))}
-  .card-body{padding:16px}
-  .card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-  .card-icon{width:38px;height:38px;border-radius:9px;background:color-mix(in srgb,var(--color,var(--accent)) 15%,transparent);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
-  .card-meta{flex:1}
-  .card-subject{font-size:16px;font-weight:700}
-  .card-teacher{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
-  .section{border-radius:9px;padding:12px 14px;margin-bottom:10px}
-  .section-label{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
-  .section-text{font-size:13px;line-height:1.65}
-  .sec-aula{background:var(--surface);border:1px solid var(--border)}
-  .sec-aula .section-label{color:var(--muted)}
-  .sec-deveres{background:color-mix(in srgb,var(--yellow) 7%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 22%,transparent)}
-  .sec-deveres .section-label{color:var(--yellow)}
-  .sec-resumo{background:color-mix(in srgb,var(--accent2) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent2) 22%,transparent)}
-  .sec-resumo .section-label{color:var(--accent2)}
-  .sec-quiz{background:color-mix(in srgb,var(--green) 7%,transparent);border:1px solid color-mix(in srgb,var(--green) 22%,transparent)}
-  .sec-quiz .section-label{color:var(--green)}
-  .sec-proxima{background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
-  .sec-proxima .section-label{color:var(--accent)}
-  .dever-item{display:flex;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.4}
-  .dever-dot{color:var(--yellow);flex-shrink:0;margin-top:1px}
-  .quiz-q{margin-bottom:13px}
-  .quiz-enunciado{font-size:13px;font-weight:600;margin-bottom:7px;line-height:1.4}
-  .quiz-opts{display:flex;flex-direction:column;gap:5px}
-  .quiz-opt{padding:7px 11px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;text-align:left;color:var(--text);font-family:var(--sans);transition:all .12s}
-  .quiz-opt:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
-  .quiz-opt.correct{background:color-mix(in srgb,var(--green) 14%,transparent);border-color:var(--green);color:var(--green)}
-  .quiz-opt.wrong{background:color-mix(in srgb,var(--red) 14%,transparent);border-color:var(--red);color:var(--red)}
-  .quiz-opt:disabled{cursor:default}
-  .quiz-feedback{font-size:12px;margin-top:5px;padding:7px 10px;border-radius:6px;line-height:1.4}
-  .quiz-feedback.correct{background:color-mix(in srgb,var(--green) 9%,transparent);color:var(--green)}
-  .quiz-feedback.wrong{background:color-mix(in srgb,var(--red) 9%,transparent);color:var(--red)}
-  .score-row{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface);border-radius:8px;margin-top:8px;font-size:12px}
-  .score-label{color:var(--muted)}
-  .score-val{font-weight:700;font-size:14px;color:var(--green);margin-left:4px}
-  .section-title{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
-  .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
-  .bottom-note{text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:24px;letter-spacing:1px}
-  .loading-card{background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:18px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px}
-  .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
-  .error-box{background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid color-mix(in srgb,var(--red) 25%,transparent);border-radius:10px;padding:14px 16px;text-align:center;font-size:13px;color:var(--red)}
+  html{-webkit-font-smoothing:antialiased}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;position:relative}
+
+  /* imagem de fundo sutil */
+  body::after{
+    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:url('/fundo.jpg') center/cover no-repeat;
+    opacity:.10;
+  }
+  /* gradiente quente por cima do fundo */
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:linear-gradient(180deg,rgba(26,22,17,.7),rgba(26,22,17,.92));
+  }
+
+  /* ═══ animações ═══ */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  /* ═══ LOGIN ═══ */
+  #loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-box{width:100%;max-width:380px;position:relative;z-index:1;animation:scaleIn .5s cubic-bezier(.2,.8,.2,1)}
+  .login-brand{text-align:center;margin-bottom:32px}
+  .login-logo{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;color:var(--text-2);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px;padding:6px 14px;border:1px solid var(--border);border-radius:100px;background:var(--surface)}
+  .login-logo .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  .login-box h1{font-size:32px;font-weight:800;letter-spacing:-1.5px;line-height:1.1}
+  .login-box .tag{font-size:14px;color:var(--text-2);margin-top:8px}
+  .login-card{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border);border-radius:18px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .field{margin-bottom:16px}
+  .field label{font-size:12px;font-weight:500;color:var(--text-2);display:block;margin-bottom:7px}
+  .field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:var(--sans);font-size:15px;padding:13px 15px;outline:none;transition:border-color .2s,box-shadow .2s}
+  .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+  .field input::placeholder{color:var(--text-3)}
+  .btn-primary{width:100%;padding:14px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:transform .12s,background .2s,box-shadow .2s;box-shadow:0 4px 16px var(--accent-glow)}
+  .btn-primary:hover{background:#6f9cff;transform:translateY(-1px);box-shadow:0 6px 22px var(--accent-glow)}
+  .btn-primary:active{transform:translateY(0) scale(.99)}
+  .btn-primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
+  .login-erro{font-size:13px;color:var(--red);margin-top:12px;text-align:center;min-height:18px;transition:opacity .2s}
+  .login-foot{text-align:center;font-size:12px;color:var(--text-3);margin-top:20px;line-height:1.6}
+
+  /* ═══ HEADER ═══ */
+  #appScreen{position:relative;z-index:1}
+  header{position:sticky;top:0;z-index:100;background:rgba(8,9,12,.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:16px 22px}
+  .head-row{max-width:720px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+  .head-left{display:flex;align-items:center;gap:12px}
+  .head-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff;box-shadow:0 2px 12px var(--accent-glow)}
+  .head-titles h1{font-size:17px;font-weight:700;letter-spacing:-.3px;line-height:1}
+  .head-titles .sub{font-size:12px;color:var(--text-2);margin-top:3px}
+  .head-right{display:flex;align-items:center;gap:14px}
+  #clock{font-family:var(--mono);font-size:13px;color:var(--text-3)}
+  .logout-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-2);font-size:12px;padding:6px 11px;cursor:pointer;transition:all .15s;font-family:var(--sans)}
+  .logout-btn:hover{border-color:var(--border-bright);color:var(--text)}
+
+  main{max-width:720px;margin:0 auto;padding:24px 22px 80px}
+
+  /* ═══ DAY HEADER ═══ */
+  .day-head{display:flex;align-items:center;gap:12px;margin-bottom:24px;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1)}
+  .day-badge{font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-glow);border:1px solid var(--accent-dim);padding:5px 13px;border-radius:100px}
+  .day-line{flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
+  .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
+
+  /* ═══ CARDS ═══ */
+  .card{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border);border-radius:18px;margin-bottom:18px;overflow:hidden;opacity:0;animation:fadeUp .55s cubic-bezier(.2,.8,.2,1) forwards;transition:border-color .25s,transform .25s}
+  .card:hover{border-color:var(--border-bright);transform:translateY(-2px)}
+  .card-glow{height:2px;background:linear-gradient(90deg,transparent,var(--cor,var(--accent)),transparent);opacity:.6}
+  .card-in{padding:20px}
+  .c-head{display:flex;align-items:center;gap:13px;margin-bottom:18px}
+  .c-icon{width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cor,var(--accent)) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--cor,var(--accent)) 30%,transparent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .c-meta{flex:1;min-width:0}
+  .c-subj{font-size:18px;font-weight:700;letter-spacing:-.3px}
+  .c-prof{font-size:12px;color:var(--text-2);margin-top:2px;font-family:var(--mono)}
+
+  .blk{border:1px solid var(--border);background:var(--bg);border-radius:13px;padding:14px;margin-bottom:11px}
+  .blk-head{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+  .blk-ic{font-size:13px}
+  .blk-label{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+  .blk-body{font-size:14px;line-height:1.65;color:var(--text)}
+  .blk-aula .blk-label{color:var(--text-2)}
+  .blk-dev{border-color:color-mix(in srgb,var(--amber) 22%,transparent);background:color-mix(in srgb,var(--amber) 5%,var(--bg))}
+  .blk-dev .blk-label{color:var(--amber)}
+  .blk-res{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
+  .blk-res .blk-label{color:var(--accent)}
+  .blk-quiz{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
+  .blk-quiz .blk-label{color:var(--green)}
+  .blk-prox{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
+  .blk-prox .blk-label{color:var(--accent)}
+
+  .dev-group{margin-bottom:11px}
+  .dev-group:last-child{margin-bottom:0}
+  .dev-date{font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:5px;font-weight:500}
+  .dev-item{display:flex;gap:8px;font-size:13px;line-height:1.5;margin-bottom:4px;color:var(--text)}
+  .dev-dot{color:var(--amber);flex-shrink:0}
+  .muted{font-size:13px;color:var(--text-3)}
+
+  /* quiz */
+  .q-item{margin-bottom:15px}
+  .q-item:last-child{margin-bottom:0}
+  .q-text{font-size:14px;font-weight:600;margin-bottom:9px;line-height:1.45}
+  .q-opts{display:flex;flex-direction:column;gap:6px}
+  .q-opt{padding:10px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font-size:13px;cursor:pointer;text-align:left;color:var(--text);font-family:var(--sans);transition:all .15s;display:flex;gap:8px;align-items:center}
+  .q-opt:hover:not(:disabled){border-color:var(--accent);background:var(--surface-2);transform:translateX(2px)}
+  .q-opt b{color:var(--text-2);font-weight:700}
+  .q-opt.correct{background:color-mix(in srgb,var(--green) 14%,transparent);border-color:var(--green);color:var(--green)}
+  .q-opt.correct b{color:var(--green)}
+  .q-opt.wrong{background:color-mix(in srgb,var(--red) 14%,transparent);border-color:var(--red);color:var(--red)}
+  .q-opt.wrong b{color:var(--red)}
+  .q-opt:disabled{cursor:default}
+  .q-fb{font-size:12px;margin-top:7px;padding:9px 11px;border-radius:9px;line-height:1.45;animation:fadeIn .3s}
+  .q-fb.correct{background:color-mix(in srgb,var(--green) 9%,transparent);color:var(--green)}
+  .q-fb.wrong{background:color-mix(in srgb,var(--red) 9%,transparent);color:var(--red)}
+  .score{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--surface);border-radius:10px;margin-top:10px;font-size:12px;color:var(--text-2)}
+  .score b{font-size:15px;color:var(--green);font-weight:700}
+
+  /* loading */
+  .skel{border:1px solid var(--border);background:var(--surface);border-radius:18px;padding:20px;margin-bottom:18px;display:flex;align-items:center;gap:13px}
+  .spin{width:20px;height:20px;border:2px solid var(--border-bright);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+  .skel-txt{font-size:14px;color:var(--text-2)}
+  .skel-bar{height:11px;border-radius:6px;background:linear-gradient(90deg,var(--surface),var(--surface-2),var(--surface));background-size:200% 100%;animation:shimmer 1.4s infinite;flex:1}
+
+  .big-load{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 20px;gap:18px}
+  .big-spin{width:38px;height:38px;border:3px solid var(--border-bright);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  .big-load-txt{font-size:14px;color:var(--text-2);text-align:center;line-height:1.7}
+
+  .empty-box{text-align:center;padding:50px 24px;animation:fadeUp .5s}
+  .empty-emoji{font-size:42px;margin-bottom:14px}
+  .empty-title{font-size:18px;font-weight:700;margin-bottom:6px}
+  .empty-sub{font-size:14px;color:var(--text-2);line-height:1.6}
+  .empty-box .btn-primary{max-width:200px;margin:18px auto 0}
+
+  .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
+
+  /* ═══ PLAYER DE MÚSICA ═══ */
+  .music-btn{position:fixed;bottom:20px;right:20px;z-index:500;width:48px;height:48px;border-radius:50%;background:var(--surface);border:1px solid var(--border-bright);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,.4);transition:all .2s;font-size:18px}
+  .music-btn:hover{transform:scale(1.08);border-color:var(--accent);box-shadow:0 8px 30px var(--accent-glow)}
+  .music-btn.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .music-btn .bars{display:flex;align-items:flex-end;gap:2px;height:16px}
+  .music-btn .bars span{width:3px;background:currentColor;border-radius:2px;height:5px}
+  .music-btn.playing .bars span{animation:eq .9s ease-in-out infinite}
+  .music-btn.playing .bars span:nth-child(2){animation-delay:.2s}
+  .music-btn.playing .bars span:nth-child(3){animation-delay:.4s}
+  .music-btn.playing .bars span:nth-child(4){animation-delay:.6s}
+  @keyframes eq{0%,100%{height:5px}50%{height:15px}}
 </style>
 </head>
 <body>
 
-<!-- ═══ TELA DE LOGIN ═══ -->
-<div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px">
-  <div style="width:100%;max-width:340px">
-    <div style="text-align:center;margin-bottom:28px">
-      <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">CNS Anglo · 3º Ano</div>
-      <h1 style="font-size:26px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Meu Estudo</h1>
-      <div style="font-size:13px;color:var(--muted);margin-top:6px">Entre com seu login para acessar</div>
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen" style="display:none">
+  <div class="login-box">
+    <div class="login-brand">
+      <div class="login-logo"><span class="dot"></span>CNS Anglo · 3º Ano</div>
+      <h1>Meu Estudo</h1>
+      <div class="tag">Seu resumo do dia, pronto em segundos.</div>
     </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px">
-      <label style="font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px">Usuário</label>
-      <input id="loginUser" type="text" autocomplete="username" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:11px 13px;margin-bottom:14px;outline:none" placeholder="seu usuário">
-      <label style="font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px">Senha</label>
-      <input id="loginPass" type="password" autocomplete="current-password" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:11px 13px;margin-bottom:18px;outline:none" placeholder="sua senha">
-      <button id="loginBtn" onclick="fazerLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer">Entrar</button>
-      <div id="loginErro" style="font-size:12px;color:var(--red);margin-top:12px;text-align:center;min-height:16px"></div>
+    <div class="login-card">
+      <div class="field">
+        <label>Usuário</label>
+        <input id="loginUser" type="text" autocomplete="username" placeholder="seu usuário">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input id="loginPass" type="password" autocomplete="current-password" placeholder="sua senha">
+      </div>
+      <button class="btn-primary" id="loginBtn" onclick="fazerLogin()">Entrar</button>
+      <div class="login-erro" id="loginErro"></div>
     </div>
-    <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5">Não tem acesso? Faça o Pix e<br>chame o administrador para liberar.</div>
+    <div class="login-foot">Ainda não tem acesso?<br>Faça o Pix e chame o administrador para liberar.</div>
   </div>
 </div>
 
-<!-- ═══ APP PRINCIPAL ═══ -->
+<!-- ═══ APP ═══ -->
 <div id="appScreen" style="display:none">
-<header>
-  <div class="header-top">
-    <span class="logo">CNS Anglo · 3º Ano</span>
-    <span id="clock"></span>
-  </div>
-  <h1>Meu Estudo</h1>
-  <div class="subtitle" id="subtitle">Carregando matérias do dia…</div>
-</header>
-<main id="main">
-  <div class="loading-screen">
-    <div class="big-spinner"></div>
-    <div class="loading-text">Lendo blogs dos professores<br>e gerando resumos com IA…<br><br>Pode levar 20–30 segundos</div>
-  </div>
-</main>
+  <audio id="bgMusic" loop preload="none">
+    <source src="/musica.mp3" type="audio/mpeg">
+  </audio>
+  <button class="music-btn" id="musicBtn" onclick="toggleMusic()" aria-label="Música de fundo" title="Música de fundo">
+    <div class="bars"><span></span><span></span><span></span><span></span></div>
+  </button>
+  <header>
+    <div class="head-row">
+      <div class="head-left">
+        <div class="head-mark">M</div>
+        <div class="head-titles">
+          <h1>Meu Estudo</h1>
+          <div class="sub" id="subtitle">Carregando…</div>
+        </div>
+      </div>
+      <div class="head-right">
+        <span id="clock"></span>
+        <button class="logout-btn" onclick="sair()">Sair</button>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+    <div class="big-load">
+      <div class="big-spin"></div>
+      <div class="big-load-txt">Lendo os blogs dos professores<br>e preparando seu material…</div>
+    </div>
+  </main>
 </div>
 
 <script>
-const DIAS=[{k:'seg',l:'Seg'},{k:'ter',l:'Ter'},{k:'qua',l:'Qua'},{k:'qui',l:'Qui'},{k:'sex',l:'Sex'}];
-const CORES=['#4f9eff','#7c5cfc','#2ecc8a','#f59e0b','#f472b6','#38bdf8','#a3e635','#fb923c'];
-const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','História':'📜','Química A':'⚗️','Física':'🔭','Linguística':'📝','Matemática A':'📐','Matemática B':'📊','Inglês':'🇺🇸','Biologia':'🧬','Química B':'🔬','Práticas/Red.':'✍️','Literatura':'📚','Sociologia':'🏛️'};
+const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','História':'📜','Química A':'⚗️','Física':'🔭','Linguística':'📝','Matemática A':'📐','Matemática B':'📊','Inglês':'🇺🇸','Biologia':'🧬','Química B':'🔬','Práticas/Red.':'✍️','Literatura':'📚','Redação':'✍️','Sociologia':'🏛️'};
+const CORES=['#d9a865','#c99a78','#a8c08a','#e0b876','#d9a0a0','#b89a7a','#cbb88a','#d4a574'];
 const scores={};
-let selectedDay=null;
 
-function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+function toggleMusic(){
+  const audio=document.getElementById('bgMusic');
+  const btn=document.getElementById('musicBtn');
+  if(audio.paused){
+    audio.volume=0.35;
+    audio.play().then(()=>{
+      btn.classList.add('playing');
+      localStorage.setItem('musicOn','1');
+    }).catch(()=>{});
+  }else{
+    audio.pause();
+    btn.classList.remove('playing');
+    localStorage.setItem('musicOn','0');
+  }
+}
+
+function updateClock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
 
 function checkAnswer(cardId,qi,chosen,correta,explicacao){
   document.querySelectorAll(`[id^="opt-${cardId}-${qi}-"]`).forEach(o=>{
@@ -131,84 +267,80 @@ function checkAnswer(cardId,qi,chosen,correta,explicacao){
   });
   const ok=chosen===correta;
   document.getElementById(`fb-${cardId}-${qi}`).innerHTML=
-    `<div class="quiz-feedback ${ok?'correct':'wrong'}">${ok?'✅ Correto!':'❌ Errado.'} ${explicacao}</div>`;
+    `<div class="q-fb ${ok?'correct':'wrong'}">${ok?'✓ Correto. ':'✕ Errado. '}${explicacao}</div>`;
   if(!scores[cardId])scores[cardId]={a:0,t:0,v:new Set()};
   if(!scores[cardId].v.has(qi)){scores[cardId].v.add(qi);scores[cardId].t++;if(ok)scores[cardId].a++;}
   const el=document.getElementById('score-'+cardId);
-  if(el){const s=scores[cardId];el.innerHTML=`<span class="score-label">Placar:</span><span class="score-val">${s.a}/${s.t}</span>`;}
+  if(el){const s=scores[cardId];el.innerHTML=`Placar <b>${s.a}/${s.t}</b>`;}
 }
 
 function renderCard(item, idx){
-  const cardId=`${selectedDay}-${idx}`;
+  const cardId=`d-${idx}`;
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
 
   const deveresHtml=item.deveres_pendentes?.length
-    ?item.deveres_pendentes.map(grupo=>`
-      <div style="margin-bottom:10px">
-        <div style="font-family:var(--mono);font-size:10px;color:var(--yellow);margin-bottom:4px">📅 Aula de ${grupo.data}</div>
-        ${(grupo.deveres||[]).map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')}
+    ?item.deveres_pendentes.map(g=>`
+      <div class="dev-group">
+        <div class="dev-date">${g.data}</div>
+        ${(g.deveres||[]).map(d=>`<div class="dev-item"><span class="dev-dot">▸</span><span>${d}</span></div>`).join('')}
       </div>`).join('')
-    :`<div style="font-size:13px;color:var(--muted)">Nenhum dever pendente das aulas anteriores.</div>`;
+    :`<div class="muted">Nenhum dever pendente das aulas anteriores.</div>`;
 
   const quizHtml=item.questoes?.length
     ?item.questoes.map((q,qi)=>`
-      <div class="quiz-q">
-        <div class="quiz-enunciado">${qi+1}. ${q.enunciado}</div>
-        <div class="quiz-opts">
+      <div class="q-item">
+        <div class="q-text">${qi+1}. ${q.enunciado}</div>
+        <div class="q-opts">
           ${Object.entries(q.opcoes).map(([k,v])=>`
-            <button class="quiz-opt" id="opt-${cardId}-${qi}-${k}"
+            <button class="q-opt" id="opt-${cardId}-${qi}-${k}"
               onclick="checkAnswer('${cardId}',${qi},'${k}','${q.correta}',\`${q.explicacao.replace(/`/g,"'")}\`)">
-              <strong>${k})</strong> ${v}
+              <b>${k}</b> ${v}
             </button>`).join('')}
         </div>
         <div id="fb-${cardId}-${qi}"></div>
       </div>`).join('')
-    :`<div style="font-size:13px;color:var(--muted)">Simulado não disponível.</div>`;
+    :`<div class="muted">Simulado não disponível.</div>`;
 
-  // próxima aula — só renderiza se existir
-  const temProxima = item.proxima_aula && item.proxima_aula.trim().length > 2;
-  const proxDeveresHtml = item.proxima_deveres?.length
-    ?item.proxima_deveres.map(d=>`<div class="dever-item"><span class="dever-dot" style="color:var(--accent)">▸</span><span>${d}</span></div>`).join('')
-    :'';
-  const proximaSection = temProxima ? `
-      <div class="section sec-proxima">
-        <div class="section-label">🔜 Próxima aula</div>
-        <div class="section-text"><strong>${item.proxima_aula}</strong></div>
-        ${item.proxima_resumo?`<div class="section-text" style="margin-top:6px;color:var(--muted)">${item.proxima_resumo}</div>`:''}
-        ${proxDeveresHtml?`<div style="margin-top:8px"><div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:4px">DEVERES DA PRÓXIMA</div>${proxDeveresHtml}</div>`:''}
-      </div>` : '';
+  const temProx=item.proxima_aula&&item.proxima_aula.trim().length>2;
+  const proxDev=item.proxima_deveres?.length
+    ?`<div style="margin-top:9px">${item.proxima_deveres.map(d=>`<div class="dev-item"><span class="dev-dot" style="color:var(--accent)">▸</span><span>${d}</span></div>`).join('')}</div>`:'';
+  const proxSec=temProx?`
+    <div class="blk blk-prox">
+      <div class="blk-head"><span class="blk-ic">🔜</span><span class="blk-label">Próxima aula</span></div>
+      <div class="blk-body"><strong>${item.proxima_aula}</strong></div>
+      ${item.proxima_resumo?`<div class="blk-body" style="margin-top:6px;color:var(--text-2)">${item.proxima_resumo}</div>`:''}
+      ${proxDev}
+    </div>`:'';
 
-  return `<div class="subject-card" style="--color:${cor}">
-    <div class="card-top"></div>
-    <div class="card-body">
-      <div class="card-header">
-        <div class="card-icon">${emoji}</div>
-        <div class="card-meta">
-          <div class="card-subject">${item.m}</div>
-          <div class="card-teacher">${item.p}</div>
+  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.06}s">
+    <div class="card-glow"></div>
+    <div class="card-in">
+      <div class="c-head">
+        <div class="c-icon">${emoji}</div>
+        <div class="c-meta">
+          <div class="c-subj">${item.m}</div>
+          <div class="c-prof">${item.p}</div>
         </div>
       </div>
-      <div class="section sec-aula">
-        <div class="section-label">📅 Última aula (cai no teste)</div>
-        <div class="section-text">${item.ultima_aula||'—'}</div>
+      <div class="blk blk-aula">
+        <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Última aula · cai no teste</span></div>
+        <div class="blk-body">${item.ultima_aula||'—'}</div>
       </div>
-      <div class="section sec-deveres">
-        <div class="section-label">⚡ Deveres pendentes (aulas anteriores)</div>
+      <div class="blk blk-dev">
+        <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
         ${deveresHtml}
       </div>
-      <div class="section sec-resumo">
-        <div class="section-label">🤖 Resumo para o teste</div>
-        <div class="section-text">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
+      <div class="blk blk-res">
+        <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo para o teste</span></div>
+        <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
       </div>
-      <div class="section sec-quiz">
-        <div class="section-label">📝 Simulado – 4 questões</div>
+      <div class="blk blk-quiz">
+        <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado · 4 questões</span></div>
         ${quizHtml}
-        <div class="score-row" id="score-${cardId}">
-          <span class="score-label">Responda as questões acima</span>
-        </div>
+        <div class="score" id="score-${cardId}">Responda as questões acima</div>
       </div>
-      ${proximaSection}
+      ${proxSec}
     </div>
   </div>`;
 }
@@ -216,7 +348,7 @@ function renderCard(item, idx){
 function loadDay(){
   document.getElementById('subtitle').textContent='Carregando…';
   const main=document.getElementById('main');
-  main.innerHTML=`<div class="section-title" id="sec-title">Carregando…</div><div id="cards"></div>`;
+  main.innerHTML=`<div class="day-head"><span class="day-badge" id="day-badge">Hoje</span><span class="day-line"></span><span class="day-count" id="day-count"></span></div><div id="cards"></div>`;
 
   const token=localStorage.getItem('sessionToken');
   const evtSource=new EventSource(`/api/today?token=${encodeURIComponent(token)}`);
@@ -224,67 +356,56 @@ function loadDay(){
 
   evtSource.onmessage=function(e){
     const msg=JSON.parse(e.data);
-
     if(msg.type==='start'){
       total=msg.total;
-      document.getElementById('sec-title').textContent=`Matérias — ${msg.dayLabel}`;
-      document.getElementById('subtitle').textContent=`${msg.dayLabel}`;
+      document.getElementById('day-badge').textContent=msg.dayLabel;
+      document.getElementById('subtitle').textContent=msg.dayLabel;
       const cards=document.getElementById('cards');
       cards.innerHTML='';
       for(let i=0;i<total;i++){
         const div=document.createElement('div');
-        div.id=`card-slot-${i}`;
-        div.innerHTML=`<div class="loading-card"><div class="spinner"></div><span>Aguardando…</span></div>`;
+        div.id=`slot-${i}`;
+        div.innerHTML=`<div class="skel"><div class="spin"></div><div class="skel-bar"></div></div>`;
         cards.appendChild(div);
       }
     }
-
     if(msg.type==='weekend'){
-      main.innerHTML=`<div class="error-box" style="color:var(--muted);border-color:var(--border)">🎉 Fim de semana!<br><br>Não há aulas hoje. Volte na segunda-feira para ver as matérias do dia.</div>`;
+      main.innerHTML=`<div class="empty-box"><div class="empty-emoji">🎉</div><div class="empty-title">Fim de semana</div><div class="empty-sub">Não há aulas hoje.<br>Volte na segunda-feira para ver suas matérias.</div></div>`;
     }
-
     if(msg.type==='loading'){
-      const slot=document.getElementById(`card-slot-${msg.index}`);
-      if(slot)slot.innerHTML=`<div class="loading-card"><div class="spinner"></div><span>Gerando ${msg.materia}…</span></div>`;
+      const slot=document.getElementById(`slot-${msg.index}`);
+      if(slot)slot.innerHTML=`<div class="skel"><div class="spin"></div><div class="skel-txt">Preparando ${msg.materia}…</div></div>`;
     }
-
     if(msg.type==='result'){
       done++;
-      const slot=document.getElementById(`card-slot-${msg.index}`);
+      const slot=document.getElementById(`slot-${msg.index}`);
       if(slot)slot.innerHTML=renderCard(msg.item,msg.index);
-      document.getElementById('subtitle').textContent=`${done}/${total} matérias`;
+      const c=document.getElementById('day-count');if(c)c.textContent=`${done}/${total}`;
     }
-
     if(msg.type==='done'){
       evtSource.close();
       if(total>0){
-        document.getElementById('subtitle').textContent=`${total} matérias`+(msg.fromCache?' · atualizado hoje':'');
+        document.getElementById('subtitle').textContent=`${total} matérias hoje`;
+        const c=document.getElementById('day-count');if(c)c.textContent=`${total} matérias`;
         document.getElementById('cards').insertAdjacentHTML('beforeend',
-          `<div class="bottom-note">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}${msg.fromCache?' · do cache':''}</div>`);
+          `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}${msg.fromCache?' · atualizado hoje':''}</div>`);
       }
     }
   };
-
   evtSource.onerror=function(){
     evtSource.close();
     if(done===0){
-      main.innerHTML=`<div class="error-box">Sessão expirada ou erro ao carregar.<br><br><button onclick="sair()" style="background:none;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--sans);margin-top:8px">↻ Entrar de novo</button></div>`;
+      main.innerHTML=`<div class="empty-box"><div class="empty-emoji">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">Sua sessão pode ter expirado.</div><button class="btn-primary" onclick="sair()">Entrar de novo</button></div>`;
     }
   };
 }
 
-// ── fingerprint do dispositivo (identifica o aparelho de forma estável) ──────
 function getDeviceId(){
   let id=localStorage.getItem('deviceId');
-  if(!id){
-    // gera um id único e persistente para este dispositivo/navegador
-    id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
-    localStorage.setItem('deviceId',id);
-  }
+  if(!id){id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('deviceId',id);}
   return id;
 }
 
-// ── login ─────────────────────────────────────────────────────────────────────
 async function fazerLogin(){
   const user=document.getElementById('loginUser').value.trim();
   const pass=document.getElementById('loginPass').value;
@@ -293,19 +414,13 @@ async function fazerLogin(){
   if(!user||!pass){erro.textContent='Preencha usuário e senha.';return;}
   btn.disabled=true;btn.textContent='Entrando…';erro.textContent='';
   try{
-    const res=await fetch('/api/login',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({user,pass,device:getDeviceId()})
-    });
+    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user,pass,device:getDeviceId()})});
     const data=await res.json();
     if(data.error){erro.textContent=data.error;btn.disabled=false;btn.textContent='Entrar';return;}
     localStorage.setItem('sessionToken',data.token);
     localStorage.setItem('sessionUser',data.user);
     iniciarApp();
-  }catch(e){
-    erro.textContent='Erro de conexão. Tente novamente.';
-    btn.disabled=false;btn.textContent='Entrar';
-  }
+  }catch(e){erro.textContent='Erro de conexão. Tente novamente.';btn.disabled=false;btn.textContent='Entrar';}
 }
 
 function sair(){
@@ -313,33 +428,23 @@ function sair(){
   localStorage.removeItem('sessionUser');
   document.getElementById('appScreen').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
-  const btn=document.getElementById('loginBtn');
-  btn.disabled=false;btn.textContent='Entrar';
+  const btn=document.getElementById('loginBtn');btn.disabled=false;btn.textContent='Entrar';
 }
 
 function iniciarApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
-  updateClock();
-  setInterval(updateClock,1000);
+  updateClock();setInterval(updateClock,1000);
   loadDay();
 }
 
-// permite Enter para logar
 document.addEventListener('keydown',function(e){
-  if(e.key==='Enter'&&document.getElementById('loginScreen').style.display!=='none'){
-    fazerLogin();
-  }
+  if(e.key==='Enter'&&document.getElementById('loginScreen').style.display!=='none'){fazerLogin();}
 });
 
-// ── inicialização: tem token salvo? entra direto. senão mostra login ─────────
 (function init(){
-  const token=localStorage.getItem('sessionToken');
-  if(token){
-    iniciarApp();
-  }else{
-    document.getElementById('loginScreen').style.display='flex';
-  }
+  if(localStorage.getItem('sessionToken')){iniciarApp();}
+  else{document.getElementById('loginScreen').style.display='flex';}
 })();
 </script>
 </body>
