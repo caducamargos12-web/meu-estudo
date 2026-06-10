@@ -216,14 +216,16 @@ async function processWithAI(materia, professor, blogText, filtro) {
   }
   const prompt = 'Você é um tutor do ensino médio brasileiro. Hoje é ' + hoje + ' (DD/MM/AAAA). Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
-    '\n\nIdentifique DUAS aulas:\n' +
+    '\n\nIdentifique:\n' +
     '• ULTIMA AULA = aula de data MAIS RECENTE que seja IGUAL OU ANTERIOR a hoje (' + hoje + '). Cai no teste.\n' +
+    '• DEVERES PENDENTES = os deveres/tarefas das ATÉ 3 AULAS ANTERIORES à última aula (NÃO inclua o dever da última aula em si). São os deveres que podem ser cobrados hoje. Para cada um, informe a data da aula de origem.\n' +
     '• PROXIMA AULA = primeira aula com data POSTERIOR a hoje, SE registrada. Se não houver, deixe vazio.\n' +
-    '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. NUNCA use aula futura como última aula.\n' +
-    (filtro ? '3. Ambas de "' + filtro + '".\n' : '') +
+    '\nEXEMPLO: se a última aula é 09/06 e as aulas anteriores foram 03/06, 27/05 e 26/05, os deveres pendentes vêm de 03/06, 27/05 e 26/05 — NUNCA de 09/06.\n' +
+    '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. NUNCA use aula futura como última aula.\n3. Se uma aula anterior não tem tarefa registrada, pule ela.\n' +
+    (filtro ? '4. Tudo apenas de "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
     '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"ultima_aula":"data e conteúdo","ultima_deveres":["dever"],"resumo":"resumo didático 3-4 parágrafos da última aula","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"data e conteúdo ou vazio","proxima_resumo":"1-2 frases ou vazio","proxima_deveres":[]}';
+    '{"ultima_aula":"data e conteúdo","deveres_pendentes":[{"data":"03/06","deveres":["dever 1","dever 2"]},{"data":"27/05","deveres":["dever"]}],"resumo":"resumo didático 3-4 parágrafos da última aula","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"data e conteúdo ou vazio","proxima_resumo":"1-2 frases ou vazio","proxima_deveres":[]}';
   return callAnthropic(prompt, 0);
 }
 
@@ -272,7 +274,7 @@ app.get('/api/today', auth, async function(req, res) {
       resultados.push(result);
       res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
     } catch(e) {
-      const result = Object.assign({}, item, { ok:false, ultima_aula:'—', ultima_deveres:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+      const result = Object.assign({}, item, { ok:false, ultima_aula:'—', deveres_pendentes:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
       resultados.push(result);
       res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
     }

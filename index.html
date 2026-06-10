@@ -142,9 +142,13 @@ function renderCard(item, idx){
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
 
-  const deveresHtml=item.ultima_deveres?.length
-    ?item.ultima_deveres.map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')
-    :`<div style="font-size:13px;color:var(--muted)">Nenhum dever registrado.</div>`;
+  const deveresHtml=item.deveres_pendentes?.length
+    ?item.deveres_pendentes.map(grupo=>`
+      <div style="margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--yellow);margin-bottom:4px">📅 Aula de ${grupo.data}</div>
+        ${(grupo.deveres||[]).map(d=>`<div class="dever-item"><span class="dever-dot">▸</span><span>${d}</span></div>`).join('')}
+      </div>`).join('')
+    :`<div style="font-size:13px;color:var(--muted)">Nenhum dever pendente das aulas anteriores.</div>`;
 
   const quizHtml=item.questoes?.length
     ?item.questoes.map((q,qi)=>`
@@ -189,7 +193,7 @@ function renderCard(item, idx){
         <div class="section-text">${item.ultima_aula||'—'}</div>
       </div>
       <div class="section sec-deveres">
-        <div class="section-label">⚡ Deveres da última aula</div>
+        <div class="section-label">⚡ Deveres pendentes (aulas anteriores)</div>
         ${deveresHtml}
       </div>
       <div class="section sec-resumo">
