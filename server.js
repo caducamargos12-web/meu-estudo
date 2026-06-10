@@ -62,14 +62,36 @@ function auth(req, res, next) {
   next();
 }
 
-// ── rota de diagnóstico (temporária) ────────────────────────────────────────
-app.get('/api/diag', (req, res) => {
-  res.json({
-    alunos_carregados: Object.keys(ALUNOS).length,
-    usuarios: Object.keys(ALUNOS),
-    tem_session_secret: !!process.env.SESSION_SECRET,
-    tem_api_key: !!process.env.ANTHROPIC_API_KEY
+// ── PAINEL ADMIN ─────────────────────────────────────────────────────────────
+// senha do admin vem da variável ADMIN_SENHA no Railway
+function checkAdmin(req, res, next) {
+  const senha = req.headers['x-admin-senha'] || req.query.adminSenha || (req.body && req.body.adminSenha);
+  if (!senha || senha !== process.env.ADMIN_SENHA) {
+    return res.status(401).json({ error: 'Senha de admin incorreta' });
+  }
+  next();
+}
+
+// lista alunos e o status de vínculo de dispositivo
+app.get('/api/admin/alunos', checkAdmin, (req, res) => {
+  const lista = Object.keys(ALUNOS).map(user => ({
+    user,
+    vinculado: !!dispositivoPorUser[user],
+    dispositivo: dispositivoPorUser[user] ? dispositivoPorUser[user].slice(0,12) + '…' : null
+  }));
+  res.json({ alunos: lista, total: lista.length });
+});
+
+// desbloqueia o dispositivo de um aluno (ele poderá logar em novo aparelho)
+app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
+  const { user } = req.body;
+  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  delete dispositivoPorUser[user];
+  // invalida sessões ativas desse usuário
+  Object.keys(sessoesAtivas).forEach(t => {
+    if (sessoesAtivas[t].user === user) delete sessoesAtivas[t];
   });
+  res.json({ ok: true, msg: 'Dispositivo de ' + user + ' liberado. Ele já pode entrar em outro aparelho.' });
 });
 
 // ── rota de login ─────────────────────────────────────────────────────────────
@@ -266,6 +288,11 @@ app.get('/api/today', auth, async function(req, res) {
 
   res.write('data: ' + JSON.stringify({ type:'done' }) + '\n\n');
   res.end();
+});
+
+// ── página do painel admin ───────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
 // ── serve arquivos estáticos só depois das rotas de API ──────────────────────
