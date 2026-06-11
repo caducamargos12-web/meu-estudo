@@ -91,11 +91,18 @@
   .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
 
   /* ═══ CARDS ═══ */
-  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:18px;margin-bottom:18px;overflow:hidden;animation:fadeUp .55s cubic-bezier(.2,.8,.2,1) both;transition:border-color .25s,transform .25s}
-  .card:hover{border-color:var(--border-bright);transform:translateY(-2px)}
+  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:16px;margin-bottom:12px;overflow:hidden;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1) both;transition:border-color .25s}
+  .card.open{border-color:color-mix(in srgb,var(--cor,var(--accent)) 45%,transparent)}
   .card-glow{height:2px;background:linear-gradient(90deg,transparent,var(--cor,var(--accent)),transparent);opacity:.6}
-  .card-in{padding:20px}
-  .c-head{display:flex;align-items:center;gap:13px;margin-bottom:18px}
+  /* cabeçalho clicável */
+  .c-head{display:flex;align-items:center;gap:13px;padding:16px 18px;cursor:pointer;user-select:none;transition:background .2s}
+  .c-head:hover{background:color-mix(in srgb,var(--cor,var(--accent)) 6%,transparent)}
+  .c-chevron{margin-left:auto;color:var(--text-3);transition:transform .3s cubic-bezier(.2,.8,.2,1);flex-shrink:0;font-size:18px}
+  .card.open .c-chevron{transform:rotate(180deg);color:var(--cor,var(--accent))}
+  /* conteúdo expansível */
+  .c-body{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.2,.8,.2,1),opacity .3s;opacity:0}
+  .card.open .c-body{max-height:4000px;opacity:1}
+  .c-body-in{padding:0 18px 18px}
   .c-icon{width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cor,var(--accent)) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--cor,var(--accent)) 30%,transparent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
   .c-meta{flex:1;min-width:0}
   .c-subj{font-size:18px;font-weight:700;letter-spacing:-.3px}
@@ -160,19 +167,24 @@
   .empty-sub{font-size:14px;color:var(--text-2);line-height:1.6}
   .empty-box .btn-primary{max-width:200px;margin:18px auto 0}
 
+  /* ═══ MARCA D'ÁGUA (anti-compartilhamento) ═══ */
+  #watermark{position:fixed;inset:0;z-index:400;pointer-events:none;overflow:hidden;opacity:.07}
+  #watermark .wm-row{display:flex;white-space:nowrap;transform:rotate(-30deg);transform-origin:left center}
+  .wm-text{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text);padding:0 40px;letter-spacing:1px;flex-shrink:0}
+
   .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
 
-  /* ═══ PLAYER DE MÚSICA ═══ */
-  .music-btn{position:fixed;bottom:20px;right:20px;z-index:500;width:48px;height:48px;border-radius:50%;background:var(--surface);border:1px solid var(--border-bright);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,.4);transition:all .2s;font-size:18px}
-  .music-btn:hover{transform:scale(1.08);border-color:var(--accent);box-shadow:0 8px 30px var(--accent-glow)}
-  .music-btn.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-  .music-btn .bars{display:flex;align-items:flex-end;gap:2px;height:16px}
-  .music-btn .bars span{width:3px;background:currentColor;border-radius:2px;height:5px}
-  .music-btn.playing .bars span{animation:eq .9s ease-in-out infinite}
-  .music-btn.playing .bars span:nth-child(2){animation-delay:.2s}
-  .music-btn.playing .bars span:nth-child(3){animation-delay:.4s}
-  .music-btn.playing .bars span:nth-child(4){animation-delay:.6s}
-  @keyframes eq{0%,100%{height:5px}50%{height:15px}}
+  /* ═══ PLAYER DE MÚSICA (mini, no header) ═══ */
+  .music-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .music-btn-mini:hover{border-color:var(--accent)}
+  .music-btn-mini.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .music-btn-mini .bars{display:flex;align-items:flex-end;gap:2px;height:13px}
+  .music-btn-mini .bars span{width:2.5px;background:currentColor;border-radius:2px;height:4px}
+  .music-btn-mini.playing .bars span{animation:eq .9s ease-in-out infinite}
+  .music-btn-mini.playing .bars span:nth-child(2){animation-delay:.2s}
+  .music-btn-mini.playing .bars span:nth-child(3){animation-delay:.4s}
+  .music-btn-mini.playing .bars span:nth-child(4){animation-delay:.6s}
+  @keyframes eq{0%,100%{height:4px}50%{height:12px}}
 </style>
 </head>
 <body>
@@ -205,12 +217,10 @@
 
 <!-- ═══ APP ═══ -->
 <div id="appScreen" style="display:none">
+  <div id="watermark"></div>
   <audio id="bgMusic" loop preload="none">
     <source src="/musica.mp3" type="audio/mpeg">
   </audio>
-  <button class="music-btn" id="musicBtn" onclick="toggleMusic()" aria-label="Música de fundo" title="Música de fundo">
-    <div class="bars"><span></span><span></span><span></span><span></span></div>
-  </button>
   <header>
     <div class="head-row">
       <div class="head-left">
@@ -221,6 +231,9 @@
         </div>
       </div>
       <div class="head-right">
+        <button class="music-btn-mini" id="musicBtn" onclick="toggleMusic()" aria-label="Música" title="Música de fundo">
+          <div class="bars"><span></span><span></span><span></span><span></span></div>
+        </button>
         <span id="clock"></span>
         <button class="logout-btn" onclick="sair()">Sair</button>
       </div>
@@ -256,6 +269,20 @@ function toggleMusic(){
 }
 
 function updateClock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+
+function toggleCard(idx){
+  const alvo=document.getElementById('card-'+idx);
+  if(!alvo)return;
+  const jaAberto=alvo.classList.contains('open');
+  // fecha todos
+  document.querySelectorAll('.card.open').forEach(c=>c.classList.remove('open'));
+  // se o clicado não estava aberto, abre ele
+  if(!jaAberto){
+    alvo.classList.add('open');
+    // rola suave até o card aberto
+    setTimeout(()=>{alvo.scrollIntoView({behavior:'smooth',block:'start'});},120);
+  }
+}
 
 function checkAnswer(cardId,qi,chosen,correta,explicacao){
   document.querySelectorAll(`[id^="opt-${cardId}-${qi}-"]`).forEach(o=>{
@@ -312,38 +339,41 @@ function renderCard(item, idx){
       ${proxDev}
     </div>`:'';
 
-  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.06}s">
+  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.05}s" id="card-${idx}">
     <div class="card-glow"></div>
-    <div class="card-in">
-      <div class="c-head">
-        <div class="c-icon">${emoji}</div>
-        <div class="c-meta">
-          <div class="c-subj">${item.m}</div>
-          <div class="c-prof">${item.p}</div>
+    <div class="c-head" onclick="toggleCard(${idx})">
+      <div class="c-icon">${emoji}</div>
+      <div class="c-meta">
+        <div class="c-subj">${item.m}</div>
+        <div class="c-prof">${item.p}</div>
+      </div>
+      <span class="c-chevron">⌄</span>
+    </div>
+    <div class="c-body">
+      <div class="c-body-in">
+        <div class="blk blk-aula">
+          <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+          <div class="blk-body">${item.aula_hoje||'—'}</div>
         </div>
+        <div class="blk blk-teste">
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste de hoje${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
+          <div class="blk-body">${item.materia_teste||'—'}</div>
+        </div>
+        <div class="blk blk-dev">
+          <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+          ${deveresHtml}
+        </div>
+        <div class="blk blk-res">
+          <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
+          <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
+        </div>
+        <div class="blk blk-quiz">
+          <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
+          ${quizHtml}
+          <div class="score" id="score-${cardId}">Responda as questões acima</div>
+        </div>
+        ${proxSec}
       </div>
-      <div class="blk blk-aula">
-        <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
-        <div class="blk-body">${item.aula_hoje||'—'}</div>
-      </div>
-      <div class="blk blk-teste">
-        <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste de hoje${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
-        <div class="blk-body">${item.materia_teste||'—'}</div>
-      </div>
-      <div class="blk blk-dev">
-        <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
-        ${deveresHtml}
-      </div>
-      <div class="blk blk-res">
-        <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
-        <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
-      </div>
-      <div class="blk blk-quiz">
-        <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
-        ${quizHtml}
-        <div class="score" id="score-${cardId}">Responda as questões acima</div>
-      </div>
-      ${proxSec}
     </div>
   </div>`;
 }
@@ -392,6 +422,9 @@ function loadDay(){
         const c=document.getElementById('day-count');if(c)c.textContent=`${total} matérias`;
         document.getElementById('cards').insertAdjacentHTML('beforeend',
           `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}${msg.fromCache?' · atualizado hoje':''}</div>`);
+        // abre a primeira matéria automaticamente
+        const primeiro=document.getElementById('card-0');
+        if(primeiro)primeiro.classList.add('open');
       }
     }
   };
@@ -434,9 +467,25 @@ function sair(){
   const btn=document.getElementById('loginBtn');btn.disabled=false;btn.textContent='Entrar';
 }
 
+function montarMarcaDagua(){
+  const user=localStorage.getItem('sessionUser')||'aluno';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const txt=`${user} · ${hoje} · Meu Estudo`;
+  const wm=document.getElementById('watermark');
+  // várias linhas diagonais cobrindo a tela toda
+  let linhas='';
+  for(let i=0;i<14;i++){
+    let conteudo='';
+    for(let j=0;j<8;j++){conteudo+=`<span class="wm-text">${txt}</span>`;}
+    linhas+=`<div class="wm-row" style="margin-top:${i===0?'-100px':'70px'}">${conteudo}</div>`;
+  }
+  wm.innerHTML=linhas;
+}
+
 function iniciarApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
+  montarMarcaDagua();
   updateClock();setInterval(updateClock,1000);
   loadDay();
 }
