@@ -45,7 +45,7 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.01ms!important;transition-duration:.01ms!important}
-    .card{opacity:1!important}
+    .card,.wc-hello,.wc-name,.wc-quote,.wc-loader,.wc-mark{opacity:1!important;filter:none!important}
   }
 
   /* ═══ LOGIN ═══ */
@@ -91,16 +91,17 @@
   .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
 
   /* ═══ CARDS ═══ */
-  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:16px;margin-bottom:12px;overflow:hidden;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1) both;transition:border-color .25s}
+  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:16px;margin-bottom:12px;overflow:hidden;animation:cardIn .8s cubic-bezier(.2,.8,.2,1) both;transition:border-color .4s ease}
+  @keyframes cardIn{from{opacity:0;transform:translateY(20px);filter:blur(4px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
   .card.open{border-color:color-mix(in srgb,var(--cor,var(--accent)) 45%,transparent)}
   .card-glow{height:2px;background:linear-gradient(90deg,transparent,var(--cor,var(--accent)),transparent);opacity:.6}
   /* cabeçalho clicável */
-  .c-head{display:flex;align-items:center;gap:13px;padding:16px 18px;cursor:pointer;user-select:none;transition:background .2s}
+  .c-head{display:flex;align-items:center;gap:13px;padding:16px 18px;cursor:pointer;user-select:none;transition:background .35s ease}
   .c-head:hover{background:color-mix(in srgb,var(--cor,var(--accent)) 6%,transparent)}
-  .c-chevron{margin-left:auto;color:var(--text-3);transition:transform .3s cubic-bezier(.2,.8,.2,1);flex-shrink:0;font-size:18px}
+  .c-chevron{margin-left:auto;color:var(--text-3);transition:transform .5s cubic-bezier(.34,1.3,.5,1),color .4s;flex-shrink:0;font-size:18px}
   .card.open .c-chevron{transform:rotate(180deg);color:var(--cor,var(--accent))}
   /* conteúdo expansível */
-  .c-body{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.2,.8,.2,1),opacity .3s;opacity:0}
+  .c-body{max-height:0;overflow:hidden;transition:max-height .6s cubic-bezier(.25,.8,.25,1),opacity .5s ease;opacity:0}
   .card.open .c-body{max-height:4000px;opacity:1}
   .c-body-in{padding:0 18px 18px}
   .c-icon{width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cor,var(--accent)) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--cor,var(--accent)) 30%,transparent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
@@ -174,21 +175,22 @@
 
   /* ═══ TELA DE BOAS-VINDAS ═══ */
   #welcome{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:var(--bg);text-align:center}
-  #welcome.fade-out{animation:welcomeOut .7s cubic-bezier(.4,0,.2,1) forwards}
-  @keyframes welcomeOut{to{opacity:0;visibility:hidden;transform:scale(1.04)}}
-  .wc-mark{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:#fff;box-shadow:0 8px 30px var(--accent-glow);margin-bottom:28px;animation:wcMark .7s cubic-bezier(.2,.8,.2,1) both}
-  @keyframes wcMark{from{opacity:0;transform:scale(.5) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
-  .wc-hello{font-size:15px;color:var(--text-2);font-weight:500;margin-bottom:8px;opacity:0;animation:fadeUp .6s .2s both}
-  .wc-name{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:24px;opacity:0;animation:fadeUp .6s .35s both;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-  .wc-quote{font-size:16px;color:var(--text-2);font-style:italic;line-height:1.6;max-width:340px;opacity:0;animation:fadeUp .6s .55s both}
+  #welcome.fade-out{animation:welcomeOut 1s cubic-bezier(.65,0,.35,1) forwards}
+  @keyframes welcomeOut{from{opacity:1;transform:scale(1);filter:blur(0)}to{opacity:0;visibility:hidden;transform:scale(1.06);filter:blur(8px)}}
+  .wc-mark{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:#fff;box-shadow:0 8px 30px var(--accent-glow);margin-bottom:28px;animation:wcMark 1.3s cubic-bezier(.34,1.4,.4,1) both}
+  @keyframes wcMark{from{opacity:0;transform:scale(.4) translateY(20px);filter:blur(10px)}to{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}}
+  .wc-hello{font-size:15px;color:var(--text-2);font-weight:500;margin-bottom:8px;opacity:0;animation:wcRise 1.1s .45s cubic-bezier(.2,.8,.2,1) both}
+  .wc-name{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:24px;opacity:0;animation:wcRise 1.1s .65s cubic-bezier(.2,.8,.2,1) both;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:200% auto}
+  .wc-quote{font-size:16px;color:var(--text-2);font-style:italic;line-height:1.6;max-width:340px;opacity:0;animation:wcRise 1.2s .9s cubic-bezier(.2,.8,.2,1) both}
   .wc-quote::before{content:'"'}
   .wc-quote::after{content:'"'}
-  .wc-loader{margin-top:36px;display:flex;align-items:center;gap:10px;opacity:0;animation:fadeIn .6s .8s both}
+  @keyframes wcRise{from{opacity:0;transform:translateY(22px);filter:blur(6px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+  .wc-loader{margin-top:36px;display:flex;align-items:center;gap:10px;opacity:0;animation:wcRise 1.1s 1.2s cubic-bezier(.2,.8,.2,1) both}
   .wc-dots{display:flex;gap:5px}
-  .wc-dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wcDot 1.2s ease-in-out infinite}
-  .wc-dots span:nth-child(2){animation-delay:.2s}
-  .wc-dots span:nth-child(3){animation-delay:.4s}
-  @keyframes wcDot{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+  .wc-dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wcDot 1.6s ease-in-out infinite}
+  .wc-dots span:nth-child(2){animation-delay:.25s}
+  .wc-dots span:nth-child(3){animation-delay:.5s}
+  @keyframes wcDot{0%,100%{opacity:.25;transform:scale(.75)}50%{opacity:1;transform:scale(1.2)}}
   .wc-loader-txt{font-size:13px;color:var(--text-3);font-family:var(--mono)}
 
   /* ═══ TELA DE BOAS-VINDAS ═══ END */
@@ -336,9 +338,9 @@ function montarBoasVindas(){
 function esconderBoasVindas(){
   const wc=document.getElementById('welcome');
   if(!wc || wc.classList.contains('fade-out'))return;
-  // garante pelo menos 1.8s de tela para a animação não piscar
+  // garante pelo menos 2.6s de tela para a animação completar com calma
   const decorrido=Date.now()-welcomeShownAt;
-  const espera=Math.max(0,1800-decorrido);
+  const espera=Math.max(0,2600-decorrido);
   setTimeout(()=>{
     wc.classList.add('fade-out');
     setTimeout(()=>{wc.style.display='none';},700);
@@ -414,7 +416,7 @@ function renderCard(item, idx){
       ${proxDev}
     </div>`:'';
 
-  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.05}s" id="card-${idx}">
+  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
     <div class="card-glow"></div>
     <div class="c-head" onclick="toggleCard(${idx})">
       <div class="c-icon">${emoji}</div>
