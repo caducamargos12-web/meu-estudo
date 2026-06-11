@@ -174,30 +174,31 @@
   .wm-text{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text);padding:0 40px;letter-spacing:1px;flex-shrink:0}
 
   /* ═══ TELA DE BOAS-VINDAS ═══ */
-  #welcome{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:var(--bg);text-align:center}
-  #welcome.fade-out{animation:welcomeOut 1.2s cubic-bezier(.65,0,.35,1) forwards}
+  #welcome{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:var(--bg);text-align:center;animation:welcomeIn 1.1s cubic-bezier(.4,0,.2,1) both}
+  @keyframes welcomeIn{from{opacity:0;transform:scale(1.02)}to{opacity:1;transform:scale(1)}}
+  #welcome.fade-out{animation:welcomeOut 1.3s cubic-bezier(.65,0,.35,1) forwards}
   @keyframes welcomeOut{from{opacity:1;transform:scale(1);filter:blur(0)}to{opacity:0;visibility:hidden;transform:scale(1.05);filter:blur(10px)}}
-  .wc-mark{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:#fff;box-shadow:0 8px 30px var(--accent-glow);margin-bottom:28px;animation:wcMark 1.6s cubic-bezier(.34,1.3,.4,1) both}
-  @keyframes wcMark{from{opacity:0;transform:scale(.4) translateY(24px);filter:blur(12px)}to{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}}
-  .wc-hello{font-size:15px;color:var(--text-2);font-weight:500;margin-bottom:10px;opacity:0;animation:wcRise 1.4s .5s cubic-bezier(.2,.8,.2,1) both}
+  .wc-mark{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:#fff;box-shadow:0 8px 30px var(--accent-glow);margin-bottom:28px;animation:wcMark 1.8s .3s cubic-bezier(.34,1.25,.4,1) both}
+  @keyframes wcMark{from{opacity:0;transform:scale(.5) translateY(24px);filter:blur(12px)}to{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}}
+  .wc-hello{font-size:15px;color:var(--text-2);font-weight:500;margin-bottom:10px;opacity:0;animation:wcRise 1.5s .8s cubic-bezier(.2,.8,.2,1) both}
   @keyframes wcRise{from{opacity:0;transform:translateY(20px);filter:blur(6px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
 
   /* nome letra por letra */
   .wc-name{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:26px;display:flex;flex-wrap:wrap;justify-content:center}
-  .wc-char{display:inline-block;opacity:0;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:charIn 1s cubic-bezier(.2,.8,.2,1) both}
-  @keyframes charIn{from{opacity:0;transform:translateY(18px) scale(.85);filter:blur(8px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+  .wc-char{display:inline-block;opacity:0;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:charIn 1.2s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes charIn{from{opacity:0;transform:translateY(20px) scale(.8);filter:blur(8px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
 
   /* frase palavra por palavra */
   .wc-quote{font-size:16px;color:var(--text-2);font-style:italic;line-height:1.7;max-width:340px}
-  .wc-word{display:inline-block;opacity:0;animation:wordIn 1.1s cubic-bezier(.2,.8,.2,1) both}
-  @keyframes wordIn{from{opacity:0;transform:translateY(10px);filter:blur(5px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+  .wc-word{display:inline-block;opacity:0;animation:wordIn 1.3s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes wordIn{from{opacity:0;transform:translateY(12px);filter:blur(5px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
 
-  .wc-loader{margin-top:38px;display:flex;align-items:center;gap:10px;opacity:0;animation:wcRise 1.4s 2.2s cubic-bezier(.2,.8,.2,1) both}
+  .wc-loader{margin-top:38px;display:flex;align-items:center;gap:10px;opacity:0;animation:wcRise 1.5s 2.8s cubic-bezier(.2,.8,.2,1) both}
   .wc-dots{display:flex;gap:5px}
-  .wc-dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wcDot 1.8s ease-in-out infinite}
-  .wc-dots span:nth-child(2){animation-delay:.3s}
-  .wc-dots span:nth-child(3){animation-delay:.6s}
-  @keyframes wcDot{0%,100%{opacity:.22;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+  .wc-dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wcDot 4.5s ease-in-out infinite}
+  .wc-dots span:nth-child(2){animation-delay:.9s}
+  .wc-dots span:nth-child(3){animation-delay:1.8s}
+  @keyframes wcDot{0%,100%{opacity:.4;transform:scale(.9)}50%{opacity:.85;transform:scale(1.05)}}
   .wc-loader-txt{font-size:13px;color:var(--text-3);font-family:var(--mono)}
 
   /* ═══ TELA DE BOAS-VINDAS ═══ END */
@@ -336,9 +337,10 @@ let welcomeShownAt=0;
 function montarBoasVindas(){
   welcomeShownAt=Date.now();
   const wc=document.getElementById('welcome');
-  // garante que a tela está visível e reinicia a animação do zero
+  // garante que a tela está visível e reinicia as animações do zero
   wc.style.display='flex';
   wc.classList.remove('fade-out');
+  wc.style.animation='none';
 
   const user=localStorage.getItem('sessionUser')||'Aluno';
   const nome=user.charAt(0).toUpperCase()+user.slice(1)+'!';
@@ -347,29 +349,30 @@ function montarBoasVindas(){
   // monta o nome letra por letra (cada letra com delay crescente)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${0.7+i*0.07}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${1+i*0.09}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
   // monta a frase palavra por palavra (suave)
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${1.3+i*0.09}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${1.7+i*0.11}s">${p}</span>`
   ).join(' ');
 
-  // força o navegador a reiniciar as animações CSS
+  // força o navegador a reiniciar as animações CSS do zero
   void wc.offsetWidth;
+  wc.style.animation='';
 }
 
 function esconderBoasVindas(){
   const wc=document.getElementById('welcome');
   if(!wc || wc.classList.contains('fade-out'))return;
-  // tempo mínimo maior para apreciar a animação das letras
+  // tempo mínimo de 5 segundos para a animação completar com calma
   const decorrido=Date.now()-welcomeShownAt;
-  const espera=Math.max(0,3800-decorrido);
+  const espera=Math.max(0,5000-decorrido);
   setTimeout(()=>{
     wc.classList.add('fade-out');
-    setTimeout(()=>{wc.style.display='none';},1000);
+    setTimeout(()=>{wc.style.display='none';},1300);
   },espera);
 }
 
