@@ -48,35 +48,46 @@
     .card,.wc-hello,.wc-name,.wc-quote,.wc-loader,.wc-mark,.wc-char,.wc-word{opacity:1!important;filter:none!important}
   }
 
-  /* otimização para celular: blur é pesado em mobile, então aliviamos
-     mantendo o movimento suave mas sem travar */
+  /* otimização para celular: blur trava em mobile, então usamos
+     movimentos mais ricos com scale/translate que rodam liso na GPU */
   @media (max-width:768px){
     .card{backdrop-filter:none;-webkit-backdrop-filter:none;background:linear-gradient(180deg,rgba(38,32,24,.95),rgba(30,25,19,.96))}
     header{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-    /* anima sem blur no celular: usa só movimento + fade (leve na GPU) */
+    /* nome: letras "saltam" para cima com escala, fluido e vivo */
     @keyframes charIn{
-      0%{opacity:0;transform:translateY(24px) scale(.75)}
+      0%{opacity:0;transform:translateY(30px) scale(.5)}
+      55%{opacity:1;transform:translateY(-4px) scale(1.08)}
       100%{opacity:1;transform:translateY(0) scale(1)}
     }
+    /* palavras: deslizam de baixo com leve overshoot */
     @keyframes wordIn{
-      0%{opacity:0;transform:translateY(14px) scale(.94)}
+      0%{opacity:0;transform:translateY(18px) scale(.9)}
+      60%{opacity:1;transform:translateY(-2px) scale(1.02)}
       100%{opacity:1;transform:translateY(0) scale(1)}
     }
+    /* logo: entra girando suave com bounce */
     @keyframes wcMark{
-      0%{opacity:0;transform:scale(.5) translateY(24px)}
-      100%{opacity:1;transform:scale(1) translateY(0)}
+      0%{opacity:0;transform:scale(.3) translateY(30px) rotate(-15deg)}
+      60%{opacity:1;transform:scale(1.1) translateY(-4px) rotate(4deg)}
+      100%{opacity:1;transform:scale(1) translateY(0) rotate(0)}
     }
     @keyframes wcRise{
-      0%{opacity:0;transform:translateY(20px)}
-      100%{opacity:1;transform:translateY(0)}
+      0%{opacity:0;transform:translateY(24px) scale(.95)}
+      60%{opacity:1;transform:translateY(-3px) scale(1.01)}
+      100%{opacity:1;transform:translateY(0) scale(1)}
     }
+    /* cards entram deslizando lateralmente com fade, leve e fluido */
     @keyframes cardIn{
-      0%{opacity:0;transform:translateY(20px)}
-      100%{opacity:1;transform:translateY(0)}
+      0%{opacity:0;transform:translateY(24px) scale(.97)}
+      100%{opacity:1;transform:translateY(0) scale(1)}
     }
     @keyframes welcomeOut{
       from{opacity:1;transform:scale(1)}
-      to{opacity:0;visibility:hidden;transform:scale(1.04)}
+      to{opacity:0;visibility:hidden;transform:scale(1.05)}
+    }
+    @keyframes welcomeIn{
+      from{opacity:0;transform:scale(1.03)}
+      to{opacity:1;transform:scale(1)}
     }
   }
 
@@ -217,7 +228,7 @@
 
   /* nome letra por letra - entrada cinematográfica */
   .wc-name{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:30px;display:flex;flex-wrap:wrap;justify-content:center;min-height:44px}
-  .wc-char{display:inline-block;opacity:0;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:charIn 1.8s cubic-bezier(.16,1,.3,1) both}
+  .wc-char{display:inline-block;opacity:0;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:charIn 1.2s cubic-bezier(.16,1,.3,1) both}
   @keyframes charIn{
     0%{opacity:0;transform:translateY(28px) scale(.7) rotate(-4deg);filter:blur(12px)}
     60%{opacity:1;filter:blur(0)}
@@ -226,7 +237,7 @@
 
   /* frase palavra por palavra - brecha grande entre palavras */
   .wc-quote{font-size:17px;color:var(--text-2);font-style:italic;line-height:1.8;max-width:360px;min-height:60px}
-  .wc-word{display:inline-block;opacity:0;animation:wordIn 2.4s cubic-bezier(.16,1,.3,1) both}
+  .wc-word{display:inline-block;opacity:0;animation:wordIn 1.5s cubic-bezier(.16,1,.3,1) both}
   @keyframes wordIn{
     0%{opacity:0;transform:translateY(16px) scale(.92);filter:blur(8px)}
     50%{opacity:.6;filter:blur(2px)}
@@ -248,13 +259,9 @@
   .music-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .music-btn-mini:hover{border-color:var(--accent)}
   .music-btn-mini.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-  .music-btn-mini .bars{display:flex;align-items:flex-end;gap:2px;height:13px}
-  .music-btn-mini .bars span{width:2.5px;background:currentColor;border-radius:2px;height:4px}
-  .music-btn-mini.playing .bars span{animation:eq .9s ease-in-out infinite}
-  .music-btn-mini.playing .bars span:nth-child(2){animation-delay:.2s}
-  .music-btn-mini.playing .bars span:nth-child(3){animation-delay:.4s}
-  .music-btn-mini.playing .bars span:nth-child(4){animation-delay:.6s}
-  @keyframes eq{0%,100%{height:4px}50%{height:12px}}
+  .note-icon{transition:transform .2s}
+  .music-btn-mini.playing .note-icon{animation:noteBounce 1.4s ease-in-out infinite}
+  @keyframes noteBounce{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-1.5px) rotate(-6deg)}75%{transform:translateY(1px) rotate(6deg)}}
 </style>
 </head>
 <body>
@@ -312,7 +319,11 @@
       </div>
       <div class="head-right">
         <button class="music-btn-mini" id="musicBtn" onclick="toggleMusic()" aria-label="Música" title="Música de fundo">
-          <div class="bars"><span></span><span></span><span></span><span></span></div>
+          <svg class="note-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+            <path d="M9 18V5l12-2v13"></path>
+          </svg>
         </button>
         <span id="clock"></span>
         <button class="logout-btn" onclick="sair()">Sair</button>
@@ -390,21 +401,21 @@ function montarBoasVindas(){
   // monta o nome letra por letra (brecha confortável entre letras)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${1.2+i*0.18}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${0.8+i*0.11}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
-  // monta a frase palavra por palavra (brecha grande: ~1.2s entre cada palavra)
+  // monta a frase palavra por palavra (brecha entre cada palavra)
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
-  const nomeFim=1.2+nome.length*0.18;
-  const inicioFrase=nomeFim+0.6;
+  const nomeFim=0.8+nome.length*0.11;
+  const inicioFrase=nomeFim+0.4;
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${inicioFrase+i*1.2}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.7}s">${p}</span>`
   ).join(' ');
 
   // calcula quando a última palavra termina de animar (em ms)
-  const fimAnimacao=(inicioFrase+(palavras.length-1)*1.2+2.4)*1000;
-  welcomeMinTime=Math.min(fimAnimacao+800,13000); // teto de 13s para não cansar
+  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.7+1.6)*1000;
+  welcomeMinTime=Math.min(fimAnimacao+600,9000); // teto de 9s para não cansar
 
   // força o navegador a reiniciar as animações CSS do zero
   void wc.offsetWidth;
