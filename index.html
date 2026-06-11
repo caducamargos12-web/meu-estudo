@@ -32,17 +32,9 @@
   html{-webkit-font-smoothing:antialiased}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;position:relative}
 
-  /* imagem de fundo sutil */
-  body::after{
-    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-    background:url('/fundo.jpg') center/cover no-repeat;
-    opacity:.10;
-  }
-  /* gradiente quente por cima do fundo */
-  body::before{
-    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-    background:linear-gradient(180deg,rgba(26,22,17,.7),rgba(26,22,17,.92));
-  }
+  /* imagem de fundo visível — fica FIXA atrás de tudo */
+  .bg-layer{position:fixed;inset:0;z-index:-2;background:url('/fundo.jpg') center/cover no-repeat;opacity:.55}
+  .bg-tint{position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(26,22,17,.55),rgba(26,22,17,.72))}
 
   /* ═══ animações ═══ */
   @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -51,7 +43,10 @@
   @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
-  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+    .card{opacity:1!important}
+  }
 
   /* ═══ LOGIN ═══ */
   #loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -76,7 +71,7 @@
 
   /* ═══ HEADER ═══ */
   #appScreen{position:relative;z-index:1}
-  header{position:sticky;top:0;z-index:100;background:rgba(8,9,12,.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:16px 22px}
+  header{position:sticky;top:0;z-index:100;background:rgba(26,22,17,.65);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:16px 22px}
   .head-row{max-width:720px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
   .head-left{display:flex;align-items:center;gap:12px}
   .head-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff;box-shadow:0 2px 12px var(--accent-glow)}
@@ -96,7 +91,7 @@
   .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
 
   /* ═══ CARDS ═══ */
-  .card{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border);border-radius:18px;margin-bottom:18px;overflow:hidden;opacity:0;animation:fadeUp .55s cubic-bezier(.2,.8,.2,1) forwards;transition:border-color .25s,transform .25s}
+  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:18px;margin-bottom:18px;overflow:hidden;animation:fadeUp .55s cubic-bezier(.2,.8,.2,1) both;transition:border-color .25s,transform .25s}
   .card:hover{border-color:var(--border-bright);transform:translateY(-2px)}
   .card-glow{height:2px;background:linear-gradient(90deg,transparent,var(--cor,var(--accent)),transparent);opacity:.6}
   .card-in{padding:20px}
@@ -179,6 +174,8 @@
 </style>
 </head>
 <body>
+<div class="bg-layer"></div>
+<div class="bg-tint"></div>
 
 <!-- ═══ LOGIN ═══ -->
 <div id="loginScreen" style="display:none">
