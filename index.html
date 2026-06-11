@@ -53,9 +53,9 @@
   @media (max-width:768px){
     .card{backdrop-filter:none;-webkit-backdrop-filter:none;background:linear-gradient(180deg,rgba(38,32,24,.95),rgba(30,25,19,.96));animation-name:cardInM}
     header{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-    .wc-char{animation-name:charInM}
-    .wc-word{animation-name:wordInM}
-    .wc-mark{animation-name:wcMarkM}
+    .wc-char{animation-name:charInM;background:none;-webkit-text-fill-color:var(--accent);color:var(--accent);will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-word{animation-name:wordInM;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-mark{animation-name:wcMarkM;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
     .wc-hello,.wc-loader{animation-name:wcRiseM}
     #welcome{animation-name:welcomeInM}
     #welcome.fade-out{animation-name:welcomeOutM}
@@ -229,7 +229,7 @@
   @keyframes wcRise{from{opacity:0;transform:translateY(20px);filter:blur(6px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
 
   /* nome letra por letra - entrada cinematográfica */
-  .wc-name{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:30px;display:flex;flex-wrap:wrap;justify-content:center;min-height:44px}
+  .wc-name{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.2;margin-bottom:30px;display:flex;flex-wrap:wrap;justify-content:center;min-height:48px;padding:4px 0}
   .wc-char{display:inline-block;opacity:0;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:charIn 1.2s cubic-bezier(.16,1,.3,1) both}
   @keyframes charIn{
     0%{opacity:0;transform:translateY(28px) scale(.7) rotate(-4deg);filter:blur(12px)}
