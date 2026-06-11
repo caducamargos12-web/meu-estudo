@@ -172,6 +172,26 @@
   #watermark .wm-row{display:flex;white-space:nowrap;transform:rotate(-30deg);transform-origin:left center}
   .wm-text{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text);padding:0 40px;letter-spacing:1px;flex-shrink:0}
 
+  /* ═══ TELA DE BOAS-VINDAS ═══ */
+  #welcome{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:var(--bg);text-align:center}
+  #welcome.fade-out{animation:welcomeOut .7s cubic-bezier(.4,0,.2,1) forwards}
+  @keyframes welcomeOut{to{opacity:0;visibility:hidden;transform:scale(1.04)}}
+  .wc-mark{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:#fff;box-shadow:0 8px 30px var(--accent-glow);margin-bottom:28px;animation:wcMark .7s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes wcMark{from{opacity:0;transform:scale(.5) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+  .wc-hello{font-size:15px;color:var(--text-2);font-weight:500;margin-bottom:8px;opacity:0;animation:fadeUp .6s .2s both}
+  .wc-name{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:24px;opacity:0;animation:fadeUp .6s .35s both;background:linear-gradient(90deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .wc-quote{font-size:16px;color:var(--text-2);font-style:italic;line-height:1.6;max-width:340px;opacity:0;animation:fadeUp .6s .55s both}
+  .wc-quote::before{content:'"'}
+  .wc-quote::after{content:'"'}
+  .wc-loader{margin-top:36px;display:flex;align-items:center;gap:10px;opacity:0;animation:fadeIn .6s .8s both}
+  .wc-dots{display:flex;gap:5px}
+  .wc-dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wcDot 1.2s ease-in-out infinite}
+  .wc-dots span:nth-child(2){animation-delay:.2s}
+  .wc-dots span:nth-child(3){animation-delay:.4s}
+  @keyframes wcDot{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+  .wc-loader-txt{font-size:13px;color:var(--text-3);font-family:var(--mono)}
+
+  /* ═══ TELA DE BOAS-VINDAS ═══ END */
   .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
 
   /* ═══ PLAYER DE MÚSICA (mini, no header) ═══ */
@@ -217,6 +237,16 @@
 
 <!-- ═══ APP ═══ -->
 <div id="appScreen" style="display:none">
+  <div id="welcome">
+    <div class="wc-mark">M</div>
+    <div class="wc-hello">Bons estudos,</div>
+    <div class="wc-name" id="wcName">Aluno</div>
+    <div class="wc-quote" id="wcQuote"></div>
+    <div class="wc-loader">
+      <div class="wc-dots"><span></span><span></span><span></span></div>
+      <span class="wc-loader-txt">Preparando seu material…</span>
+    </div>
+  </div>
   <div id="watermark"></div>
   <audio id="bgMusic" loop preload="none">
     <source src="/musica.mp3" type="audio/mpeg">
@@ -269,6 +299,51 @@ function toggleMusic(){
 }
 
 function updateClock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+
+const FRASES=[
+  'O sucesso é a soma de pequenos esforços repetidos todos os dias.',
+  'Não conte os dias, faça os dias contarem.',
+  'A disciplina é a ponte entre metas e conquistas.',
+  'Cada página estudada hoje é um degrau a mais amanhã.',
+  'Estudar não é sobre ser perfeito, é sobre ser constante.',
+  'O conhecimento é a única coisa que ninguém pode tirar de você.',
+  'Pequenos progressos ainda são progressos.',
+  'A jornada de mil quilômetros começa com um único passo.',
+  'Você é capaz de coisas maiores do que imagina.',
+  'O esforço de hoje é a vitória de amanhã.',
+  'Foco no progresso, não na perfeição.',
+  'Quem persiste, alcança.',
+  'A melhor preparação para amanhã é fazer o seu melhor hoje.',
+  'Acredite no processo e confie no seu esforço.',
+  'Grandes resultados exigem grandes ambições.',
+  'O que você planta hoje, colhe amanhã.',
+  'A constância vence o talento quando o talento não é constante.',
+  'Transforme o nervosismo da prova em combustível para estudar.',
+  'Um pouco todo dia leva longe.',
+  'Você já chegou até aqui. Continue.'
+];
+
+let welcomeShownAt=0;
+function montarBoasVindas(){
+  welcomeShownAt=Date.now();
+  const user=localStorage.getItem('sessionUser')||'Aluno';
+  const nome=user.charAt(0).toUpperCase()+user.slice(1);
+  document.getElementById('wcName').textContent=nome+'!';
+  const frase=FRASES[Math.floor(Math.random()*FRASES.length)];
+  document.getElementById('wcQuote').textContent=frase;
+}
+
+function esconderBoasVindas(){
+  const wc=document.getElementById('welcome');
+  if(!wc || wc.classList.contains('fade-out'))return;
+  // garante pelo menos 1.8s de tela para a animação não piscar
+  const decorrido=Date.now()-welcomeShownAt;
+  const espera=Math.max(0,1800-decorrido);
+  setTimeout(()=>{
+    wc.classList.add('fade-out');
+    setTimeout(()=>{wc.style.display='none';},700);
+  },espera);
+}
 
 function toggleCard(idx){
   const alvo=document.getElementById('card-'+idx);
@@ -403,6 +478,7 @@ function loadDay(){
       }
     }
     if(msg.type==='weekend'){
+      esconderBoasVindas();
       main.innerHTML=`<div class="empty-box"><div class="empty-emoji">🎉</div><div class="empty-title">Fim de semana</div><div class="empty-sub">Não há aulas hoje.<br>Volte na segunda-feira para ver suas matérias.</div></div>`;
     }
     if(msg.type==='loading'){
@@ -417,6 +493,7 @@ function loadDay(){
     }
     if(msg.type==='done'){
       evtSource.close();
+      esconderBoasVindas();
       if(total>0){
         document.getElementById('subtitle').textContent=`${total} matérias hoje`;
         const c=document.getElementById('day-count');if(c)c.textContent=`${total} matérias`;
@@ -430,6 +507,7 @@ function loadDay(){
   };
   evtSource.onerror=function(){
     evtSource.close();
+    esconderBoasVindas();
     if(done===0){
       main.innerHTML=`<div class="empty-box"><div class="empty-emoji">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">Sua sessão pode ter expirado.</div><button class="btn-primary" onclick="sair()">Entrar de novo</button></div>`;
     }
@@ -485,6 +563,7 @@ function montarMarcaDagua(){
 function iniciarApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
+  montarBoasVindas();
   montarMarcaDagua();
   updateClock();setInterval(updateClock,1000);
   loadDay();
