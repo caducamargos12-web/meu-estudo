@@ -107,6 +107,8 @@
   .blk-label{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
   .blk-body{font-size:14px;line-height:1.65;color:var(--text)}
   .blk-aula .blk-label{color:var(--text-2)}
+  .blk-teste{border-color:color-mix(in srgb,var(--accent) 35%,transparent);background:color-mix(in srgb,var(--accent) 9%,var(--bg))}
+  .blk-teste .blk-label{color:var(--accent)}
   .blk-dev{border-color:color-mix(in srgb,var(--amber) 22%,transparent);background:color-mix(in srgb,var(--amber) 5%,var(--bg))}
   .blk-dev .blk-label{color:var(--amber)}
   .blk-res{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
@@ -321,15 +323,19 @@ function renderCard(item, idx){
         </div>
       </div>
       <div class="blk blk-aula">
-        <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Última aula · cai no teste</span></div>
-        <div class="blk-body">${item.ultima_aula||'—'}</div>
+        <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+        <div class="blk-body">${item.aula_hoje||'—'}</div>
+      </div>
+      <div class="blk blk-teste">
+        <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste de hoje${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
+        <div class="blk-body">${item.materia_teste||'—'}</div>
       </div>
       <div class="blk blk-dev">
         <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
         ${deveresHtml}
       </div>
       <div class="blk blk-res">
-        <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo para o teste</span></div>
+        <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
         <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
       </div>
       <div class="blk blk-quiz">
