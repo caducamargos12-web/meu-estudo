@@ -27,9 +27,10 @@ const ALUNOS = carregarAlunos();
 const SESSION_SECRET = process.env.SESSION_SECRET || 'troque-isto-no-railway';
 
 // ── sessões ativas: { token: { user, device, criadoEm } } ───────────────────
-// guarda qual dispositivo (fingerprint) está logado em cada conta
+// guarda quais dispositivos estão vinculados a cada conta (até 2)
 const sessoesAtivas = {};      // token -> dados
-const dispositivoPorUser = {}; // user -> deviceId (1 login = 1 dispositivo)
+const dispositivosPorUser = {}; // user -> [deviceId1, deviceId2] (1 login = até 2 dispositivos)
+const MAX_DISPOSITIVOS = 2;
 
 function gerarToken(user, device) {
   const payload = `${user}|${device}|${Date.now()}`;
@@ -54,9 +55,10 @@ function auth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
   const dados = validarToken(token);
   if (!dados) return res.status(401).json({ error: 'Sessão inválida' });
-  // verifica se o dispositivo bate com o registrado para esse usuário
-  if (dispositivoPorUser[dados.user] && dispositivoPorUser[dados.user] !== dados.device) {
-    return res.status(403).json({ error: 'Conta em uso em outro dispositivo' });
+  // verifica se o dispositivo está entre os registrados para esse usuário
+  const lista = dispositivosPorUser[dados.user];
+  if (lista && lista.length && !lista.includes(dados.device)) {
+    return res.status(403).json({ error: 'Limite de dispositivos atingido' });
   }
   req.user = dados.user;
   next();
@@ -72,26 +74,30 @@ function checkAdmin(req, res, next) {
   next();
 }
 
-// lista alunos e o status de vínculo de dispositivo
+// lista alunos e o status de vínculo de dispositivos
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
-  const lista = Object.keys(ALUNOS).map(user => ({
-    user,
-    vinculado: !!dispositivoPorUser[user],
-    dispositivo: dispositivoPorUser[user] ? dispositivoPorUser[user].slice(0,12) + '…' : null
-  }));
+  const lista = Object.keys(ALUNOS).map(user => {
+    const devs = dispositivosPorUser[user] || [];
+    return {
+      user,
+      vinculado: devs.length > 0,
+      qtd_dispositivos: devs.length,
+      max_dispositivos: MAX_DISPOSITIVOS
+    };
+  });
   res.json({ alunos: lista, total: lista.length });
 });
 
-// desbloqueia o dispositivo de um aluno (ele poderá logar em novo aparelho)
+// desbloqueia os dispositivos de um aluno (libera todos os aparelhos dele)
 app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
   const { user } = req.body;
   if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
-  delete dispositivoPorUser[user];
+  delete dispositivosPorUser[user];
   // invalida sessões ativas desse usuário
   Object.keys(sessoesAtivas).forEach(t => {
     if (sessoesAtivas[t].user === user) delete sessoesAtivas[t];
   });
-  res.json({ ok: true, msg: 'Dispositivo de ' + user + ' liberado. Ele já pode entrar em outro aparelho.' });
+  res.json({ ok: true, msg: 'Dispositivos de ' + user + ' liberados. Ele já pode entrar em novos aparelhos.' });
 });
 
 // ── rota de login ─────────────────────────────────────────────────────────────
@@ -100,12 +106,19 @@ app.post('/api/login', (req, res) => {
   if (!user || !pass || !device) return res.json({ error: 'Dados incompletos' });
   if (ALUNOS[user] !== pass) return res.json({ error: 'Usuário ou senha incorretos' });
 
-  // 1 login = 1 dispositivo. Se já tem dispositivo registrado e é outro, bloqueia
-  if (dispositivoPorUser[user] && dispositivoPorUser[user] !== device) {
-    return res.json({ error: 'Esta conta já está vinculada a outro dispositivo. Contate o administrador para liberar.' });
+  // inicializa a lista de dispositivos do usuário
+  if (!dispositivosPorUser[user]) dispositivosPorUser[user] = [];
+  const lista = dispositivosPorUser[user];
+
+  // se o dispositivo já está registrado, deixa entrar normalmente
+  if (!lista.includes(device)) {
+    // dispositivo novo: só registra se ainda houver vaga (até 2)
+    if (lista.length >= MAX_DISPOSITIVOS) {
+      return res.json({ error: 'Esta conta já está vinculada a ' + MAX_DISPOSITIVOS + ' dispositivos. Contate o administrador para liberar.' });
+    }
+    lista.push(device);
   }
-  // registra o dispositivo na primeira vez
-  dispositivoPorUser[user] = device;
+
   const token = gerarToken(user, device);
   sessoesAtivas[token] = { user, device, criadoEm: Date.now() };
   res.json({ token, user });

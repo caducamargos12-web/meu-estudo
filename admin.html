@@ -54,7 +54,7 @@
       <div class="section-label">Como adicionar / remover alunos</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.6">
         Para <strong style="color:var(--text)">adicionar</strong> ou <strong style="color:var(--text)">remover</strong> um aluno, edite a variável <code style="background:var(--surface);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11px">ALUNOS</code> no Railway, no formato <code style="background:var(--surface);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11px">usuario:senha</code> separados por vírgula.<br><br>
-        O botão <strong style="color:var(--accent)">Liberar dispositivo</strong> abaixo serve para quando um aluno trocou de celular ou limpou o navegador e ficou travado. Liberar permite que ele entre num novo aparelho.
+        O botão <strong style="color:var(--accent)">Liberar dispositivos</strong> abaixo serve para quando um aluno trocou de aparelho ou limpou o navegador e ficou travado. Cada aluno pode usar até <strong style="color:var(--text)">2 dispositivos</strong> (ex: celular + PC). Liberar zera os aparelhos vinculados para ele cadastrar de novo.
       </div>
     </div>
   </div>
@@ -93,16 +93,16 @@ function renderLista(alunos){
       <div class="aluno-info">
         <div class="aluno-nome">${a.user}</div>
         <div class="aluno-status ${a.vinculado?'status-vinc':'status-livre'}">
-          ${a.vinculado?'🔒 Vinculado a um aparelho':'⚪ Sem aparelho vinculado'}
+          ${a.vinculado?`🔒 ${a.qtd_dispositivos}/${a.max_dispositivos} dispositivos`:'⚪ Sem aparelho vinculado'}
         </div>
       </div>
-      ${a.vinculado?`<button class="small" onclick="desbloquear('${a.user}')">Liberar dispositivo</button>`:''}
+      ${a.vinculado?`<button class="small" onclick="desbloquear('${a.user}')">Liberar dispositivos</button>`:''}
     </div>
   `).join('');
 }
 
 async function desbloquear(user){
-  if(!confirm('Liberar o dispositivo de '+user+'? Ele poderá entrar em um novo aparelho.'))return;
+  if(!confirm('Liberar os dispositivos de '+user+'? Os aparelhos vinculados serão zerados e ele poderá cadastrar de novo.'))return;
   const msg = document.getElementById('painelMsg');
   try{
     const res = await fetch('/api/admin/desbloquear',{
