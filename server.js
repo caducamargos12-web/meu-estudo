@@ -33,6 +33,26 @@ const sessoesAtivas = {};      // token -> dados
 const dispositivosPorUser = {}; // user -> [{id, aparelho, data}, ...] (até 2)
 const MAX_DISPOSITIVOS = 2;
 
+// ── persistência dos vínculos de dispositivo em disco ───────────────────────
+// usa o volume persistente do Railway em /data; se não existir, cai em /tmp
+const DATA_DIR = fs.existsSync('/data') ? '/data' : '/tmp';
+const DISPOSITIVOS_FILE = DATA_DIR + '/dispositivos.json';
+
+function carregarDispositivos() {
+  try {
+    const dados = JSON.parse(fs.readFileSync(DISPOSITIVOS_FILE, 'utf8'));
+    Object.assign(dispositivosPorUser, dados);
+    console.log('Vínculos de dispositivo carregados do disco.');
+  } catch { /* primeiro uso, arquivo ainda não existe */ }
+}
+
+function salvarDispositivos() {
+  try { fs.writeFileSync(DISPOSITIVOS_FILE, JSON.stringify(dispositivosPorUser)); }
+  catch (e) { console.log('Erro ao salvar dispositivos:', e.message); }
+}
+
+carregarDispositivos();
+
 // detecta o tipo de aparelho a partir do User-Agent
 function detectarAparelho(ua) {
   ua = ua || '';
@@ -121,6 +141,7 @@ app.post('/api/admin/remover-dispositivo', checkAdmin, (req, res) => {
   if (idx === -1) return res.json({ error: 'Dispositivo não encontrado' });
   lista.splice(idx, 1);
   if (lista.length === 0) delete dispositivosPorUser[user];
+  salvarDispositivos();
   // invalida as sessões desse dispositivo
   Object.keys(sessoesAtivas).forEach(t => {
     if (sessoesAtivas[t].user === user && sessoesAtivas[t].device === deviceId) delete sessoesAtivas[t];
@@ -133,6 +154,7 @@ app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
   const { user } = req.body;
   if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
   delete dispositivosPorUser[user];
+  salvarDispositivos();
   Object.keys(sessoesAtivas).forEach(t => {
     if (sessoesAtivas[t].user === user) delete sessoesAtivas[t];
   });
@@ -159,6 +181,7 @@ app.post('/api/login', (req, res) => {
     const aparelho = detectarAparelho(req.headers['user-agent']);
     const data = new Date().toLocaleDateString('pt-BR');
     lista.push({ id: device, aparelho, data });
+    salvarDispositivos();
   }
 
   const token = gerarToken(user, device);
@@ -204,7 +227,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_FILE = '/tmp/cache_estudo.json';
+const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
 function salvarCache() {
