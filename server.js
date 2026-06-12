@@ -53,6 +53,38 @@ function salvarDispositivos() {
 
 carregarDispositivos();
 
+// ── pagamentos / assinaturas (salvos no volume persistente) ─────────────────
+// pagamentos[user] = { cadastro, vencimento, ultimoPagamento, valorPago, historico:[{data,valor}] }
+const pagamentos = {};
+const PAGAMENTOS_FILE = DATA_DIR + '/pagamentos.json';
+
+function carregarPagamentos() {
+  try {
+    const dados = JSON.parse(fs.readFileSync(PAGAMENTOS_FILE, 'utf8'));
+    Object.assign(pagamentos, dados);
+    console.log('Pagamentos carregados do disco.');
+  } catch { /* primeiro uso */ }
+}
+function salvarPagamentos() {
+  try { fs.writeFileSync(PAGAMENTOS_FILE, JSON.stringify(pagamentos)); }
+  catch (e) { console.log('Erro ao salvar pagamentos:', e.message); }
+}
+carregarPagamentos();
+
+// registra o cadastro de um aluno na primeira vez que ele loga
+function registrarCadastro(user) {
+  if (!pagamentos[user]) {
+    pagamentos[user] = {
+      cadastro: new Date().toISOString(),
+      vencimento: null,
+      ultimoPagamento: null,
+      valorPago: 0,
+      historico: []
+    };
+    salvarPagamentos();
+  }
+}
+
 // detecta o tipo de aparelho a partir do User-Agent
 function detectarAparelho(ua) {
   ua = ua || '';
@@ -115,21 +147,84 @@ function checkAdmin(req, res, next) {
 
 // lista alunos e os dispositivos vinculados (com detalhes)
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
+  const agora = new Date();
   const lista = Object.keys(ALUNOS).map(user => {
     const devs = dispositivosPorUser[user] || [];
+    const pag = pagamentos[user] || null;
+
+    // calcula status e dias restantes
+    let statusPag = 'novo';          // novo, pago, vencido
+    let diasRestantes = null;
+    let diasDeUso = null;
+    if (pag) {
+      if (pag.cadastro) {
+        diasDeUso = Math.floor((agora - new Date(pag.cadastro)) / 86400000);
+      }
+      if (pag.vencimento) {
+        const venc = new Date(pag.vencimento);
+        diasRestantes = Math.ceil((venc - agora) / 86400000);
+        statusPag = diasRestantes >= 0 ? 'pago' : 'vencido';
+      } else {
+        statusPag = 'pendente'; // cadastrou mas nunca pagou
+      }
+    }
+
     return {
       user,
       vinculado: devs.length > 0,
       qtd_dispositivos: devs.length,
       max_dispositivos: MAX_DISPOSITIVOS,
-      dispositivos: devs.map(d => ({
-        id: d.id,
-        aparelho: d.aparelho || 'Desconhecido',
-        data: d.data || '—'
-      }))
+      dispositivos: devs.map(d => ({ id: d.id, aparelho: d.aparelho || 'Desconhecido', data: d.data || '—' })),
+      // dados de pagamento
+      cadastro: pag ? pag.cadastro : null,
+      vencimento: pag ? pag.vencimento : null,
+      ultimoPagamento: pag ? pag.ultimoPagamento : null,
+      valorTotal: pag ? pag.valorPago : 0,
+      historico: pag ? pag.historico : [],
+      statusPag,
+      diasRestantes,
+      diasDeUso
     };
   });
   res.json({ alunos: lista, total: lista.length });
+});
+
+// marca um pagamento: soma 30 dias ao vencimento e registra o valor
+app.post('/api/admin/marcar-pagamento', checkAdmin, (req, res) => {
+  const { user, valor } = req.body;
+  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  if (!pagamentos[user]) registrarCadastro(user);
+  const p = pagamentos[user];
+  const agora = new Date();
+  // se ainda tem vencimento futuro, soma 30 dias a partir dele; senão, a partir de hoje
+  const base = (p.vencimento && new Date(p.vencimento) > agora) ? new Date(p.vencimento) : agora;
+  base.setDate(base.getDate() + 30);
+  p.vencimento = base.toISOString();
+  p.ultimoPagamento = agora.toISOString();
+  const v = parseFloat(valor) || 16;
+  p.valorPago = (p.valorPago || 0) + v;
+  p.historico = p.historico || [];
+  p.historico.push({ data: agora.toISOString(), valor: v });
+  salvarPagamentos();
+  res.json({ ok: true, msg: 'Pagamento registrado. Vence em ' + base.toLocaleDateString('pt-BR') });
+});
+
+// desfaz o último pagamento (caso tenha clicado errado)
+app.post('/api/admin/desfazer-pagamento', checkAdmin, (req, res) => {
+  const { user } = req.body;
+  const p = pagamentos[user];
+  if (!p || !p.historico || !p.historico.length) return res.json({ error: 'Sem pagamento para desfazer' });
+  const ultimo = p.historico.pop();
+  p.valorPago = Math.max(0, (p.valorPago || 0) - ultimo.valor);
+  // recalcula vencimento removendo 30 dias
+  if (p.vencimento) {
+    const v = new Date(p.vencimento);
+    v.setDate(v.getDate() - 30);
+    p.vencimento = p.historico.length ? v.toISOString() : null;
+  }
+  p.ultimoPagamento = p.historico.length ? p.historico[p.historico.length-1].data : null;
+  salvarPagamentos();
+  res.json({ ok: true, msg: 'Último pagamento desfeito.' });
 });
 
 // remove UM dispositivo específico de um aluno
@@ -166,6 +261,9 @@ app.post('/api/login', (req, res) => {
   const { user, pass, device } = req.body;
   if (!user || !pass || !device) return res.json({ error: 'Dados incompletos' });
   if (ALUNOS[user] !== pass) return res.json({ error: 'Usuário ou senha incorretos' });
+
+  // registra a data de primeiro cadastro (se for a primeira vez)
+  registrarCadastro(user);
 
   // inicializa a lista de dispositivos do usuário
   if (!dispositivosPorUser[user]) dispositivosPorUser[user] = [];

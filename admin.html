@@ -21,8 +21,32 @@
   button:hover{opacity:.85}
   button.small{padding:6px 12px;font-size:12px;background:var(--surface);border:1px solid var(--accent);color:var(--accent)}
   .aluno-row{display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--surface);border-radius:8px;margin-bottom:8px}
-  .aluno-block{background:var(--surface);border-radius:10px;padding:14px;margin-bottom:10px}
-  .aluno-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .resumo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .rc{background:var(--surface);border-radius:10px;padding:14px 10px;text-align:center}
+  .rc-num{font-size:24px;font-weight:800;line-height:1}
+  .rc-lbl{font-size:10px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.5px}
+  @media (max-width:480px){.resumo-grid{grid-template-columns:repeat(2,1fr)}}
+  .aluno-block{background:var(--surface);border-radius:10px;padding:14px;margin-bottom:10px;border-left:3px solid var(--border)}
+  .aluno-block.status-vencido{border-left-color:var(--red)}
+  .aluno-block.status-pago{border-left-color:var(--green)}
+  .aluno-block.status-pendente{border-left-color:var(--yellow)}
+  .aluno-block.status-novo{border-left-color:var(--muted)}
+  .aluno-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .pg-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;margin-left:6px;vertical-align:middle}
+  .pg-pago{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+  .pg-vencido{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
+  .pg-pendente{background:color-mix(in srgb,var(--yellow) 18%,transparent);color:var(--yellow)}
+  .pg-novo{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--muted)}
+  .venc-info{font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+  .aluno-acoes{display:flex;gap:6px;flex-shrink:0}
+  button.small.pay{border-color:var(--green);color:var(--green)}
+  button.small.pay:hover{background:var(--green);color:#fff}
+  .hist{margin:8px 0;font-size:12px}
+  .hist summary{cursor:pointer;color:var(--accent);font-family:var(--mono);font-size:11px}
+  .hist-item{font-size:11px;color:var(--muted);padding:3px 0 3px 14px;font-family:var(--mono)}
+  .sub-sec{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .sub-titulo{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)}
+  .mini-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;text-decoration:underline;padding:0;font-family:var(--mono)}
   .dev-list{display:flex;flex-direction:column;gap:6px}
   .dev-item{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:7px}
   .dev-info{flex:1;min-width:0}
@@ -54,7 +78,9 @@
 
   <div id="painel" style="display:none">
     <div class="card">
-      <div class="section-label">Alunos cadastrados</div>
+      <div class="section-label">Resumo</div>
+      <div id="resumoCards" class="resumo-grid"></div>
+      <div class="section-label" style="margin-top:18px">Alunos</div>
       <div id="listaAlunos"></div>
       <div id="painelMsg"></div>
       <button class="small" onclick="carregar()" style="margin-top:8px">↻ Atualizar lista</button>
@@ -88,15 +114,50 @@ async function carregar(){
     }
     document.getElementById('loginCard').style.display='none';
     document.getElementById('painel').style.display='block';
+    renderResumo(data.alunos);
     renderLista(data.alunos);
   }catch(e){
     document.getElementById('loginErro').textContent = 'Erro de conexão.';
   }
 }
 
+function renderResumo(alunos){
+  const emDia=alunos.filter(a=>a.statusPag==='pago').length;
+  const vencidos=alunos.filter(a=>a.statusPag==='vencido').length;
+  const pendentes=alunos.filter(a=>a.statusPag==='pendente').length;
+  // receita do mês atual (soma dos pagamentos feitos neste mês)
+  const agora=new Date();
+  let receitaMes=0;
+  alunos.forEach(a=>{
+    (a.historico||[]).forEach(h=>{
+      const d=new Date(h.data);
+      if(d.getMonth()===agora.getMonth()&&d.getFullYear()===agora.getFullYear())receitaMes+=h.valor;
+    });
+  });
+  const cont=document.getElementById('resumoCards');
+  cont.innerHTML=`
+    <div class="rc"><div class="rc-num" style="color:var(--green)">${emDia}</div><div class="rc-lbl">Em dia</div></div>
+    <div class="rc"><div class="rc-num" style="color:var(--red)">${vencidos}</div><div class="rc-lbl">Vencidos</div></div>
+    <div class="rc"><div class="rc-num" style="color:var(--yellow)">${pendentes}</div><div class="rc-lbl">Nunca pagaram</div></div>
+    <div class="rc"><div class="rc-num" style="color:var(--accent)">R$ ${receitaMes.toFixed(0)}</div><div class="rc-lbl">Receita do mês</div></div>`;
+}
+
+function fmtData(iso){
+  if(!iso)return '—';
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+
 function renderLista(alunos){
   const cont = document.getElementById('listaAlunos');
   if(!alunos.length){cont.innerHTML='<div style="color:var(--muted);font-size:13px">Nenhum aluno cadastrado.</div>';return;}
+
+  // ordena: vencidos primeiro, depois quem vence em breve
+  alunos.sort((a,b)=>{
+    const ordem={vencido:0,pendente:1,pago:2,novo:3};
+    if(ordem[a.statusPag]!==ordem[b.statusPag])return ordem[a.statusPag]-ordem[b.statusPag];
+    return (a.diasRestantes??999)-(b.diasRestantes??999);
+  });
+
   cont.innerHTML = alunos.map(a => {
     const dispositivosHtml = a.vinculado
       ? a.dispositivos.map(d => `
@@ -109,20 +170,62 @@ function renderLista(alunos){
           </div>`).join('')
       : '<div style="color:var(--muted);font-size:12px;padding:6px 0">Nenhum aparelho vinculado ainda.</div>';
 
+    // badge de status de pagamento
+    let badge='', vencInfo='';
+    if(a.statusPag==='pago'){
+      badge=`<span class="pg-badge pg-pago">● Em dia</span>`;
+      vencInfo=`Vence em ${fmtData(a.vencimento)} · ${a.diasRestantes} dia${a.diasRestantes!==1?'s':''} restante${a.diasRestantes!==1?'s':''}`;
+    }else if(a.statusPag==='vencido'){
+      badge=`<span class="pg-badge pg-vencido">● Vencido</span>`;
+      vencInfo=`Venceu em ${fmtData(a.vencimento)} · há ${Math.abs(a.diasRestantes)} dia${Math.abs(a.diasRestantes)!==1?'s':''}`;
+    }else if(a.statusPag==='pendente'){
+      badge=`<span class="pg-badge pg-pendente">● Nunca pagou</span>`;
+      vencInfo=`Cadastrou em ${fmtData(a.cadastro)} · usando há ${a.diasDeUso} dia${a.diasDeUso!==1?'s':''}`;
+    }else{
+      badge=`<span class="pg-badge pg-novo">● Novo</span>`;
+      vencInfo='Ainda não acessou';
+    }
+
+    const historicoHtml = (a.historico&&a.historico.length)
+      ? `<details class="hist"><summary>Histórico · R$ ${a.valorTotal.toFixed(2).replace('.',',')} no total</summary>
+          ${a.historico.slice().reverse().map(h=>`<div class="hist-item">${fmtData(h.data)} · R$ ${h.valor.toFixed(2).replace('.',',')}</div>`).join('')}
+        </details>`
+      : '';
+
     return `
-    <div class="aluno-block">
+    <div class="aluno-block status-${a.statusPag}">
       <div class="aluno-top">
-        <div>
-          <div class="aluno-nome">${a.user}</div>
-          <div class="aluno-status ${a.vinculado?'status-vinc':'status-livre'}">
-            ${a.vinculado?`🔒 ${a.qtd_dispositivos}/${a.max_dispositivos} dispositivos`:'⚪ Sem aparelho vinculado'}
-          </div>
+        <div style="flex:1">
+          <div class="aluno-nome">${a.user} ${badge}</div>
+          <div class="venc-info">${vencInfo}</div>
         </div>
-        ${a.qtd_dispositivos>1?`<button class="small" onclick="desbloquear('${a.user}')">Liberar todos</button>`:''}
+        <div class="aluno-acoes">
+          <button class="small pay" onclick="marcarPagamento('${a.user}')">✓ Marcar pago</button>
+        </div>
       </div>
-      <div class="dev-list">${dispositivosHtml}</div>
+      ${historicoHtml}
+      <div class="sub-sec">
+        <div class="sub-titulo">Dispositivos ${a.vinculado?`(${a.qtd_dispositivos}/${a.max_dispositivos})`:''} ${a.qtd_dispositivos>1?`<button class="mini-link" onclick="desbloquear('${a.user}')">liberar todos</button>`:''}</div>
+        <div class="dev-list">${dispositivosHtml}</div>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function marcarPagamento(user){
+  const valor=prompt('Valor recebido de '+user+' (R$):','16');
+  if(valor===null)return;
+  const msg = document.getElementById('painelMsg');
+  try{
+    const res = await fetch('/api/admin/marcar-pagamento',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ adminSenha, user, valor })
+    });
+    const data = await res.json();
+    if(data.error){msg.className='erro';msg.textContent=data.error;return;}
+    msg.className='ok';msg.textContent=data.msg;
+    carregar();
+  }catch(e){msg.className='erro';msg.textContent='Erro de conexão.';}
 }
 
 async function removerDispositivo(user, deviceId){
