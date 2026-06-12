@@ -23,14 +23,25 @@ function carregarAlunos() {
 }
 const ALUNOS = carregarAlunos();
 
-// segredo para assinar tokens de sessão
-const SESSION_SECRET = process.env.SESSION_SECRET || 'troque-isto-no-railway';
+// ── checagem de segurança no arranque ───────────────────────────────────────
+// o app se recusa a subir sem os segredos essenciais definidos
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET || SESSION_SECRET.length < 16) {
+  console.error('ERRO FATAL: variável SESSION_SECRET ausente ou muito curta (mínimo 16 caracteres). Defina-a no Railway.');
+  process.exit(1);
+}
+if (!process.env.ADMIN_SENHA || process.env.ADMIN_SENHA.length < 6) {
+  console.error('ERRO FATAL: variável ADMIN_SENHA ausente ou muito curta (mínimo 6 caracteres). Defina-a no Railway.');
+  process.exit(1);
+}
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error('ERRO FATAL: variável ANTHROPIC_API_KEY ausente. Defina-a no Railway.');
+  process.exit(1);
+}
 
-// ── sessões ativas: { token: { user, device, criadoEm } } ───────────────────
-// guarda quais dispositivos estão vinculados a cada conta (até 2)
+// ── vínculos de dispositivo por usuário (até 2 por conta) ───────────────────
 // cada item: { id, aparelho, data }
-const sessoesAtivas = {};      // token -> dados
-const dispositivosPorUser = {}; // user -> [{id, aparelho, data}, ...] (até 2)
+const dispositivosPorUser = {}; // user -> [{id, aparelho, data}, ...]
 const MAX_DISPOSITIVOS = 2;
 
 // ── persistência dos vínculos de dispositivo em disco ───────────────────────
@@ -137,9 +148,17 @@ function auth(req, res, next) {
 
 // ── PAINEL ADMIN ─────────────────────────────────────────────────────────────
 // senha do admin vem da variável ADMIN_SENHA no Railway
+// comparação com tempo constante para evitar ataques de timing
+function senhaIgual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 function checkAdmin(req, res, next) {
   const senha = req.headers['x-admin-senha'] || req.query.adminSenha || (req.body && req.body.adminSenha);
-  if (!senha || senha !== process.env.ADMIN_SENHA) {
+  if (!senha || !senhaIgual(senha, process.env.ADMIN_SENHA)) {
     return res.status(401).json({ error: 'Senha de admin incorreta' });
   }
   next();
@@ -237,10 +256,6 @@ app.post('/api/admin/remover-dispositivo', checkAdmin, (req, res) => {
   lista.splice(idx, 1);
   if (lista.length === 0) delete dispositivosPorUser[user];
   salvarDispositivos();
-  // invalida as sessões desse dispositivo
-  Object.keys(sessoesAtivas).forEach(t => {
-    if (sessoesAtivas[t].user === user && sessoesAtivas[t].device === deviceId) delete sessoesAtivas[t];
-  });
   res.json({ ok: true, msg: 'Acesso removido. A vaga foi liberada para um novo aparelho.' });
 });
 
@@ -250,17 +265,45 @@ app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
   if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
   delete dispositivosPorUser[user];
   salvarDispositivos();
-  Object.keys(sessoesAtivas).forEach(t => {
-    if (sessoesAtivas[t].user === user) delete sessoesAtivas[t];
-  });
   res.json({ ok: true, msg: 'Todos os dispositivos de ' + user + ' foram liberados.' });
 });
 
+// ── rate limiting do login (anti força-bruta) ───────────────────────────────
+// guarda tentativas recentes por IP; máx 5 falhas por minuto
+const tentativasLogin = {}; // ip -> { count, reset }
+function checarRateLimit(ip) {
+  const agora = Date.now();
+  const reg = tentativasLogin[ip];
+  if (!reg || agora > reg.reset) {
+    tentativasLogin[ip] = { count: 0, reset: agora + 60000 };
+    return true;
+  }
+  return reg.count < 5;
+}
+function registrarFalha(ip) {
+  const reg = tentativasLogin[ip];
+  if (reg) reg.count++;
+}
+// limpeza periódica para não acumular IPs antigos na memória
+setInterval(() => {
+  const agora = Date.now();
+  Object.keys(tentativasLogin).forEach(ip => {
+    if (agora > tentativasLogin[ip].reset) delete tentativasLogin[ip];
+  });
+}, 300000);
+
 // ── rota de login ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido';
+  if (!checarRateLimit(ip)) {
+    return res.json({ error: 'Muitas tentativas. Aguarde 1 minuto e tente de novo.' });
+  }
   const { user, pass, device } = req.body;
   if (!user || !pass || !device) return res.json({ error: 'Dados incompletos' });
-  if (ALUNOS[user] !== pass) return res.json({ error: 'Usuário ou senha incorretos' });
+  if (ALUNOS[user] !== pass) {
+    registrarFalha(ip);
+    return res.json({ error: 'Usuário ou senha incorretos' });
+  }
 
   // registra a data de primeiro cadastro (se for a primeira vez)
   registrarCadastro(user);
@@ -283,7 +326,6 @@ app.post('/api/login', (req, res) => {
   }
 
   const token = gerarToken(user, device);
-  sessoesAtivas[token] = { user, device, criadoEm: Date.now() };
   res.json({ token, user });
 });
 
