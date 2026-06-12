@@ -21,6 +21,15 @@
   button:hover{opacity:.85}
   button.small{padding:6px 12px;font-size:12px;background:var(--surface);border:1px solid var(--accent);color:var(--accent)}
   .aluno-row{display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--surface);border-radius:8px;margin-bottom:8px}
+  .aluno-block{background:var(--surface);border-radius:10px;padding:14px;margin-bottom:10px}
+  .aluno-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .dev-list{display:flex;flex-direction:column;gap:6px}
+  .dev-item{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:7px}
+  .dev-info{flex:1;min-width:0}
+  .dev-aparelho{font-size:13px;font-weight:600;color:var(--text)}
+  .dev-data{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+  button.small.danger{border-color:var(--red);color:var(--red)}
+  button.small.danger:hover{background:var(--red);color:#fff}
   .aluno-info{flex:1}
   .aluno-nome{font-size:14px;font-weight:600}
   .aluno-status{font-size:11px;font-family:var(--mono);margin-top:2px}
@@ -88,21 +97,53 @@ async function carregar(){
 function renderLista(alunos){
   const cont = document.getElementById('listaAlunos');
   if(!alunos.length){cont.innerHTML='<div style="color:var(--muted);font-size:13px">Nenhum aluno cadastrado.</div>';return;}
-  cont.innerHTML = alunos.map(a => `
-    <div class="aluno-row">
-      <div class="aluno-info">
-        <div class="aluno-nome">${a.user}</div>
-        <div class="aluno-status ${a.vinculado?'status-vinc':'status-livre'}">
-          ${a.vinculado?`🔒 ${a.qtd_dispositivos}/${a.max_dispositivos} dispositivos`:'⚪ Sem aparelho vinculado'}
+  cont.innerHTML = alunos.map(a => {
+    const dispositivosHtml = a.vinculado
+      ? a.dispositivos.map(d => `
+          <div class="dev-item">
+            <div class="dev-info">
+              <div class="dev-aparelho">📱 ${d.aparelho}</div>
+              <div class="dev-data">Conectou em ${d.data} · ${d.id.slice(0,10)}…</div>
+            </div>
+            <button class="small danger" onclick="removerDispositivo('${a.user}','${d.id}')">Remover</button>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:6px 0">Nenhum aparelho vinculado ainda.</div>';
+
+    return `
+    <div class="aluno-block">
+      <div class="aluno-top">
+        <div>
+          <div class="aluno-nome">${a.user}</div>
+          <div class="aluno-status ${a.vinculado?'status-vinc':'status-livre'}">
+            ${a.vinculado?`🔒 ${a.qtd_dispositivos}/${a.max_dispositivos} dispositivos`:'⚪ Sem aparelho vinculado'}
+          </div>
         </div>
+        ${a.qtd_dispositivos>1?`<button class="small" onclick="desbloquear('${a.user}')">Liberar todos</button>`:''}
       </div>
-      ${a.vinculado?`<button class="small" onclick="desbloquear('${a.user}')">Liberar dispositivos</button>`:''}
-    </div>
-  `).join('');
+      <div class="dev-list">${dispositivosHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+async function removerDispositivo(user, deviceId){
+  if(!confirm('Remover este acesso de '+user+'? A vaga ficará livre para um novo aparelho.'))return;
+  const msg = document.getElementById('painelMsg');
+  try{
+    const res = await fetch('/api/admin/remover-dispositivo',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ adminSenha, user, deviceId })
+    });
+    const data = await res.json();
+    if(data.error){msg.className='erro';msg.textContent=data.error;return;}
+    msg.className='ok';msg.textContent=data.msg;
+    carregar();
+  }catch(e){
+    msg.className='erro';msg.textContent='Erro de conexão.';
+  }
 }
 
 async function desbloquear(user){
-  if(!confirm('Liberar os dispositivos de '+user+'? Os aparelhos vinculados serão zerados e ele poderá cadastrar de novo.'))return;
+  if(!confirm('Liberar TODOS os dispositivos de '+user+'? Os dois aparelhos serão zerados.'))return;
   const msg = document.getElementById('painelMsg');
   try{
     const res = await fetch('/api/admin/desbloquear',{

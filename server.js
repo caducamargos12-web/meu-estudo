@@ -28,9 +28,28 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'troque-isto-no-railway';
 
 // ── sessões ativas: { token: { user, device, criadoEm } } ───────────────────
 // guarda quais dispositivos estão vinculados a cada conta (até 2)
+// cada item: { id, aparelho, data }
 const sessoesAtivas = {};      // token -> dados
-const dispositivosPorUser = {}; // user -> [deviceId1, deviceId2] (1 login = até 2 dispositivos)
+const dispositivosPorUser = {}; // user -> [{id, aparelho, data}, ...] (até 2)
 const MAX_DISPOSITIVOS = 2;
+
+// detecta o tipo de aparelho a partir do User-Agent
+function detectarAparelho(ua) {
+  ua = ua || '';
+  let so = 'Desconhecido';
+  if (/iPhone/i.test(ua)) so = 'iPhone';
+  else if (/iPad/i.test(ua)) so = 'iPad';
+  else if (/Android/i.test(ua)) so = 'Android';
+  else if (/Windows/i.test(ua)) so = 'Windows (PC)';
+  else if (/Macintosh|Mac OS/i.test(ua)) so = 'Mac';
+  else if (/Linux/i.test(ua)) so = 'Linux';
+  let navegador = '';
+  if (/Edg/i.test(ua)) navegador = 'Edge';
+  else if (/Chrome/i.test(ua)) navegador = 'Chrome';
+  else if (/Safari/i.test(ua)) navegador = 'Safari';
+  else if (/Firefox/i.test(ua)) navegador = 'Firefox';
+  return navegador ? `${navegador} · ${so}` : so;
+}
 
 function gerarToken(user, device) {
   const payload = `${user}|${device}|${Date.now()}`;
@@ -57,7 +76,7 @@ function auth(req, res, next) {
   if (!dados) return res.status(401).json({ error: 'Sessão inválida' });
   // verifica se o dispositivo está entre os registrados para esse usuário
   const lista = dispositivosPorUser[dados.user];
-  if (lista && lista.length && !lista.includes(dados.device)) {
+  if (lista && lista.length && !lista.some(d => d.id === dados.device)) {
     return res.status(403).json({ error: 'Limite de dispositivos atingido' });
   }
   req.user = dados.user;
@@ -74,7 +93,7 @@ function checkAdmin(req, res, next) {
   next();
 }
 
-// lista alunos e o status de vínculo de dispositivos
+// lista alunos e os dispositivos vinculados (com detalhes)
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   const lista = Object.keys(ALUNOS).map(user => {
     const devs = dispositivosPorUser[user] || [];
@@ -82,22 +101,42 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
       user,
       vinculado: devs.length > 0,
       qtd_dispositivos: devs.length,
-      max_dispositivos: MAX_DISPOSITIVOS
+      max_dispositivos: MAX_DISPOSITIVOS,
+      dispositivos: devs.map(d => ({
+        id: d.id,
+        aparelho: d.aparelho || 'Desconhecido',
+        data: d.data || '—'
+      }))
     };
   });
   res.json({ alunos: lista, total: lista.length });
 });
 
-// desbloqueia os dispositivos de um aluno (libera todos os aparelhos dele)
+// remove UM dispositivo específico de um aluno
+app.post('/api/admin/remover-dispositivo', checkAdmin, (req, res) => {
+  const { user, deviceId } = req.body;
+  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  const lista = dispositivosPorUser[user] || [];
+  const idx = lista.findIndex(d => d.id === deviceId);
+  if (idx === -1) return res.json({ error: 'Dispositivo não encontrado' });
+  lista.splice(idx, 1);
+  if (lista.length === 0) delete dispositivosPorUser[user];
+  // invalida as sessões desse dispositivo
+  Object.keys(sessoesAtivas).forEach(t => {
+    if (sessoesAtivas[t].user === user && sessoesAtivas[t].device === deviceId) delete sessoesAtivas[t];
+  });
+  res.json({ ok: true, msg: 'Acesso removido. A vaga foi liberada para um novo aparelho.' });
+});
+
+// desbloqueia TODOS os dispositivos de um aluno
 app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
   const { user } = req.body;
   if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
   delete dispositivosPorUser[user];
-  // invalida sessões ativas desse usuário
   Object.keys(sessoesAtivas).forEach(t => {
     if (sessoesAtivas[t].user === user) delete sessoesAtivas[t];
   });
-  res.json({ ok: true, msg: 'Dispositivos de ' + user + ' liberados. Ele já pode entrar em novos aparelhos.' });
+  res.json({ ok: true, msg: 'Todos os dispositivos de ' + user + ' foram liberados.' });
 });
 
 // ── rota de login ─────────────────────────────────────────────────────────────
@@ -110,13 +149,16 @@ app.post('/api/login', (req, res) => {
   if (!dispositivosPorUser[user]) dispositivosPorUser[user] = [];
   const lista = dispositivosPorUser[user];
 
-  // se o dispositivo já está registrado, deixa entrar normalmente
-  if (!lista.includes(device)) {
+  // verifica se o dispositivo já está registrado
+  const jaExiste = lista.some(d => d.id === device);
+  if (!jaExiste) {
     // dispositivo novo: só registra se ainda houver vaga (até 2)
     if (lista.length >= MAX_DISPOSITIVOS) {
       return res.json({ error: 'Esta conta já está vinculada a ' + MAX_DISPOSITIVOS + ' dispositivos. Contate o administrador para liberar.' });
     }
-    lista.push(device);
+    const aparelho = detectarAparelho(req.headers['user-agent']);
+    const data = new Date().toLocaleDateString('pt-BR');
+    lista.push({ id: device, aparelho, data });
   }
 
   const token = gerarToken(user, device);
