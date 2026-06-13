@@ -568,7 +568,7 @@ function renderCard(item, idx, ehPrevia){
       <div class="c-body-in">
         <div class="blk blk-aula">
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
-          <div class="blk-body">${item.aula_hoje||'—'}</div>
+          <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje:'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
         <div class="blk blk-teste">
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>

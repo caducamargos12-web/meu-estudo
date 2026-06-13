@@ -373,10 +373,12 @@ try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache =
 function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
+// versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
+const CACHE_VERSAO = 'v2';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
-  return `${dia}_${dayKey}`;
+  return `${dia}_${dayKey}_${CACHE_VERSAO}`;
 }
 
 // ── busca blog ──────────────────────────────────────────────────────────────
@@ -435,11 +437,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), que corresponde a uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
     '\n\nIdentifique:\n' +
-    '• AULA DO DIA = a aula que acontece em ' + ref + ' (a aula dessa ' + labelDia + '). Se não houver aula registrada exatamente nessa data, use a aula de data mais próxima de ' + ref + ' (igual ou logo após). É a matéria que será vista nessa aula.\n' +
-    '• MATÉRIA DO TESTE = a matéria que cai no teste dessa aula. REGRA: é a aula IMEDIATAMENTE ANTERIOR à aula do dia (uma aula atrás). Se o blog tiver anotação explícita "matéria para o teste do dia XX/XX" ou "teste", USE com prioridade. Senão, use a aula imediatamente anterior.\n' +
+    '• AULA DO DIA = a aula que acontece EXATAMENTE em ' + ref + ' (a aula dessa ' + labelDia + '). Se NÃO houver aula registrada para essa data exata no blog, retorne "" (vazio). NÃO invente nem use a aula de outra data como se fosse a do dia. É melhor vazio do que data errada.\n' +
+    '• MATÉRIA DO TESTE = a matéria que cai no teste dessa aula. REGRA: é a aula IMEDIATAMENTE ANTERIOR à data ' + ref + ' (a última aula que aconteceu antes dela). Se o blog tiver anotação explícita "matéria para o teste do dia XX/XX" ou "teste", USE com prioridade. Senão, use a aula imediatamente anterior a ' + ref + '.\n' +
     '  ATENÇÃO AOS FERIADOS: "uma aula atrás" é a aula real anterior que ACONTECEU. Pule datas sem aula (feriado).\n' +
-    '• DEVERES PENDENTES = deveres/tarefas passados em AULAS ANTERIORES à aula do dia (até 3 aulas atrás) que ainda estão em aberto. Para cada, informe a data de origem.\n' +
-    '• DEVERES DESTA AULA = deveres/tarefas que o professor passou NA PRÓPRIA aula do dia (' + ref + ') para fazer e entregar na próxima aula. São os deveres novos dessa aula. Se não houver, deixe vazio.\n' +
+    '• DEVERES PENDENTES = deveres/tarefas passados em aulas ANTERIORES a ' + ref + ' (até 3 aulas atrás) que ainda estão em aberto. Para cada, informe a data de origem.\n' +
+    '• DEVERES DESTA AULA = deveres/tarefas que o blog indica para a data ' + ref + ' (passados nessa aula para entregar depois). Se não houver nada registrado para essa data, deixe vazio [].\n' +
     '• PROXIMA AULA = primeira aula com data POSTERIOR a ' + ref + ', SE registrada. Senão vazio.\n' +
     '\nIMPORTANTE: o RESUMO e as QUESTÕES devem ser sobre a MATÉRIA DO TESTE (a aula de uma atrás), porque é o que o aluno precisa estudar para o teste.\n' +
     '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. Separe bem: dever PENDENTE vem de aula anterior; dever DESTA AULA foi passado na aula do dia.\n3. Aula sem tarefa: pule.\n' +
