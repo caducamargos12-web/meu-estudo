@@ -169,12 +169,15 @@
   .blk-teste .blk-label{color:var(--accent)}
   .blk-dev{border-color:color-mix(in srgb,var(--amber) 22%,transparent);background:color-mix(in srgb,var(--amber) 5%,var(--bg))}
   .blk-dev .blk-label{color:var(--amber)}
+  .blk-dev-novo{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
+  .blk-dev-novo .blk-label{color:var(--green)}
   .blk-res{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
   .blk-res .blk-label{color:var(--accent)}
   .blk-quiz{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
   .blk-quiz .blk-label{color:var(--green)}
   .blk-prox{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
   .blk-prox .blk-label{color:var(--accent)}
+  .blk-sub{font-size:11px;color:var(--text-3);margin:-2px 0 9px;font-style:italic}
 
   .dev-group{margin-bottom:11px}
   .dev-group:last-child{margin-bottom:0}
@@ -182,6 +185,16 @@
   .dev-item{display:flex;gap:8px;font-size:13px;line-height:1.5;margin-bottom:4px;color:var(--text)}
   .dev-dot{color:var(--amber);flex-shrink:0}
   .muted{font-size:13px;color:var(--text-3)}
+  /* checkbox de dever */
+  .dev-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.5;margin-bottom:7px;cursor:pointer;color:var(--text);user-select:none}
+  .dev-check input{position:absolute;opacity:0;width:0;height:0}
+  .dev-box{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:2px solid var(--border-bright);margin-top:1px;position:relative;transition:all .2s}
+  .dev-check:hover .dev-box{border-color:var(--green)}
+  .dev-check input:checked+.dev-box{background:var(--green);border-color:var(--green)}
+  .dev-check input:checked+.dev-box::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+  .dev-check.feito .dev-txt{text-decoration:line-through;color:var(--text-3)}
+  .dev-txt{transition:all .2s}
+
 
   /* quiz */
   .q-item{margin-bottom:15px}
@@ -441,6 +454,15 @@ function esconderBoasVindas(){
   },espera);
 }
 
+function toggleDever(id,el){
+  const feito=el.checked;
+  if(feito)localStorage.setItem(id,'1');
+  else localStorage.removeItem(id);
+  // atualiza o visual (risco no texto)
+  const label=el.closest('.dev-check');
+  if(label)label.classList.toggle('feito',feito);
+}
+
 function toggleCard(idx){
   const alvo=document.getElementById('card-'+idx);
   if(!alvo)return;
@@ -475,14 +497,32 @@ function renderCard(item, idx, ehPrevia){
   const cardId=`d-${idx}`;
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
+  // chave única por matéria para salvar o estado das checkboxes no navegador
+  const chaveDev=`${item.m}`.replace(/\s/g,'_');
+
+  // gera um item de dever com checkbox que lembra o estado
+  function devCheck(texto, grupo){
+    const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
+    const marcado=localStorage.getItem(id)==='1';
+    return `<label class="dev-check ${marcado?'feito':''}">
+      <input type="checkbox" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
+      <span class="dev-box"></span>
+      <span class="dev-txt">${texto}</span>
+    </label>`;
+  }
 
   const deveresHtml=item.deveres_pendentes?.length
     ?item.deveres_pendentes.map(g=>`
       <div class="dev-group">
         <div class="dev-date">${g.data}</div>
-        ${(g.deveres||[]).map(d=>`<div class="dev-item"><span class="dev-dot">▸</span><span>${d}</span></div>`).join('')}
+        ${(g.deveres||[]).map(d=>devCheck(d,'pend_'+g.data)).join('')}
       </div>`).join('')
     :`<div class="muted">Nenhum dever pendente das aulas anteriores.</div>`;
+
+  // NOVO: deveres passados nesta aula para entregar na próxima
+  const deveresAulaHtml=item.deveres_aula?.length
+    ?item.deveres_aula.map(d=>devCheck(d,'aula')).join('')
+    :`<div class="muted">Nenhum dever novo passado nesta aula.</div>`;
 
   const quizHtml=item.questoes?.length
     ?item.questoes.map((q,qi)=>`
@@ -510,6 +550,10 @@ function renderCard(item, idx, ehPrevia){
       ${proxDev}
     </div>`:'';
 
+  // label do bloco de aula muda conforme prévia ou hoje
+  const labelAula=ehPrevia?'Aula desta prévia':'Aula de hoje';
+  const labelTeste=ehPrevia?'Matéria do teste':'Matéria para o teste de hoje';
+
   return `<div class="card${ehPrevia?' card-previa':''}" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
     <div class="card-glow"></div>
     <div class="c-head" onclick="toggleCard(${idx})">
@@ -523,16 +567,22 @@ function renderCard(item, idx, ehPrevia){
     <div class="c-body">
       <div class="c-body-in">
         <div class="blk blk-aula">
-          <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+          <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
           <div class="blk-body">${item.aula_hoje||'—'}</div>
         </div>
         <div class="blk blk-teste">
-          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste de hoje${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
           <div class="blk-body">${item.materia_teste||'—'}</div>
         </div>
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+          <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
           ${deveresHtml}
+        </div>
+        <div class="blk blk-dev-novo">
+          <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula</span></div>
+          <div class="blk-sub">Passados nesta aula, para entregar na próxima</div>
+          ${deveresAulaHtml}
         </div>
         <div class="blk blk-res">
           <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>

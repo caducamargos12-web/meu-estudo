@@ -425,39 +425,62 @@ async function callAnthropic(prompt, modelIndex) {
   return JSON.parse(raw);
 }
 
-async function processWithAI(materia, professor, blogText, filtro) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia) {
   const temConteudo = blogText && blogText.length > 50;
-  const hoje = hojeStr();
+  const ref = dataRef || hojeStr();
   let instrucaoFiltro = '';
   if (filtro) {
     instrucaoFiltro = '\n\nIMPORTANTE: Este blog mistura DUAS disciplinas. Considere SOMENTE as aulas de "' + filtro + '". Ignore a outra disciplina.';
   }
-  const prompt = 'Você é um tutor do ensino médio brasileiro. Hoje é ' + hoje + ' (DD/MM/AAAA). Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
+  const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), que corresponde a uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
     '\n\nIdentifique:\n' +
-    '• AULA DE HOJE = a aula de data MAIS RECENTE que seja IGUAL OU ANTERIOR a hoje (' + hoje + '). É a matéria vista na aula mais recente.\n' +
-    '• MATÉRIA DO TESTE = a matéria que cai no teste de hoje. REGRA: é a aula IMEDIATAMENTE ANTERIOR à aula de hoje (uma aula atrás). Se o blog tiver uma anotação explícita do tipo "matéria para o teste do dia XX/XX" ou "teste", USE essa informação com prioridade. Senão, use a aula imediatamente anterior à de hoje.\n' +
-    '  ATENÇÃO AOS FERIADOS: "uma aula atrás" significa a aula real anterior que ACONTECEU. Se entre a aula de hoje e a anterior houve uma data sem aula (feriado), pule para a aula que de fato ocorreu antes.\n' +
-    '• DEVERES PENDENTES = deveres/tarefas das ATÉ 3 AULAS ANTERIORES à aula de hoje (não inclua o dever da aula de hoje). Para cada, informe a data de origem.\n' +
-    '• PROXIMA AULA = primeira aula com data POSTERIOR a hoje, SE registrada. Senão vazio.\n' +
-    '\nEXEMPLO REAL: hoje 11/06. Aula de hoje = 11/06. Matéria do teste = aula de uma atrás, que seria 09/06 (a aula real anterior). O resumo e o simulado são sobre a MATÉRIA DO TESTE (09/06), não sobre a de hoje.\n' +
-    '\nIMPORTANTE: o RESUMO e as QUESTÕES do simulado devem ser sobre a MATÉRIA DO TESTE (a aula de uma atrás), porque é isso que o aluno precisa estudar hoje.\n' +
-    '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. NUNCA use aula futura como aula de hoje.\n3. Aula anterior sem tarefa: pule.\n' +
+    '• AULA DO DIA = a aula que acontece em ' + ref + ' (a aula dessa ' + labelDia + '). Se não houver aula registrada exatamente nessa data, use a aula de data mais próxima de ' + ref + ' (igual ou logo após). É a matéria que será vista nessa aula.\n' +
+    '• MATÉRIA DO TESTE = a matéria que cai no teste dessa aula. REGRA: é a aula IMEDIATAMENTE ANTERIOR à aula do dia (uma aula atrás). Se o blog tiver anotação explícita "matéria para o teste do dia XX/XX" ou "teste", USE com prioridade. Senão, use a aula imediatamente anterior.\n' +
+    '  ATENÇÃO AOS FERIADOS: "uma aula atrás" é a aula real anterior que ACONTECEU. Pule datas sem aula (feriado).\n' +
+    '• DEVERES PENDENTES = deveres/tarefas passados em AULAS ANTERIORES à aula do dia (até 3 aulas atrás) que ainda estão em aberto. Para cada, informe a data de origem.\n' +
+    '• DEVERES DESTA AULA = deveres/tarefas que o professor passou NA PRÓPRIA aula do dia (' + ref + ') para fazer e entregar na próxima aula. São os deveres novos dessa aula. Se não houver, deixe vazio.\n' +
+    '• PROXIMA AULA = primeira aula com data POSTERIOR a ' + ref + ', SE registrada. Senão vazio.\n' +
+    '\nIMPORTANTE: o RESUMO e as QUESTÕES devem ser sobre a MATÉRIA DO TESTE (a aula de uma atrás), porque é o que o aluno precisa estudar para o teste.\n' +
+    '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. Separe bem: dever PENDENTE vem de aula anterior; dever DESTA AULA foi passado na aula do dia.\n3. Aula sem tarefa: pule.\n' +
     (filtro ? '4. Tudo apenas de "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
     '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"aula_hoje":"data e conteúdo da aula de hoje","materia_teste_data":"DD/MM da matéria do teste","materia_teste":"conteúdo da matéria que cai no teste","deveres_pendentes":[{"data":"03/06","deveres":["dever 1"]}],"resumo":"resumo didático 3-4 parágrafos da MATÉRIA DO TESTE (aula de uma atrás)","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"data e conteúdo ou vazio","proxima_resumo":"1-2 frases ou vazio","proxima_deveres":[]}';
+    '{"aula_hoje":"data e conteúdo da aula do dia","materia_teste_data":"DD/MM da matéria do teste","materia_teste":"conteúdo da matéria que cai no teste","deveres_pendentes":[{"data":"03/06","deveres":["dever 1"]}],"deveres_aula":["dever passado nesta aula para entregar na próxima"],"resumo":"resumo didático 3-4 parágrafos da MATÉRIA DO TESTE","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"data e conteúdo ou vazio","proxima_resumo":"1-2 frases ou vazio","proxima_deveres":[]}';
   return callAnthropic(prompt, 0);
 }
 
 // ── rota protegida ────────────────────────────────────────────────────────────
 // processa um dia inteiro (com cache) e envia via SSE; retorna o offset final de índice
+// calcula a data real (DD/MM/AAAA) do próximo dia da semana indicado
+// offsetSemana: 0 = esta semana, usado para achar a data correta a partir de hoje
+function dataDoDia(dayKey) {
+  const dayNum = { seg:1, ter:2, qua:3, qui:4, sex:5 }[dayKey];
+  const hoje = new Date();
+  const hojeNum = hoje.getDay();
+  let diff = dayNum - hojeNum;
+  // se o dia já passou nesta semana (ou é fim de semana olhando pra segunda), pega o da próxima ocorrência
+  if (diff < 0) diff += 7;
+  // caso especial: fim de semana (sáb=6, dom=0) olhando para segunda → próxima segunda
+  if ((hojeNum === 6 || hojeNum === 0) && dayKey === 'seg') {
+    diff = hojeNum === 6 ? 2 : 1;
+  }
+  const alvo = new Date(hoje);
+  alvo.setDate(hoje.getDate() + diff);
+  const dd = String(alvo.getDate()).padStart(2,'0');
+  const mm = String(alvo.getMonth()+1).padStart(2,'0');
+  const aaaa = alvo.getFullYear();
+  return `${dd}/${mm}/${aaaa}`;
+}
+
 async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   const materias = GRADE[dayKey];
   const chave = chaveCacheHoje(dayKey);
+  const dataRef = dataDoDia(dayKey);
+  const labelDia = DIAS_PT[dayKey];
 
   // cabeçalho da seção do dia
-  res.write('data: ' + JSON.stringify({ type:'section', dayKey, dayLabel:DIAS_PT[dayKey], ehPrevia, total:materias.length, offset:offsetIndex }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'section', dayKey, dayLabel:DIAS_PT[dayKey], dataRef, ehPrevia, total:materias.length, offset:offsetIndex }) + '\n\n');
 
   // cache pronto: entrega instantâneo
   if (cache[chave]) {
@@ -474,12 +497,12 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro);
+      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia);
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);
       res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
     } catch(e) {
-      const result = Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+      const result = Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
       resultados.push(result);
       res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
     }
