@@ -129,10 +129,16 @@
   main{max-width:720px;margin:0 auto;padding:24px 22px 80px}
 
   /* ═══ DAY HEADER ═══ */
-  .day-head{display:flex;align-items:center;gap:12px;margin-bottom:24px;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1)}
+  .day-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;margin-top:6px;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1)}
+  .day-head.previa{margin-top:28px}
   .day-badge{font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-glow);border:1px solid var(--accent-dim);padding:5px 13px;border-radius:100px}
+  .day-badge.badge-previa{color:var(--text-2);background:color-mix(in srgb,var(--text-2) 10%,transparent);border-color:var(--border-bright)}
   .day-line{flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
   .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
+  /* card de prévia: levemente esmaecido para diferenciar de hoje */
+  .card-previa{opacity:.82}
+  .card-previa:hover{opacity:1}
+  .tag-previa{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-2);background:color-mix(in srgb,var(--text-2) 14%,transparent);padding:2px 7px;border-radius:5px;vertical-align:middle;margin-left:6px}
 
   /* ═══ CARDS ═══ */
   .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:16px;margin-bottom:12px;overflow:hidden;animation:cardIn .8s cubic-bezier(.2,.8,.2,1) both;transition:border-color .4s ease}
@@ -465,7 +471,7 @@ function checkAnswer(cardId,qi,chosen,correta,explicacao){
   if(el){const s=scores[cardId];el.innerHTML=`Placar <b>${s.a}/${s.t}</b>`;}
 }
 
-function renderCard(item, idx){
+function renderCard(item, idx, ehPrevia){
   const cardId=`d-${idx}`;
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
@@ -504,12 +510,12 @@ function renderCard(item, idx){
       ${proxDev}
     </div>`:'';
 
-  return `<div class="card" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
+  return `<div class="card${ehPrevia?' card-previa':''}" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
     <div class="card-glow"></div>
     <div class="c-head" onclick="toggleCard(${idx})">
       <div class="c-icon">${emoji}</div>
       <div class="c-meta">
-        <div class="c-subj">${item.m}</div>
+        <div class="c-subj">${item.m}${ehPrevia?' <span class="tag-previa">prévia</span>':''}</div>
         <div class="c-prof">${item.p}</div>
       </div>
       <span class="c-chevron">⌄</span>
@@ -546,20 +552,21 @@ function renderCard(item, idx){
 function loadDay(){
   document.getElementById('subtitle').textContent='Carregando…';
   const main=document.getElementById('main');
-  main.innerHTML=`<div class="day-head"><span class="day-badge" id="day-badge">Hoje</span><span class="day-line"></span><span class="day-count" id="day-count"></span></div><div id="cards"></div>`;
+  main.innerHTML=`<div id="cards"></div>`;
 
   const token=localStorage.getItem('sessionToken');
   const evtSource=new EventSource(`/api/today?token=${encodeURIComponent(token)}`);
-  let total=0;let done=0;
+  let total=0;let done=0;let fimDeSemana=false;
 
   evtSource.onmessage=function(e){
     const msg=JSON.parse(e.data);
     if(msg.type==='start'){
       total=msg.total;
-      document.getElementById('day-badge').textContent=msg.dayLabel;
-      document.getElementById('subtitle').textContent=msg.dayLabel;
+      fimDeSemana=msg.fimDeSemana;
+      document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':msg.dayLabel;
       const cards=document.getElementById('cards');
       cards.innerHTML='';
+      // cria placeholders para todas as matérias (hoje + prévia)
       for(let i=0;i<total;i++){
         const div=document.createElement('div');
         div.id=`slot-${i}`;
@@ -567,9 +574,16 @@ function loadDay(){
         cards.appendChild(div);
       }
     }
-    if(msg.type==='weekend'){
-      esconderBoasVindas();
-      main.innerHTML=`<div class="empty-box"><div class="empty-emoji">🎉</div><div class="empty-title">Fim de semana</div><div class="empty-sub">Não há aulas hoje.<br>Volte na segunda-feira para ver suas matérias.</div></div>`;
+    if(msg.type==='section'){
+      // insere um cabeçalho de seção antes do primeiro slot daquele dia
+      const slot=document.getElementById(`slot-${msg.offset}`);
+      if(slot){
+        const head=document.createElement('div');
+        head.className='day-head'+(msg.ehPrevia?' previa':'');
+        const titulo=msg.ehPrevia?`Prévia · ${msg.dayLabel}`:`Hoje · ${msg.dayLabel}`;
+        head.innerHTML=`<span class="day-badge${msg.ehPrevia?' badge-previa':''}">${msg.ehPrevia?'🔜 '+titulo:titulo}</span><span class="day-line"></span><span class="day-count">${msg.total} mat.</span>`;
+        slot.parentNode.insertBefore(head,slot);
+      }
     }
     if(msg.type==='loading'){
       const slot=document.getElementById(`slot-${msg.index}`);
@@ -578,20 +592,20 @@ function loadDay(){
     if(msg.type==='result'){
       done++;
       const slot=document.getElementById(`slot-${msg.index}`);
-      if(slot)slot.innerHTML=renderCard(msg.item,msg.index);
-      const c=document.getElementById('day-count');if(c)c.textContent=`${done}/${total}`;
+      if(slot)slot.innerHTML=renderCard(msg.item,msg.index,msg.ehPrevia);
     }
     if(msg.type==='done'){
       evtSource.close();
       esconderBoasVindas();
       if(total>0){
-        document.getElementById('subtitle').textContent=`${total} matérias hoje`;
-        const c=document.getElementById('day-count');if(c)c.textContent=`${total} matérias`;
+        document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':`${total} matérias`;
         document.getElementById('cards').insertAdjacentHTML('beforeend',
-          `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}${msg.fromCache?' · atualizado hoje':''}</div>`);
+          `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}</div>`);
         // abre a primeira matéria automaticamente
         const primeiro=document.getElementById('card-0');
         if(primeiro)primeiro.classList.add('open');
+      }else{
+        main.innerHTML=`<div class="empty-box"><div class="empty-emoji">📭</div><div class="empty-title">Sem matérias</div><div class="empty-sub">Não há aulas para mostrar agora.</div></div>`;
       }
     }
   };

@@ -451,61 +451,83 @@ async function processWithAI(materia, professor, blogText, filtro) {
 }
 
 // ── rota protegida ────────────────────────────────────────────────────────────
-app.get('/api/today', auth, async function(req, res) {
-  // SEMPRE usa o dia real de hoje (trava no dia da semana)
-  const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
-  const hojeDay = new Date().getDay();
-  const dayKey = dayMap[hojeDay];
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-
-  // fim de semana: sem aulas
-  if (!dayKey) {
-    res.write('data: ' + JSON.stringify({ type:'start', day:'fds', dayLabel:'Fim de semana', total:0 }) + '\n\n');
-    res.write('data: ' + JSON.stringify({ type:'weekend' }) + '\n\n');
-    res.write('data: ' + JSON.stringify({ type:'done' }) + '\n\n');
-    return res.end();
-  }
-
+// processa um dia inteiro (com cache) e envia via SSE; retorna o offset final de índice
+async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   const materias = GRADE[dayKey];
-  const chaveHoje = chaveCacheHoje(dayKey);
+  const chave = chaveCacheHoje(dayKey);
 
-  res.write('data: ' + JSON.stringify({ type:'start', day:dayKey, dayLabel:DIAS_PT[dayKey], total:materias.length }) + '\n\n');
+  // cabeçalho da seção do dia
+  res.write('data: ' + JSON.stringify({ type:'section', dayKey, dayLabel:DIAS_PT[dayKey], ehPrevia, total:materias.length, offset:offsetIndex }) + '\n\n');
 
-  // SE JÁ TEM CACHE DE HOJE: entrega instantâneo, sem gastar API
-  if (cache[chaveHoje]) {
-    cache[chaveHoje].forEach((item, i) => {
-      res.write('data: ' + JSON.stringify({ type:'result', index:i, item, cached:true }) + '\n\n');
+  // cache pronto: entrega instantâneo
+  if (cache[chave]) {
+    cache[chave].forEach((item, i) => {
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item, ehPrevia, cached:true }) + '\n\n');
     });
-    res.write('data: ' + JSON.stringify({ type:'done', fromCache:true }) + '\n\n');
-    return res.end();
+    return offsetIndex + materias.length;
   }
 
-  // SE NÃO TEM CACHE: processa e salva
+  // sem cache: processa e salva
   const resultados = [];
   for (let i = 0; i < materias.length; i++) {
     const item = materias[i];
-    res.write('data: ' + JSON.stringify({ type:'loading', index:i, materia:item.m }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
       const ai = await processWithAI(item.m, item.p, blogText, item.filtro);
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);
-      res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
     } catch(e) {
       const result = Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
       resultados.push(result);
-      res.write('data: ' + JSON.stringify({ type:'result', index:i, item:result }) + '\n\n');
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
     }
   }
+  cache[chave] = resultados;
+  salvarCache();
+  return offsetIndex + materias.length;
+}
 
-  // salva no cache do dia
-  cache[chaveHoje] = resultados;
-  // limpa caches de dias antigos
+app.get('/api/today', auth, async function(req, res) {
+  const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
+  const ordem = ['seg','ter','qua','qui','sex'];
+  const hojeDay = new Date().getDay();
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // define o dia principal e o dia da prévia
+  let diaPrincipal, diaPrevia;
+  if (hojeDay >= 1 && hojeDay <= 5) {
+    // dia de semana: hoje + amanhã (se amanhã for dia letivo)
+    diaPrincipal = dayMap[hojeDay];
+    const idx = ordem.indexOf(diaPrincipal);
+    diaPrevia = idx < 4 ? ordem[idx+1] : null; // sexta não tem prévia (sábado não tem aula)
+  } else {
+    // fim de semana (sábado=6, domingo=0): mostra segunda como prévia, sem dia principal
+    diaPrincipal = null;
+    diaPrevia = 'seg';
+  }
+
+  // calcula o total de matérias para o front montar os placeholders
+  const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
+
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias }) + '\n\n');
+
+  let offset = 0;
+  if (diaPrincipal) {
+    offset = await processarDia(res, diaPrincipal, false, offset);
+  }
+  if (diaPrevia) {
+    offset = await processarDia(res, diaPrevia, true, offset);
+  }
+
+  // limpa caches de dias muito antigos (mantém os de hoje)
+  const hojeISO = new Date().toISOString().slice(0,10);
   Object.keys(cache).forEach(k => {
-    if (k !== chaveHoje && !k.startsWith(new Date().toISOString().slice(0,10))) delete cache[k];
+    if (!k.startsWith(hojeISO)) delete cache[k];
   });
   salvarCache();
 
