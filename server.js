@@ -374,7 +374,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v3';
+const CACHE_VERSAO = 'v4';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -445,7 +445,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada.\n' +
     '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
     '• MATÉRIA DO TESTE = o CONTEÚDO da matéria da aula IMEDIATAMENTE ANTERIOR a ' + ref + ' (a última linha COM matéria antes de ' + ref + '). Se houver anotação explícita "matéria para o teste do dia XX/XX", use-a com prioridade. Pule linhas sem matéria (feriados, "correção de tarefa" conta como aula normal).\n' +
-    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + ' (até 3 linhas com dever, da mais recente para a mais antiga). Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). Pule linhas sem dever.\n' +
+    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + ' (até 3 linhas COM dever, da mais recente para a mais antiga). Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua uma data com lista de deveres vazia. Pule completamente linhas sem dever (coluna "—" ou vazia).\n' +
     '• PROXIMA AULA = primeira linha com matéria e data POSTERIOR a ' + ref + ', se houver. Senão vazio.\n' +
     '\nEXEMPLO com a tabela real:\n' +
     'Linha 18/05: matéria "Platão" | deveres "Págs 3-4; 5 a 8"\n' +
@@ -509,6 +509,16 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     const blogText = await fetchBlog(item.url);
     try {
       const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia);
+      // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
+      if (Array.isArray(ai.deveres_pendentes)) {
+        ai.deveres_pendentes = ai.deveres_pendentes
+          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0) }))
+          .filter(g => g.deveres.length > 0);
+      }
+      // remove deveres desta aula vazios
+      if (Array.isArray(ai.deveres_aula)) {
+        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0);
+      }
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);
       res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');

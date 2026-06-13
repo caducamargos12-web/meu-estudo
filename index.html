@@ -511,17 +511,20 @@ function renderCard(item, idx, ehPrevia){
     </label>`;
   }
 
-  const deveresHtml=item.deveres_pendentes?.length
-    ?item.deveres_pendentes.map(g=>`
+  // filtra grupos sem deveres (proteção extra contra datas vazias)
+  const gruposPend=(item.deveres_pendentes||[]).filter(g=>g && (g.deveres||[]).filter(d=>d&&d.trim()).length>0);
+  const deveresHtml=gruposPend.length
+    ?gruposPend.map(g=>`
       <div class="dev-group">
         <div class="dev-date">${g.data}</div>
-        ${(g.deveres||[]).map(d=>devCheck(d,'pend_'+g.data)).join('')}
+        ${(g.deveres||[]).filter(d=>d&&d.trim()).map(d=>devCheck(d,'pend_'+g.data)).join('')}
       </div>`).join('')
     :`<div class="muted">Nenhum dever pendente das aulas anteriores.</div>`;
 
   // NOVO: deveres passados nesta aula para entregar na próxima
-  const deveresAulaHtml=item.deveres_aula?.length
-    ?item.deveres_aula.map(d=>devCheck(d,'aula')).join('')
+  const devsAula=(item.deveres_aula||[]).filter(d=>d&&d.trim());
+  const deveresAulaHtml=devsAula.length
+    ?devsAula.map(d=>devCheck(d,'aula')).join('')
     :`<div class="muted">Nenhum dever novo passado nesta aula.</div>`;
 
   const quizHtml=item.questoes?.length
