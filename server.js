@@ -374,7 +374,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v2';
+const CACHE_VERSAO = 'v3';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -396,7 +396,7 @@ async function fetchBlog(url) {
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
       .replace(/\s{3,}/g, '\n').trim();
-    return texto.length > 6000 ? texto.slice(texto.length - 6000) : texto;
+    return texto.length > 9000 ? texto.slice(texto.length - 9000) : texto;
   } catch { return null; }
 }
 
@@ -434,21 +434,30 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   if (filtro) {
     instrucaoFiltro = '\n\nIMPORTANTE: Este blog mistura DUAS disciplinas. Considere SOMENTE as aulas de "' + filtro + '". Ignore a outra disciplina.';
   }
-  const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), que corresponde a uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
+  const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
-    '\n\nIdentifique:\n' +
-    '• AULA DO DIA = a aula que acontece EXATAMENTE em ' + ref + ' (a aula dessa ' + labelDia + '). Se NÃO houver aula registrada para essa data exata no blog, retorne "" (vazio). NÃO invente nem use a aula de outra data como se fosse a do dia. É melhor vazio do que data errada.\n' +
-    '• MATÉRIA DO TESTE = a matéria que cai no teste dessa aula. REGRA: é a aula IMEDIATAMENTE ANTERIOR à data ' + ref + ' (a última aula que aconteceu antes dela). Se o blog tiver anotação explícita "matéria para o teste do dia XX/XX" ou "teste", USE com prioridade. Senão, use a aula imediatamente anterior a ' + ref + '.\n' +
-    '  ATENÇÃO AOS FERIADOS: "uma aula atrás" é a aula real anterior que ACONTECEU. Pule datas sem aula (feriado).\n' +
-    '• DEVERES PENDENTES = deveres/tarefas passados em aulas ANTERIORES a ' + ref + ' (até 3 aulas atrás) que ainda estão em aberto. Para cada, informe a data de origem.\n' +
-    '• DEVERES DESTA AULA = deveres/tarefas que o blog indica para a data ' + ref + ' (passados nessa aula para entregar depois). Se não houver nada registrado para essa data, deixe vazio [].\n' +
-    '• PROXIMA AULA = primeira aula com data POSTERIOR a ' + ref + ', SE registrada. Senão vazio.\n' +
-    '\nIMPORTANTE: o RESUMO e as QUESTÕES devem ser sobre a MATÉRIA DO TESTE (a aula de uma atrás), porque é o que o aluno precisa estudar para o teste.\n' +
-    '\nREGRAS:\n1. Datas DD/MM ou DD/MM/AAAA. Ano atual 2026 se faltar.\n2. Separe bem: dever PENDENTE vem de aula anterior; dever DESTA AULA foi passado na aula do dia.\n3. Aula sem tarefa: pule.\n' +
-    (filtro ? '4. Tudo apenas de "' + filtro + '".\n' : '') +
+    '\n\n=== ESTRUTURA DO REGISTRO (MUITO IMPORTANTE) ===\n' +
+    'O registro é uma TABELA com 3 colunas por linha:\n' +
+    '  [DATA] | [MATÉRIA/CONTEÚDO da aula] | [DEVERES daquela data]\n' +
+    'REGRA DE OURO: cada dever pertence à DATA DA PRÓPRIA LINHA onde ele aparece. O dever na linha do dia 15/06 é um dever DO dia 15/06.\n' +
+    'Uma linha pode ter matéria mas não ter dever (coluna de dever vazia ou "—"), ou ter dever mas não ter matéria nova. Trate as duas colunas de forma independente.\n' +
+    '\n=== O QUE EXTRAIR (para a data ' + ref + ') ===\n' +
+    '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada.\n' +
+    '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
+    '• MATÉRIA DO TESTE = o CONTEÚDO da matéria da aula IMEDIATAMENTE ANTERIOR a ' + ref + ' (a última linha COM matéria antes de ' + ref + '). Se houver anotação explícita "matéria para o teste do dia XX/XX", use-a com prioridade. Pule linhas sem matéria (feriados, "correção de tarefa" conta como aula normal).\n' +
+    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + ' (até 3 linhas com dever, da mais recente para a mais antiga). Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). Pule linhas sem dever.\n' +
+    '• PROXIMA AULA = primeira linha com matéria e data POSTERIOR a ' + ref + ', se houver. Senão vazio.\n' +
+    '\nEXEMPLO com a tabela real:\n' +
+    'Linha 18/05: matéria "Platão" | deveres "Págs 3-4; 5 a 8"\n' +
+    'Linha 01/06: matéria "Módulo 4 Aristóteles" | deveres "Pág 52; Págs 63-64"\n' +
+    'Linha 08/06: matéria "A lógica de Aristóteles" | deveres "—"\n' +
+    'Linha 15/06: matéria "" (vazia) | deveres "Págs 53-54; Págs 59-61 Leitura"\n' +
+    'Para ref=15/06 o correto é: AULA DO DIA="" (linha 15/06 não tem matéria); DEVERES DESTA AULA=["Págs 53-54","Págs 59-61 (Leitura)"] (da linha 15/06); MATÉRIA DO TESTE="A lógica de Aristóteles" (linha 08/06, anterior); DEVERES PENDENTES=[{data:01/06,deveres:["Pág 52","Págs 63-64"]},{data:18/05,deveres:["Págs 3-4","5 a 8"]}] (08/06 não tem dever, pula).\n' +
+    '\nREGRAS: Datas DD/MM. Ano 2026 se faltar. O RESUMO e as QUESTÕES são sobre a MATÉRIA DO TESTE.\n' +
+    (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
     '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"aula_hoje":"data e conteúdo da aula do dia","materia_teste_data":"DD/MM da matéria do teste","materia_teste":"conteúdo da matéria que cai no teste","deveres_pendentes":[{"data":"03/06","deveres":["dever 1"]}],"deveres_aula":["dever passado nesta aula para entregar na próxima"],"resumo":"resumo didático 3-4 parágrafos da MATÉRIA DO TESTE","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"data e conteúdo ou vazio","proxima_resumo":"1-2 frases ou vazio","proxima_deveres":[]}';
+    '{"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","materia_teste_data":"DD/MM da matéria do teste","materia_teste":"conteúdo da matéria que cai no teste","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático 3-4 parágrafos da MATÉRIA DO TESTE","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
   return callAnthropic(prompt, 0);
 }
 
