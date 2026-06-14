@@ -372,7 +372,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v15';
+const CACHE_VERSAO = 'v16';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -488,10 +488,14 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n\nO registro é uma TABELA. As colunas de cada linha estão separadas por " | " (barra vertical). O formato de cada linha é geralmente:' +
     '\n  DATA | CONTEÚDO/matéria da aula | DEVERES daquela data' +
     '\nCada linha começa com uma data. Tudo entre as barras "|" daquela linha pertence àquela data. NÃO misture conteúdo de linhas diferentes.' +
-    '\nExtraia TODAS as linhas que tenham uma data, na ordem em que aparecem. Para cada linha:' +
+    '\n\n*** REGRA CRÍTICA SOBRE DEVERES ***' +
+    '\nÀS VEZES uma data tem vários deveres que aparecem em linhas visuais seguidas. TODOS os deveres que aparecem ENTRE uma data e a PRÓXIMA data pertencem à PRIMEIRA data (a de cima).' +
+    '\nNUNCA mova um dever para uma data anterior. Se a coluna de deveres de uma linha estiver "—" ou vazia, ela NÃO tem dever, mesmo que a linha seguinte tenha vários. Não puxe deveres da linha de baixo para preencher uma linha que está com "—".' +
+    '\nExemplo: se 08/06 tem dever "—" e 15/06 tem "Págs 59-61; Pág 53-54", então 08/06 fica com [] e 15/06 fica com AMBOS ["Págs 59-61","Pág 53-54"]. NÃO coloque "Págs 59-61" no 08/06.' +
+    '\n\nExtraia TODAS as linhas que tenham uma data, na ordem em que aparecem. Para cada linha:' +
     '\n- "data": a data da linha (formato DD/MM)' +
-    '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se essa coluna estiver vazia para a linha, use "".' +
-    '\n- "deveres": lista dos deveres (última coluna). Se for "—" ou vazio, use []. Separe múltiplos deveres em itens.' +
+    '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se vazia, use "".' +
+    '\n- "deveres": TODOS os deveres daquela data (última coluna). Se for "—" ou vazio, use []. Liste cada dever como um item separado.' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
     '\nNÃO invente linhas nem datas. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
