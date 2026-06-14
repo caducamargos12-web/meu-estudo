@@ -276,6 +276,29 @@
   .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
 
   /* ═══ PLAYER DE MÚSICA (mini, no header) ═══ */
+  /* botão e modal de reportar erro */
+  .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
+  .rep-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px}
+  .rep-overlay.aberto{display:flex;animation:repFade .25s ease}
+  @keyframes repFade{from{opacity:0}to{opacity:1}}
+  .rep-modal{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:16px;padding:22px;max-width:420px;width:100%;animation:repUp .3s cubic-bezier(.2,.8,.2,1)}
+  @keyframes repUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .rep-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:5px}
+  .rep-sub{font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.5}
+  .rep-textarea{width:100%;min-height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-family:var(--sans);font-size:14px;resize:vertical;box-sizing:border-box}
+  .rep-textarea:focus{outline:none;border-color:var(--accent)}
+  .rep-ctx{font-size:11px;color:var(--text-3);font-family:var(--mono);margin-top:8px}
+  .rep-acoes{display:flex;gap:10px;margin-top:16px}
+  .rep-cancelar{flex:1;background:none;border:1px solid var(--border);border-radius:9px;color:var(--text-2);padding:11px;cursor:pointer;font-size:14px;font-family:var(--sans)}
+  .rep-cancelar:hover{border-color:var(--border-bright);color:var(--text)}
+  .rep-enviar{flex:1;background:var(--accent);border:none;border-radius:9px;color:var(--bg);font-weight:600;padding:11px;cursor:pointer;font-size:14px;font-family:var(--sans)}
+  .rep-enviar:hover{opacity:.9}
+  .rep-enviar:disabled{opacity:.5;cursor:default}
+  .rep-msg{font-size:13px;margin-top:12px;text-align:center}
+  .rep-msg.ok{color:var(--green)}
+  .rep-msg.erro{color:#e0726a}
+
   .music-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .music-btn-mini:hover{border-color:var(--accent)}
   .music-btn-mini.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
@@ -345,8 +368,29 @@
             <path d="M9 18V5l12-2v13"></path>
           </svg>
         </button>
+        <button class="report-btn-mini" onclick="abrirReporte()" aria-label="Reportar erro" title="Reportar erro">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 9v4"></path><path d="M12 17h.01"></path>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          </svg>
+        </button>
         <span id="clock"></span>
         <button class="logout-btn" onclick="sair()">Sair</button>
+      </div>
+    </div>
+
+    <!-- modal de reportar erro -->
+    <div id="reporteOverlay" class="rep-overlay" onclick="if(event.target===this)fecharReporte()">
+      <div class="rep-modal">
+        <div class="rep-title">Reportar um erro</div>
+        <div class="rep-sub">Viu algo errado? Conta pra gente que arrumamos rápido.</div>
+        <textarea id="reporteTexto" class="rep-textarea" placeholder="Ex: o dever de matemática do dia 10 está na matéria errada..." maxlength="1000"></textarea>
+        <div class="rep-ctx" id="reporteContexto"></div>
+        <div class="rep-acoes">
+          <button class="rep-cancelar" onclick="fecharReporte()">Cancelar</button>
+          <button class="rep-enviar" id="reporteEnviar" onclick="enviarReporte()">Enviar</button>
+        </div>
+        <div class="rep-msg" id="reporteMsg"></div>
       </div>
     </div>
   </header>
@@ -363,6 +407,51 @@ const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','Hist�
 const CORES=['#d9a865','#c99a78','#a8c08a','#e0b876','#d9a0a0','#b89a7a','#cbb88a','#d4a574'];
 const scores={};
 
+function abrirReporte(){
+  const ov=document.getElementById('reporteOverlay');
+  ov.classList.add('aberto');
+  document.getElementById('reporteTexto').value='';
+  document.getElementById('reporteMsg').textContent='';
+  document.getElementById('reporteEnviar').disabled=false;
+  // captura qual matéria está aberta no momento (contexto pro admin)
+  let ctx='';
+  const aberto=document.querySelector('.card.open .c-subj');
+  const dia=document.getElementById('subtitle');
+  if(aberto)ctx='Matéria: '+aberto.textContent.trim();
+  if(dia&&dia.textContent)ctx+=(ctx?' · ':'')+dia.textContent.trim();
+  document.getElementById('reporteContexto').textContent=ctx?('Contexto: '+ctx):'';
+  document.getElementById('reporteTexto')._ctx=ctx;
+  setTimeout(()=>document.getElementById('reporteTexto').focus(),100);
+}
+function fecharReporte(){
+  document.getElementById('reporteOverlay').classList.remove('aberto');
+}
+async function enviarReporte(){
+  const txt=document.getElementById('reporteTexto').value.trim();
+  const msg=document.getElementById('reporteMsg');
+  if(!txt){msg.className='rep-msg erro';msg.textContent='Escreva o que está errado.';return;}
+  const btn=document.getElementById('reporteEnviar');
+  btn.disabled=true;btn.textContent='Enviando…';
+  try{
+    const token=localStorage.getItem('sessionToken');
+    const ctx=document.getElementById('reporteTexto')._ctx||'';
+    const res=await fetch('/api/reportar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-session-token':token},
+      body:JSON.stringify({mensagem:txt,contexto:ctx})
+    });
+    const data=await res.json();
+    if(data.error){msg.className='rep-msg erro';msg.textContent=data.error;btn.disabled=false;btn.textContent='Enviar';return;}
+    msg.className='rep-msg ok';msg.textContent='Obrigado! Report enviado. 🙌';
+    btn.textContent='Enviado';
+    setTimeout(fecharReporte,1400);
+  }catch(e){
+    msg.className='rep-msg erro';msg.textContent='Erro de conexão. Tente de novo.';
+    btn.disabled=false;btn.textContent='Enviar';
+  }
+}
+
+function abrirReporteGlobalInit(){}
 function toggleMusic(){
   const audio=document.getElementById('bgMusic');
   const btn=document.getElementById('musicBtn');

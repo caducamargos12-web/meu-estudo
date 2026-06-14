@@ -82,6 +82,18 @@ function salvarPagamentos() {
 }
 carregarPagamentos();
 
+// ── reports de erro enviados pelos alunos ───────────────────────────────────
+let reports = [];
+const REPORTS_FILE = DATA_DIR + '/reports.json';
+function carregarReports() {
+  try { reports = JSON.parse(fs.readFileSync(REPORTS_FILE, 'utf8')); } catch { reports = []; }
+}
+function salvarReports() {
+  try { fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports)); }
+  catch (e) { console.log('Erro ao salvar reports:', e.message); }
+}
+carregarReports();
+
 // registra o cadastro de um aluno na primeira vez que ele loga
 function registrarCadastro(user) {
   if (!pagamentos[user]) {
@@ -698,6 +710,51 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   return offsetIndex + materias.length;
 }
 
+// ── aluno envia um report de erro ────────────────────────────────────────────
+app.post('/api/reportar', auth, (req, res) => {
+  const { mensagem, contexto } = req.body;
+  if (!mensagem || !mensagem.trim()) return res.json({ error: 'Mensagem vazia' });
+  if (mensagem.length > 1000) return res.json({ error: 'Mensagem muito longa' });
+  const report = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    user: req.user,
+    mensagem: mensagem.trim().slice(0, 1000),
+    contexto: (contexto || '').slice(0, 200), // matéria/dia que o aluno estava vendo
+    data: new Date().toISOString(),
+    resolvido: false
+  };
+  reports.unshift(report); // mais recente primeiro
+  if (reports.length > 200) reports = reports.slice(0, 200); // limita acúmulo
+  salvarReports();
+  res.json({ ok: true });
+});
+
+// ── admin lista os reports ───────────────────────────────────────────────────
+app.get('/api/admin/reports', checkAdmin, (req, res) => {
+  res.json({
+    reports,
+    pendentes: reports.filter(r => !r.resolvido).length
+  });
+});
+
+// ── admin marca um report como resolvido ─────────────────────────────────────
+app.post('/api/admin/resolver-report', checkAdmin, (req, res) => {
+  const { id } = req.body;
+  const r = reports.find(x => x.id === id);
+  if (!r) return res.json({ error: 'Report não encontrado' });
+  r.resolvido = !r.resolvido; // alterna (permite reabrir)
+  salvarReports();
+  res.json({ ok: true });
+});
+
+// ── admin apaga um report ────────────────────────────────────────────────────
+app.post('/api/admin/apagar-report', checkAdmin, (req, res) => {
+  const { id } = req.body;
+  reports = reports.filter(x => x.id !== id);
+  salvarReports();
+  res.json({ ok: true });
+});
+
 app.get('/api/today', auth, async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const ordem = ['seg','ter','qua','qui','sex'];
@@ -742,53 +799,6 @@ app.get('/api/today', auth, async function(req, res) {
 
   res.write('data: ' + JSON.stringify({ type:'done' }) + '\n\n');
   res.end();
-});
-
-// ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
-// uso: /api/diag?senha=ADMIN_SENHA&materia=Filosofia
-app.get('/api/diag', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const nomeMateria = req.query.materia;
-  // procura a matéria na GRADE
-  let alvo = null;
-  for (const dia of Object.keys(GRADE)) {
-    const m = GRADE[dia].find(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase());
-    if (m) { alvo = m; break; }
-  }
-  if (!alvo) return res.json({ error: 'matéria não encontrada', materias: Object.values(GRADE).flat().map(x=>x.m) });
-
-  const blogText = await fetchBlog(alvo.url);
-  // pede só a extração da tabela bruta
-  const ref = req.query.ref || dataDoDia('seg');
-  const instrucaoFiltro = alvo.filtro ? ' Considere SOMENTE "' + alvo.filtro + '".' : '';
-  const promptTabela = 'Extraia a tabela do registro de aulas de ' + alvo.m + '.' + instrucaoFiltro +
-    ' Colunas separadas por " | ": DATA | MATÉRIA | DEVERES. Cada linha começa com data.' +
-    '\n\nREGISTRO:\n' + (blogText||'(vazio)') +
-    '\n\nResponda APENAS JSON: {"linhas":[{"data":"DD/MM","materia":"","deveres":[]}],"avaliacao":{"tem":false}}';
-  let tabela;
-  try { tabela = await callAnthropic(promptTabela, 0); } catch(e){ tabela = { erro: e.message }; }
-
-  // também roda o processamento completo para ver o resultado final
-  let resultadoFinal;
-  try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo);
-  } catch(e) { resultadoFinal = { erro: e.message }; }
-
-  res.json({
-    materia: alvo.m,
-    tipo: alvo.tipo || 'normal',
-    dataReferencia: ref,
-    tabelaExtraida: tabela,
-    RESULTADO_FINAL: {
-      aula_hoje: resultadoFinal.aula_hoje,
-      deveres_pendentes: resultadoFinal.deveres_pendentes,
-      deveres_aula: resultadoFinal.deveres_aula,
-      tem_avaliacao: resultadoFinal.tem_avaliacao,
-      materia_teste: resultadoFinal.materia_teste
-    }
-  });
 });
 
 // ── página do painel admin ───────────────────────────────────────────────────

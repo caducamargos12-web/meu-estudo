@@ -46,6 +46,16 @@
   .sub-sec{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
   .sub-titulo{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)}
   .mini-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;text-decoration:underline;padding:0;font-family:var(--mono)}
+  .mini-link.danger{color:var(--red)}
+  .rep-badge{display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;margin-left:6px;vertical-align:middle}
+  .rep-item{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:9px;padding:12px;margin-bottom:8px}
+  .rep-item.resolvido{border-left-color:var(--green);opacity:.6}
+  .rep-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .rep-user{font-size:13px;font-weight:700;color:var(--text)}
+  .rep-data{font-size:10px;color:var(--muted);font-family:var(--mono)}
+  .rep-texto{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px}
+  .rep-contexto{font-size:11px;color:var(--muted);font-family:var(--mono);background:var(--card);padding:5px 8px;border-radius:6px;margin-bottom:8px}
+  .rep-item-acoes{display:flex;gap:14px}
   .dev-list{display:flex;flex-direction:column;gap:6px}
   .dev-item{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:7px}
   .dev-info{flex:1;min-width:0}
@@ -72,6 +82,10 @@
   </div>
 
   <div id="painel" style="display:none">
+    <div class="card">
+      <div class="section-label">Reports de erro <span id="repBadge" class="rep-badge"></span></div>
+      <div id="listaReports"></div>
+    </div>
     <div class="card">
       <div class="section-label">Resumo</div>
       <div id="resumoCards" class="resumo-grid"></div>
@@ -111,9 +125,59 @@ async function carregar(){
     document.getElementById('painel').style.display='block';
     renderResumo(data.alunos);
     renderLista(data.alunos);
+    carregarReports();
   }catch(e){
     document.getElementById('loginErro').textContent = 'Erro de conexão.';
   }
+}
+
+async function carregarReports(){
+  try{
+    const res = await fetch('/api/admin/reports?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error)return;
+    renderReports(data.reports, data.pendentes);
+  }catch(e){}
+}
+
+function fmtDataHora(iso){
+  const d=new Date(iso);
+  return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function renderReports(reps, pendentes){
+  const badge=document.getElementById('repBadge');
+  badge.textContent=pendentes>0?pendentes+' novo'+(pendentes>1?'s':''):'';
+  badge.style.display=pendentes>0?'inline-block':'none';
+  const cont=document.getElementById('listaReports');
+  if(!reps.length){cont.innerHTML='<div style="color:var(--muted);font-size:13px">Nenhum report ainda.</div>';return;}
+  cont.innerHTML=reps.map(r=>`
+    <div class="rep-item ${r.resolvido?'resolvido':''}">
+      <div class="rep-item-top">
+        <span class="rep-user">${r.user}</span>
+        <span class="rep-data">${fmtDataHora(r.data)}</span>
+      </div>
+      <div class="rep-texto">${r.mensagem.replace(/</g,'&lt;')}</div>
+      ${r.contexto?`<div class="rep-contexto">${r.contexto.replace(/</g,'&lt;')}</div>`:''}
+      <div class="rep-item-acoes">
+        <button class="mini-link" onclick="resolverReport('${r.id}')">${r.resolvido?'Reabrir':'✓ Marcar resolvido'}</button>
+        <button class="mini-link danger" onclick="apagarReport('${r.id}')">Apagar</button>
+      </div>
+    </div>`).join('');
+}
+
+async function resolverReport(id){
+  try{
+    await fetch('/api/admin/resolver-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminSenha,id})});
+    carregarReports();
+  }catch(e){}
+}
+async function apagarReport(id){
+  if(!confirm('Apagar este report?'))return;
+  try{
+    await fetch('/api/admin/apagar-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminSenha,id})});
+    carregarReports();
+  }catch(e){}
 }
 
 function renderResumo(alunos){
