@@ -698,6 +698,41 @@ app.get('/api/today', auth, async function(req, res) {
   res.end();
 });
 
+// ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
+// uso: /api/diag?senha=ADMIN_SENHA&materia=Filosofia
+app.get('/api/diag', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const nomeMateria = req.query.materia;
+  // procura a matéria na GRADE
+  let alvo = null;
+  for (const dia of Object.keys(GRADE)) {
+    const m = GRADE[dia].find(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase());
+    if (m) { alvo = m; break; }
+  }
+  if (!alvo) return res.json({ error: 'matéria não encontrada', materias: Object.values(GRADE).flat().map(x=>x.m) });
+
+  const blogText = await fetchBlog(alvo.url);
+  // pede só a extração da tabela bruta
+  const ref = req.query.ref || dataDoDia('seg');
+  const instrucaoFiltro = alvo.filtro ? ' Considere SOMENTE "' + alvo.filtro + '".' : '';
+  const promptTabela = 'Extraia a tabela do registro de aulas de ' + alvo.m + '.' + instrucaoFiltro +
+    ' Colunas separadas por " | ": DATA | MATÉRIA | DEVERES. Cada linha começa com data.' +
+    '\n\nREGISTRO:\n' + (blogText||'(vazio)') +
+    '\n\nResponda APENAS JSON: {"linhas":[{"data":"DD/MM","materia":"","deveres":[]}],"avaliacao":{"tem":false}}';
+  let tabela;
+  try { tabela = await callAnthropic(promptTabela, 0); } catch(e){ tabela = { erro: e.message }; }
+
+  res.json({
+    materia: alvo.m,
+    tipo: alvo.tipo || 'normal',
+    dataReferencia: ref,
+    textoDoBlog: (blogText||'').slice(-3000), // últimos 3000 chars para ver a estrutura
+    tabelaExtraida: tabela
+  });
+});
+
 // ── página do painel admin ───────────────────────────────────────────────────
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
