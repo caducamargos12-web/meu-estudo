@@ -372,7 +372,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v18';
+const CACHE_VERSAO = 'v19';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -488,12 +488,25 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n\nO registro é uma TABELA. As colunas de cada linha estão separadas por " | " (barra vertical). O formato de cada linha é geralmente:' +
     '\n  DATA | CONTEÚDO/matéria da aula | DEVERES daquela data' +
     '\nCada linha começa com uma data. Tudo entre as barras "|" daquela linha pertence àquela data. NÃO misture conteúdo de linhas diferentes.' +
+    '\n\n*** ATENÇÃO: A TABELA PODE ESTAR DESALINHADA ***' +
+    '\nEste blog às vezes tem a tabela bagunçada: os deveres podem aparecer deslocados, numa linha visual diferente da data a que pertencem. Use INTELIGÊNCIA para realinhar:' +
+    '\n1. A DATA é a âncora. Cada bloco de deveres pertence à aula de uma data específica.' +
+    '\n2. Os deveres reais são tarefas para o aluno fazer (ex: "Página 52 (1-2)", "Exercícios 1-10", "Leitura p.16-18"). ' +
+    '\n3. NÃO confunda as páginas da MATÉRIA (ex: "Páginas: 51, 56-58" que aparece junto ao conteúdo da aula) com DEVERES. Páginas que fazem parte da descrição da matéria NÃO são deveres.' +
+    '\n4. Se um bloco de deveres aparece logo após uma data X e antes da próxima data Y, esses deveres são da data X.' +
+    '\n5. Quando em dúvida sobre a qual data um dever pertence, associe-o à data mais próxima ACIMA dele no texto.' +
     '\n\n*** REGRA CRÍTICA SOBRE DEVERES ***' +
     '\nÀS VEZES uma data tem vários deveres que aparecem em linhas visuais seguidas. TODOS os deveres que aparecem ENTRE uma data e a PRÓXIMA data pertencem à PRIMEIRA data (a de cima).' +
     '\nNUNCA mova um dever para uma data anterior. Se a coluna de deveres de uma linha estiver "—" ou vazia, ela NÃO tem dever, mesmo que a linha seguinte tenha vários. Não puxe deveres da linha de baixo para preencher uma linha que está com "—".' +
     '\nExemplo: se 08/06 tem dever "—" e 15/06 tem "Págs 59-61; Pág 53-54", então 08/06 fica com [] e 15/06 fica com AMBOS ["Págs 59-61","Pág 53-54"]. NÃO coloque "Págs 59-61" no 08/06.' +
     '\nTAMBÉM NUNCA mova um dever para uma data POSTERIOR. Se 01/06 tem "Pág 52; Págs 63-64", AMBOS ficam no 01/06. NÃO empurre "Págs 63-64" para uma data seguinte (08/06 ou 15/06). Todos os deveres listados juntos sob uma data ficam TODOS naquela data.' +
     '\nRegra geral: agrupe TODOS os deveres consecutivos sob a data imediatamente ACIMA deles. Um dever pertence à data mais próxima ACIMA dele na tabela.' +
+    '\n\n*** EXEMPLO REAL DESTE BLOG (siga este raciocínio) ***' +
+    '\nNo registro, a linha "18/05" tem matéria "Platão... Páginas: 40,47,48" e o dever "3 e 4 (páginas 41-42); 5 a 8 (páginas 49-50)".' +
+    '\nA linha "01/06" tem matéria "Ensaio para Festa Junina / Módulo 4" e os deveres "Página 52 (1-2)" E "Páginas 63-64 (1-6)" — AMBOS são do 01/06, juntos.' +
+    '\nA linha "08/06" tem matéria "Correção da tarefa. A lógica de Aristóteles. Página 59" e dever "—" (vazio).' +
+    '\nA linha "15/06" tem matéria VAZIA e os deveres "Páginas 59-61 (Leitura)" E "Página 53-54" — AMBOS do 15/06, juntos.' +
+    '\nRESULTADO correto: 01/06 → ["Página 52 (1-2)","Páginas 63-64 (1-6)"]; 08/06 → []; 15/06 → ["Páginas 59-61 (Leitura)","Página 53-54"].' +
     '\n\n*** REGRA CRÍTICA SOBRE MATÉRIA ***' +
     '\nA matéria de cada linha pertence SÓ àquela data. Se a célula de matéria de uma data estiver VAZIA, a matéria fica "" (vazio) para essa data. NUNCA copie a matéria de uma linha para outra.' +
     '\nExemplo: se 08/06 tem matéria "A lógica de Aristóteles" e 15/06 tem a célula de matéria VAZIA (só tem deveres), então a matéria do 15/06 é "" (vazio). NÃO copie "A lógica de Aristóteles" para o 15/06. É melhor deixar vazio do que repetir a matéria de outra data.' +
