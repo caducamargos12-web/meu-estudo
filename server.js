@@ -332,11 +332,16 @@ app.post('/api/login', (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // GRADE
 // ════════════════════════════════════════════════════════════════════════════
+// tipo de matéria controla o que aparece:
+//   (sem tipo) = padrão: teste semanal, mostra matéria do teste + simulado sempre
+//   'soDever'    = só aula do dia + deveres (sem teste, resumo ou simulado)
+//   'provaFinal' = aula + deveres + resumo; só mostra matéria do teste + simulado
+//                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE = {
   seg: [
-    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html' },
+    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal' },
     { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html' },
-    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html' },
+    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever' },
   ],
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História' },
@@ -347,13 +352,13 @@ const GRADE = {
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html' },
     { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html' },
-    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html' },
+    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal' },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html' },
-    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação' },
+    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal' },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html' },
@@ -374,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v4';
+const CACHE_VERSAO = 'v7';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -390,12 +395,21 @@ async function fetchBlog(url) {
     });
     if (!res.ok) return null;
     const html = await res.text();
-    const texto = html
+    let texto = html
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
+      // remove widgets de compartilhamento e rodapé do Blogspot
+      .replace(/<div[^>]*class=['"][^'"]*sharing[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<div[^>]*class=['"][^'"]*post-share-buttons[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<div[^>]*class=['"][^'"]*social[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
       .replace(/\s{3,}/g, '\n').trim();
+    // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
+    const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
+    texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
     return texto.length > 9000 ? texto.slice(texto.length - 9000) : texto;
   } catch { return null; }
 }
@@ -427,37 +441,56 @@ async function callAnthropic(prompt, modelIndex) {
   return JSON.parse(raw);
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo) {
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
   let instrucaoFiltro = '';
   if (filtro) {
     instrucaoFiltro = '\n\nIMPORTANTE: Este blog mistura DUAS disciplinas. Considere SOMENTE as aulas de "' + filtro + '". Ignore a outra disciplina.';
   }
+
+  // matéria "só dever": não processa matéria de teste, resumo nem simulado
+  if (tipo === 'soDever') {
+    const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
+      instrucaoFiltro +
+      '\n\nO registro é uma TABELA: [DATA] | [MATÉRIA] | [DEVERES da data]. Cada dever pertence à data da própria linha. Ignore botões de compartilhar do Blogspot.\n' +
+      '\nExtraia para a data ' + ref + ':\n' +
+      '• AULA DO DIA = conteúdo da matéria da linha de ' + ref + '. Vazio se não houver.\n' +
+      '• DEVERES DESTA AULA = deveres da linha de ' + ref + '. [] se não houver.\n' +
+      '• DEVERES PENDENTES = deveres de linhas anteriores a ' + ref + ' (até 3 com dever). Só datas que TÊM dever.\n' +
+      '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+      '\n\nResponda APENAS JSON sem markdown:\n' +
+      '{"aula_hoje":"conteúdo ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever"]}],"deveres_aula":[],"materia_teste":"","materia_teste_data":"","resumo":"","questoes":[],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
+    return callAnthropic(prompt, 0);
+  }
+
+  // instrução do bloco de teste: padrão (sempre) ou prova final (só quando detectar)
+  const blocoTeste = (tipo === 'provaFinal')
+    ? '• TEM_AVALIACAO = true SOMENTE se o blog mencionar explicitamente um TESTE, PROVA, AVALIAÇÃO ou SIMULADO com data marcada (ex: "prova dia 25/06", "teste 20/06"). Caso contrário, false.\n' +
+      '• MATÉRIA DO TESTE = se TEM_AVALIACAO for true, o conteúdo que cai nessa avaliação (a matéria estudada para ela). Se false, deixe "".\n' +
+      '• RESUMO e QUESTÕES = se TEM_AVALIACAO for true, faça sobre a matéria que cai na avaliação. Se false, RESUMO sobre a aula do dia e QUESTÕES vazio [].\n'
+    : '• TEM_AVALIACAO = true (esta matéria tem teste semanal).\n' +
+      '• MATÉRIA DO TESTE = conteúdo da aula IMEDIATAMENTE ANTERIOR a ' + ref + ' (a aula de uma atrás). Se houver anotação "matéria para o teste do dia XX/XX", use-a.\n' +
+      '• RESUMO e QUESTÕES = sobre a MATÉRIA DO TESTE.\n';
+
   const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
     instrucaoFiltro +
     '\n\n=== ESTRUTURA DO REGISTRO (MUITO IMPORTANTE) ===\n' +
     'O registro é uma TABELA com 3 colunas por linha:\n' +
     '  [DATA] | [MATÉRIA/CONTEÚDO da aula] | [DEVERES daquela data]\n' +
     'REGRA DE OURO: cada dever pertence à DATA DA PRÓPRIA LINHA onde ele aparece. O dever na linha do dia 15/06 é um dever DO dia 15/06.\n' +
+    'ATENÇÃO: ignore COMPLETAMENTE textos de navegação/compartilhamento do site (como "Enviar por e-mail", "Postar no blog", "Compartilhar no X/Facebook/Pinterest", "Marcadores", "Postagens mais recentes", "Início", "Assinar", "Comentários"). Isso NÃO são deveres nem matéria, são botões do Blogspot. Nunca os inclua em deveres.\n' +
     'Uma linha pode ter matéria mas não ter dever (coluna de dever vazia ou "—"), ou ter dever mas não ter matéria nova. Trate as duas colunas de forma independente.\n' +
     '\n=== O QUE EXTRAIR (para a data ' + ref + ') ===\n' +
     '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada.\n' +
     '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
-    '• MATÉRIA DO TESTE = o CONTEÚDO da matéria da aula IMEDIATAMENTE ANTERIOR a ' + ref + ' (a última linha COM matéria antes de ' + ref + '). Se houver anotação explícita "matéria para o teste do dia XX/XX", use-a com prioridade. Pule linhas sem matéria (feriados, "correção de tarefa" conta como aula normal).\n' +
+    blocoTeste +
     '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + ' (até 3 linhas COM dever, da mais recente para a mais antiga). Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua uma data com lista de deveres vazia. Pule completamente linhas sem dever (coluna "—" ou vazia).\n' +
-    '• PROXIMA AULA = primeira linha com matéria e data POSTERIOR a ' + ref + ', se houver. Senão vazio.\n' +
-    '\nEXEMPLO com a tabela real:\n' +
-    'Linha 18/05: matéria "Platão" | deveres "Págs 3-4; 5 a 8"\n' +
-    'Linha 01/06: matéria "Módulo 4 Aristóteles" | deveres "Pág 52; Págs 63-64"\n' +
-    'Linha 08/06: matéria "A lógica de Aristóteles" | deveres "—"\n' +
-    'Linha 15/06: matéria "" (vazia) | deveres "Págs 53-54; Págs 59-61 Leitura"\n' +
-    'Para ref=15/06 o correto é: AULA DO DIA="" (linha 15/06 não tem matéria); DEVERES DESTA AULA=["Págs 53-54","Págs 59-61 (Leitura)"] (da linha 15/06); MATÉRIA DO TESTE="A lógica de Aristóteles" (linha 08/06, anterior); DEVERES PENDENTES=[{data:01/06,deveres:["Pág 52","Págs 63-64"]},{data:18/05,deveres:["Págs 3-4","5 a 8"]}] (08/06 não tem dever, pula).\n' +
-    '\nREGRAS: Datas DD/MM. Ano 2026 se faltar. O RESUMO e as QUESTÕES são sobre a MATÉRIA DO TESTE.\n' +
+    '\nREGRAS: Datas DD/MM. Ano 2026 se faltar.\n' +
     (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
     '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","materia_teste_data":"DD/MM da matéria do teste","materia_teste":"conteúdo da matéria que cai no teste","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático 3-4 parágrafos da MATÉRIA DO TESTE","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
+    '{"tem_avaliacao":true,"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","materia_teste_data":"DD/MM da matéria do teste ou vazio","materia_teste":"conteúdo que cai na avaliação ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
   return callAnthropic(prompt, 0);
 }
 
@@ -508,16 +541,18 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia);
+      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo);
+      // termos de botões de compartilhar do Blogspot que não são deveres
+      const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
       // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
       if (Array.isArray(ai.deveres_pendentes)) {
         ai.deveres_pendentes = ai.deveres_pendentes
-          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0) }))
+          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixo(d)) }))
           .filter(g => g.deveres.length > 0);
       }
-      // remove deveres desta aula vazios
+      // remove deveres desta aula vazios ou que sejam botões de compartilhar
       if (Array.isArray(ai.deveres_aula)) {
-        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0);
+        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixo(d));
       }
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);

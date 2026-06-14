@@ -557,6 +557,31 @@ function renderCard(item, idx, ehPrevia){
   const labelAula=ehPrevia?'Aula desta prévia':'Aula de hoje';
   const labelTeste=ehPrevia?'Matéria do teste':'Matéria para o teste de hoje';
 
+  // controle de quais blocos aparecem conforme o tipo da matéria
+  const tipo=item.tipo||'normal';
+  const temAval=item.tem_avaliacao!==false; // só false esconde
+  const mostrarTeste = tipo!=='soDever' && temAval;        // matéria do teste + simulado
+  const mostrarResumo = tipo!=='soDever';                   // resumo (some só no soDever)
+  const mostrarSimulado = mostrarTeste && item.questoes?.length>0;
+
+  // monta os blocos condicionais
+  const blocoTesteHtml = mostrarTeste ? `
+        <div class="blk blk-teste">
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
+          <div class="blk-body">${item.materia_teste||'—'}</div>
+        </div>` : '';
+  const blocoResumoHtml = mostrarResumo ? `
+        <div class="blk blk-res">
+          <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">${mostrarTeste?'Resumo da matéria do teste':'Resumo da aula'}</span></div>
+          <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')||'—'}</div>
+        </div>` : '';
+  const blocoSimuladoHtml = mostrarSimulado ? `
+        <div class="blk blk-quiz">
+          <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
+          ${quizHtml}
+          <div class="score" id="score-${cardId}">Responda as questões acima</div>
+        </div>` : '';
+
   return `<div class="card${ehPrevia?' card-previa':''}" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
     <div class="card-glow"></div>
     <div class="c-head" onclick="toggleCard(${idx})">
@@ -573,10 +598,7 @@ function renderCard(item, idx, ehPrevia){
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
           <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje:'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
-        <div class="blk blk-teste">
-          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}${item.materia_teste_data?' · '+item.materia_teste_data:''}</span></div>
-          <div class="blk-body">${item.materia_teste||'—'}</div>
-        </div>
+        ${blocoTesteHtml}
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
           <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
@@ -587,15 +609,8 @@ function renderCard(item, idx, ehPrevia){
           <div class="blk-sub">Passados nesta aula, para entregar na próxima</div>
           ${deveresAulaHtml}
         </div>
-        <div class="blk blk-res">
-          <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
-          <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')}</div>
-        </div>
-        <div class="blk blk-quiz">
-          <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
-          ${quizHtml}
-          <div class="score" id="score-${cardId}">Responda as questões acima</div>
-        </div>
+        ${blocoResumoHtml}
+        ${blocoSimuladoHtml}
         ${proxSec}
       </div>
     </div>
