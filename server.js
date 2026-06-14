@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v11';
+const CACHE_VERSAO = 'v12';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -441,69 +441,130 @@ async function callAnthropic(prompt, modelIndex) {
   return JSON.parse(raw);
 }
 
+// converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
+function dataParaNum(ddmm) {
+  if (!ddmm) return 0;
+  const m = ddmm.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (!m) return 0;
+  const dia = parseInt(m[1],10), mes = parseInt(m[2],10);
+  let ano = m[3] ? parseInt(m[3],10) : 2026;
+  if (ano < 100) ano += 2000;
+  return ano*10000 + mes*100 + dia;
+}
+
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo) {
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+  const refDDMM = ref.slice(0,5);
+
   let instrucaoFiltro = '';
   if (filtro) {
-    instrucaoFiltro = '\n\nIMPORTANTE: Este blog mistura DUAS disciplinas. Considere SOMENTE as aulas de "' + filtro + '". Ignore a outra disciplina.';
+    instrucaoFiltro = ' IMPORTANTE: este blog mistura DUAS disciplinas; considere SOMENTE "' + filtro + '" e ignore a outra.';
   }
 
-  // matéria "só dever": não processa matéria de teste, resumo nem simulado
+  // ETAPA 1: a IA apenas EXTRAI a tabela bruta (não decide nada).
+  // Pedir só a estrutura é muito mais confiável que pedir interpretação.
+  const promptTabela = 'Você extrai dados de um registro de aulas (blog de professor). Matéria: ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
+    '\n\nO registro é uma TABELA. Cada linha tem: uma DATA, o CONTEÚDO/matéria daquela aula, e os DEVERES daquela data.' +
+    '\nExtraia TODAS as linhas que conseguir identificar, na ordem em que aparecem. Para cada linha:' +
+    '\n- "data": a data da linha (formato DD/MM)' +
+    '\n- "materia": o conteúdo/matéria daquela linha. Se a linha não tem matéria (célula vazia), use "".' +
+    '\n- "deveres": lista dos deveres daquela linha. Se não houver, use []. ' +
+    '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
+    '\nNÃO invente linhas. Extraia só o que está escrito. Cada dever pertence à data da própria linha.' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown, no formato:' +
+    '\n{"linhas":[{"data":"DD/MM","materia":"texto ou vazio","deveres":["dever1"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}' +
+    '\nNo campo "avaliacao": "tem"=true só se o registro mencionar explicitamente TESTE/PROVA/AVALIAÇÃO/SIMULADO com data; "data"=quando; "sobre"=o conteúdo que cai.';
+
+  let tabela;
+  try {
+    const raw = await callAnthropic(promptTabela, 0);
+    tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
+  } catch (e) {
+    tabela = { linhas: [], avaliacao:{tem:false} };
+  }
+
+  // limpa lixo de navegação dos deveres
+  const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment|pinterest|facebook|twitter/i.test((t||'').trim());
+  const linhas = (tabela.linhas||[])
+    .map(l => ({
+      data: (l.data||'').trim(),
+      num: dataParaNum(l.data),
+      materia: (l.materia||'').trim(),
+      deveres: (l.deveres||[]).filter(d => d && d.trim() && !ehLixo(d))
+    }))
+    .filter(l => l.num > 0);
+
+  // ── O CÓDIGO DECIDE TUDO (determinístico, não depende da IA) ──
+  // 1. AULA DO DIA: só a linha com data EXATAMENTE igual à referência E que tenha matéria
+  const linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM);
+  const aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
+
+  // 2. DEVERES DESTA AULA: deveres da linha de referência
+  const deveres_aula = linhaRef ? linhaRef.deveres : [];
+
+  // 3. DEVERES PENDENTES: as 2 últimas datas ANTERIORES à referência que têm dever
+  const anteriores = linhas
+    .filter(l => l.num < refNum && l.deveres.length > 0)
+    .sort((a,b) => b.num - a.num); // mais recente primeiro
+  const deveres_pendentes = anteriores.slice(0,2).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
+
+  // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior à referência
+  const aulasAnteriores = linhas
+    .filter(l => l.num < refNum && l.materia)
+    .sort((a,b) => b.num - a.num);
+  const linhaTeste = aulasAnteriores[0] || null;
+
+  // decide se mostra teste conforme o tipo
+  let tem_avaliacao, materia_teste, materia_teste_data;
   if (tipo === 'soDever') {
-    const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
-      instrucaoFiltro +
-      '\n\nO registro é uma TABELA: [DATA] | [MATÉRIA] | [DEVERES da data]. Cada dever pertence à data da própria linha. Ignore botões de compartilhar do Blogspot.\n' +
-      '\nExtraia para a data ' + ref + ':\n' +
-      '• AULA DO DIA = conteúdo da matéria da linha de ' + ref + '. Vazio se não houver.\n' +
-      '• DEVERES DESTA AULA = deveres da linha de ' + ref + '. [] se não houver.\n' +
-      '• DEVERES PENDENTES = deveres de linhas anteriores a ' + ref + ' (até 3 com dever). Só datas que TÊM dever.\n' +
-      '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
-      '\n\nResponda APENAS JSON sem markdown:\n' +
-      '{"aula_hoje":"conteúdo ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever"]}],"deveres_aula":[],"materia_teste":"","materia_teste_data":"","resumo":"","questoes":[],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
-    return callAnthropic(prompt, 0);
+    tem_avaliacao = false; materia_teste = ''; materia_teste_data = '';
+  } else if (tipo === 'provaFinal') {
+    // só quando o blog menciona avaliação explícita
+    tem_avaliacao = !!(tabela.avaliacao && tabela.avaliacao.tem);
+    materia_teste = tem_avaliacao ? (tabela.avaliacao.sobre || (linhaTeste? linhaTeste.materia : '')) : '';
+    materia_teste_data = tem_avaliacao ? (tabela.avaliacao.data || (linhaTeste? linhaTeste.data.slice(0,5):'')) : '';
+  } else {
+    // matéria normal: teste semanal sempre
+    tem_avaliacao = true;
+    materia_teste = linhaTeste ? linhaTeste.materia : '';
+    materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
   }
 
-  // instrução do bloco de teste: padrão (sempre) ou prova final (só quando detectar)
-  const blocoTeste = (tipo === 'provaFinal')
-    ? '• TEM_AVALIACAO = true SOMENTE se o blog mencionar explicitamente um TESTE, PROVA, AVALIAÇÃO ou SIMULADO com data marcada (ex: "prova dia 25/06", "teste 20/06"). Caso contrário, false.\n' +
-      '• MATÉRIA DO TESTE = se TEM_AVALIACAO for true, o conteúdo que cai nessa avaliação (a matéria estudada para ela). Se false, deixe "".\n' +
-      '• RESUMO e QUESTÕES = se TEM_AVALIACAO for true, faça sobre a matéria que cai na avaliação. Se false, RESUMO sobre a aula do dia e QUESTÕES vazio [].\n'
-    : '• TEM_AVALIACAO = true (esta matéria tem teste semanal).\n' +
-      '• MATÉRIA DO TESTE = conteúdo da aula IMEDIATAMENTE ANTERIOR a ' + ref + ' (a aula de uma atrás). Se houver anotação "matéria para o teste do dia XX/XX", use-a.\n' +
-      '• RESUMO e QUESTÕES = sobre a MATÉRIA DO TESTE.\n';
+  // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
+  let resumo = '', questoes = [];
+  const precisaResumo = (tipo !== 'soDever') && tem_avaliacao && materia_teste;
+  if (precisaResumo) {
+    const promptResumo = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
+      'O aluno tem um teste sobre: "' + materia_teste + '".\n' +
+      'Faça:\n1. RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
+      '2. QUESTÕES: 4 questões de múltipla escolha (A-D) sobre o conteúdo, com a resposta correta e explicação.\n' +
+      '\nResponda APENAS JSON sem markdown:\n' +
+      '{"resumo":"texto","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}';
+    try {
+      const r = await callAnthropic(promptResumo, 0);
+      resumo = r.resumo || '';
+      questoes = Array.isArray(r.questoes) ? r.questoes : [];
+    } catch (e) { resumo = ''; questoes = []; }
+  } else if (tipo !== 'soDever') {
+    // sem avaliação: um resumo curto da aula do dia, se houver
+    if (aula_hoje) {
+      try {
+        const r = await callAnthropic('Resuma em 2-3 frases, de forma didática, o conteúdo desta aula de ' + materia + ': "' + aula_hoje + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
+        resumo = r.resumo || '';
+      } catch(e){ resumo=''; }
+    }
+  }
 
-  const prompt = 'Você é um tutor do ensino médio brasileiro. A data de referência é ' + ref + ' (DD/MM/AAAA), uma ' + labelDia + '. Analise o registro de aulas do professor ' + professor + ' de ' + materia + '.' +
-    instrucaoFiltro +
-    '\n\n=== ESTRUTURA DO REGISTRO (MUITO IMPORTANTE) ===\n' +
-    'O registro é uma TABELA com 3 colunas por linha:\n' +
-    '  [DATA] | [MATÉRIA/CONTEÚDO da aula] | [DEVERES daquela data]\n' +
-    'REGRA DE OURO: cada dever pertence à DATA DA PRÓPRIA LINHA onde ele aparece. O dever na linha do dia 15/06 é um dever DO dia 15/06.\n' +
-    'ATENÇÃO: ignore COMPLETAMENTE textos de navegação/compartilhamento do site (como "Enviar por e-mail", "Postar no blog", "Compartilhar no X/Facebook/Pinterest", "Marcadores", "Postagens mais recentes", "Início", "Assinar", "Comentários"). Isso NÃO são deveres nem matéria, são botões do Blogspot. Nunca os inclua em deveres.\n' +
-    'Uma linha pode ter matéria mas não ter dever (coluna de dever vazia ou "—"), ou ter dever mas não ter matéria nova. Trate as duas colunas de forma independente.\n' +
-    '\n=== O QUE EXTRAIR (para a data ' + ref + ') ===\n' +
-    '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada. ATENÇÃO: a AULA DO DIA e a MATÉRIA DO TESTE são campos DIFERENTES. Mesmo que exista matéria do teste (de uma aula anterior), a AULA DO DIA continua vazia se a linha de ' + ref + ' não tiver matéria. Não copie a matéria do teste para a aula do dia.\n' +
-    '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
-    blocoTeste +
-    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + '. Pegue as ÚLTIMAS 2 OU 3 datas que tenham dever (as mais recentes antes de ' + ref + '), da mais recente para a mais antiga. Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: procure no registro inteiro, não só as linhas mais próximas; se a penúltima data com dever for bem antiga (ex: 18/05), inclua mesmo assim. Só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua data com lista vazia. Pule linhas sem dever ("—" ou vazia).\n' +
-    '\n=== EXEMPLO REAL (siga exatamente este raciocínio) ===\n' +
-    'Suponha esta tabela e ref=15/06:\n' +
-    'Linha 18/05: matéria "Platão - política" | deveres "Págs 3-4 (41-42); 5 a 8 (49-50)"\n' +
-    'Linha 25/05: matéria "Correção da tarefa" | deveres "—"\n' +
-    'Linha 01/06: matéria "Módulo 4: Aristóteles" | deveres "Pág 52 (1-2); Págs 63-64 (1-6)"\n' +
-    'Linha 08/06: matéria "A lógica de Aristóteles" | deveres "—"\n' +
-    'Linha 15/06: matéria "" (NÃO tem matéria, a célula está vazia) | deveres "Págs 59-61 (Leitura); Pág 53-54"\n' +
-    'RESULTADO CORRETO para ref=15/06:\n' +
-    '  aula_hoje = "" (a linha 15/06 NÃO tem matéria; NÃO pegue a de 08/06 nem de outra data)\n' +
-    '  deveres_aula = ["Págs 59-61 (Leitura)","Pág 53-54"] (os deveres DA linha 15/06)\n' +
-    '  deveres_pendentes = [{"data":"01/06","deveres":["Pág 52 (1-2)","Págs 63-64 (1-6)"]},{"data":"18/05","deveres":["Págs 3-4 (41-42)","5 a 8 (49-50)"]}] (as 2 últimas datas COM dever antes de 15/06; pulou 08/06 e 25/05 que têm "—")\n' +
-    '  materia_teste = "A lógica de Aristóteles" (linha 08/06, a aula com matéria imediatamente anterior) — APENAS se tem_avaliacao for true\n' +
-    '\nREGRAS: Datas DD/MM. Ano 2026 se faltar.\n' +
-    (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
-    '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
-    '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"tem_avaliacao":true,"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","aula_data":"DD/MM da linha de onde tirou a aula_hoje, ou vazio","materia_teste_data":"DD/MM da matéria do teste ou vazio","materia_teste":"conteúdo que cai na avaliação ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
-  return callAnthropic(prompt, 0);
+  return {
+    aula_hoje, aula_data: linhaRef ? linhaRef.data.slice(0,5) : '',
+    materia_teste, materia_teste_data,
+    deveres_pendentes, deveres_aula,
+    tem_avaliacao, resumo, questoes,
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
 }
 
 // ── rota protegida ────────────────────────────────────────────────────────────
@@ -565,19 +626,6 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       // remove deveres desta aula vazios ou que sejam botões de compartilhar
       if (Array.isArray(ai.deveres_aula)) {
         ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixo(d));
-      }
-      // TRAVA: a aula do dia só vale se for da data de referência.
-      // Se a IA pegou de outra data (ex: aula de 08/06 quando ref é 15/06), zera.
-      const refDDMM = (dataRef || '').slice(0, 5); // "15/06"
-      if (refDDMM && ai.aula_data && ai.aula_data.slice(0,5) !== refDDMM) {
-        ai.aula_hoje = '';
-      }
-      // se a aula_hoje contém uma data diferente da referência embutida no texto, também zera
-      if (refDDMM && ai.aula_hoje) {
-        const datasNoTexto = ai.aula_hoje.match(/\b(\d{2}\/\d{2})\b/);
-        if (datasNoTexto && datasNoTexto[1] !== refDDMM) {
-          ai.aula_hoje = '';
-        }
       }
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);
