@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v7';
+const CACHE_VERSAO = 'v8';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -410,7 +410,7 @@ async function fetchBlog(url) {
     // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
     const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
     texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
-    return texto.length > 9000 ? texto.slice(texto.length - 9000) : texto;
+    return texto.length > 14000 ? texto.slice(texto.length - 14000) : texto;
   } catch { return null; }
 }
 
@@ -485,7 +485,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada.\n' +
     '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
     blocoTeste +
-    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + ' (até 3 linhas COM dever, da mais recente para a mais antiga). Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua uma data com lista de deveres vazia. Pule completamente linhas sem dever (coluna "—" ou vazia).\n' +
+    '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + '. Pegue as ÚLTIMAS 2 OU 3 datas que tenham dever (as mais recentes antes de ' + ref + '), da mais recente para a mais antiga. Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: procure no registro inteiro, não só as linhas mais próximas; se a penúltima data com dever for bem antiga (ex: 18/05), inclua mesmo assim. Só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua data com lista vazia. Pule linhas sem dever ("—" ou vazia).\n' +
     '\nREGRAS: Datas DD/MM. Ano 2026 se faltar.\n' +
     (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +

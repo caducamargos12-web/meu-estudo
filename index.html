@@ -493,7 +493,7 @@ function checkAnswer(cardId,qi,chosen,correta,explicacao){
   if(el){const s=scores[cardId];el.innerHTML=`Placar <b>${s.a}/${s.t}</b>`;}
 }
 
-function renderCard(item, idx, ehPrevia){
+function renderCard(item, idx, ehPrevia, dataRef){
   const cardId=`d-${idx}`;
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
@@ -554,7 +554,8 @@ function renderCard(item, idx, ehPrevia){
     </div>`:'';
 
   // label do bloco de aula muda conforme prévia ou hoje
-  const labelAula=ehPrevia?'Aula desta prévia':'Aula de hoje';
+  const dataCurta=dataRef?dataRef.slice(0,5):'';
+  const labelAula=ehPrevia?`Aula de ${dataCurta||'segunda'}`:'Aula de hoje';
   const labelTeste=ehPrevia?'Matéria do teste':'Matéria para o teste de hoje';
 
   // controle de quais blocos aparecem conforme o tipo da matéria
@@ -643,12 +644,16 @@ function loadDay(){
       }
     }
     if(msg.type==='section'){
+      // guarda a data de referência desta seção para os cards usarem
+      window._dataRefSecao=window._dataRefSecao||{};
+      for(let k=0;k<msg.total;k++){window._dataRefSecao[msg.offset+k]=msg.dataRef;}
       // insere um cabeçalho de seção antes do primeiro slot daquele dia
       const slot=document.getElementById(`slot-${msg.offset}`);
       if(slot){
         const head=document.createElement('div');
         head.className='day-head'+(msg.ehPrevia?' previa':'');
-        const titulo=msg.ehPrevia?`Prévia · ${msg.dayLabel}`:`Hoje · ${msg.dayLabel}`;
+        const dataCurta=msg.dataRef?msg.dataRef.slice(0,5):'';
+        const titulo=msg.ehPrevia?`Prévia · ${msg.dayLabel}${dataCurta?' '+dataCurta:''}`:`Hoje · ${msg.dayLabel}`;
         head.innerHTML=`<span class="day-badge${msg.ehPrevia?' badge-previa':''}">${msg.ehPrevia?'🔜 '+titulo:titulo}</span><span class="day-line"></span><span class="day-count">${msg.total} mat.</span>`;
         slot.parentNode.insertBefore(head,slot);
       }
@@ -660,7 +665,8 @@ function loadDay(){
     if(msg.type==='result'){
       done++;
       const slot=document.getElementById(`slot-${msg.index}`);
-      if(slot)slot.innerHTML=renderCard(msg.item,msg.index,msg.ehPrevia);
+      const dataRef=(window._dataRefSecao||{})[msg.index]||'';
+      if(slot)slot.innerHTML=renderCard(msg.item,msg.index,msg.ehPrevia,dataRef);
     }
     if(msg.type==='done'){
       evtSource.close();
