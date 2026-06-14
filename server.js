@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v9';
+const CACHE_VERSAO = 'v10';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -502,7 +502,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
     '\n\nResponda APENAS JSON sem markdown:\n' +
-    '{"tem_avaliacao":true,"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","materia_teste_data":"DD/MM da matéria do teste ou vazio","materia_teste":"conteúdo que cai na avaliação ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
+    '{"tem_avaliacao":true,"aula_hoje":"conteúdo da matéria da linha de ' + ref + ' ou vazio","aula_data":"DD/MM da linha de onde tirou a aula_hoje, ou vazio","materia_teste_data":"DD/MM da matéria do teste ou vazio","materia_teste":"conteúdo que cai na avaliação ou vazio","deveres_pendentes":[{"data":"01/06","deveres":["dever 1"]}],"deveres_aula":["dever da linha de ' + ref + '"],"resumo":"resumo didático","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}],"proxima_aula":"","proxima_resumo":"","proxima_deveres":[]}';
   return callAnthropic(prompt, 0);
 }
 
@@ -565,6 +565,19 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       // remove deveres desta aula vazios ou que sejam botões de compartilhar
       if (Array.isArray(ai.deveres_aula)) {
         ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixo(d));
+      }
+      // TRAVA: a aula do dia só vale se for da data de referência.
+      // Se a IA pegou de outra data (ex: aula de 08/06 quando ref é 15/06), zera.
+      const refDDMM = ref.slice(0, 5); // "15/06"
+      if (ai.aula_data && ai.aula_data.slice(0,5) !== refDDMM) {
+        ai.aula_hoje = '';
+      }
+      // se a aula_hoje contém uma data diferente da referência embutida no texto, também zera
+      if (ai.aula_hoje) {
+        const datasNoTexto = ai.aula_hoje.match(/\b(\d{2}\/\d{2})\b/);
+        if (datasNoTexto && datasNoTexto[1] !== refDDMM) {
+          ai.aula_hoje = '';
+        }
       }
       const result = Object.assign({}, item, ai, { ok: true });
       resultados.push(result);
