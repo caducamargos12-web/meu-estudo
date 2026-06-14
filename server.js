@@ -748,12 +748,24 @@ app.get('/api/diag', async (req, res) => {
   let tabela;
   try { tabela = await callAnthropic(promptTabela, 0); } catch(e){ tabela = { erro: e.message }; }
 
+  // também roda o processamento completo para ver o resultado final
+  let resultadoFinal;
+  try {
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo);
+  } catch(e) { resultadoFinal = { erro: e.message }; }
+
   res.json({
     materia: alvo.m,
     tipo: alvo.tipo || 'normal',
     dataReferencia: ref,
-    textoDoBlog: (blogText||'').slice(-3000), // últimos 3000 chars para ver a estrutura
-    tabelaExtraida: tabela
+    tabelaExtraida: tabela,
+    RESULTADO_FINAL: {
+      aula_hoje: resultadoFinal.aula_hoje,
+      deveres_pendentes: resultadoFinal.deveres_pendentes,
+      deveres_aula: resultadoFinal.deveres_aula,
+      tem_avaliacao: resultadoFinal.tem_avaliacao,
+      materia_teste: resultadoFinal.materia_teste
+    }
   });
 });
 
