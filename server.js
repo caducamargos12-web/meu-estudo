@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v13';
+const CACHE_VERSAO = 'v14';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -404,9 +404,18 @@ async function fetchBlog(url) {
       .replace(/<div[^>]*class=['"][^'"]*social[^'"]*['"][\s\S]*?<\/div>/gi, '')
       .replace(/<footer[\s\S]*?<\/footer>/gi, '')
       .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+      // PRESERVA A ESTRUTURA DA TABELA: cada linha <tr> vira uma linha de texto,
+      // cada célula <td>/<th> é separada por " | ". Isso é essencial para a IA
+      // entender qual matéria/dever pertence a qual data.
+      .replace(/<\/tr>/gi, '\n')
+      .replace(/<\/t[dh]>/gi, ' | ')
+      .replace(/<br\s*\/?>/gi, ' ')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
-      .replace(/\s{3,}/g, '\n').trim();
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{2,}/g, '\n')
+      .replace(/ \| (?= \| )/g, '')
+      .trim();
     // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
     const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
     texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
@@ -466,13 +475,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // ETAPA 1: a IA apenas EXTRAI a tabela bruta (não decide nada).
   // Pedir só a estrutura é muito mais confiável que pedir interpretação.
   const promptTabela = 'Você extrai dados de um registro de aulas (blog de professor). Matéria: ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
-    '\n\nO registro é uma TABELA. Cada linha tem: uma DATA, o CONTEÚDO/matéria daquela aula, e os DEVERES daquela data.' +
-    '\nExtraia TODAS as linhas que conseguir identificar, na ordem em que aparecem. Para cada linha:' +
+    '\n\nO registro é uma TABELA. As colunas de cada linha estão separadas por " | " (barra vertical). O formato de cada linha é geralmente:' +
+    '\n  DATA | CONTEÚDO/matéria da aula | DEVERES daquela data' +
+    '\nCada linha começa com uma data. Tudo entre as barras "|" daquela linha pertence àquela data. NÃO misture conteúdo de linhas diferentes.' +
+    '\nExtraia TODAS as linhas que tenham uma data, na ordem em que aparecem. Para cada linha:' +
     '\n- "data": a data da linha (formato DD/MM)' +
-    '\n- "materia": o conteúdo/matéria daquela linha. Se a linha não tem matéria (célula vazia), use "".' +
-    '\n- "deveres": lista dos deveres daquela linha. Se não houver, use []. ' +
+    '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se essa coluna estiver vazia para a linha, use "".' +
+    '\n- "deveres": lista dos deveres (última coluna). Se for "—" ou vazio, use []. Separe múltiplos deveres em itens.' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
-    '\nNÃO invente linhas. Extraia só o que está escrito. Cada dever pertence à data da própria linha.' +
+    '\nNÃO invente linhas nem datas. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown, no formato:' +
     '\n{"linhas":[{"data":"DD/MM","materia":"texto ou vazio","deveres":["dever1"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}' +
