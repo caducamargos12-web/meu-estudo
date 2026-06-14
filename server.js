@@ -372,14 +372,24 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
+const CACHE_VERSAO = 'v15';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
+// limpa do disco qualquer cache que não seja da versão atual (evita servir dados velhos após deploy)
+(function limparCacheAntigo(){
+  let mudou = false;
+  Object.keys(cache).forEach(k => {
+    if (!k.endsWith('_' + CACHE_VERSAO)) { delete cache[k]; mudou = true; }
+  });
+  if (mudou) {
+    try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); console.log('Cache antigo limpo (versão != ' + CACHE_VERSAO + ').'); } catch {}
+  }
+})();
 function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v14';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -533,10 +543,24 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   if (tipo === 'soDever') {
     tem_avaliacao = false; materia_teste = ''; materia_teste_data = '';
   } else if (tipo === 'provaFinal') {
-    // só quando o blog menciona avaliação explícita
-    tem_avaliacao = !!(tabela.avaliacao && tabela.avaliacao.tem);
-    materia_teste = tem_avaliacao ? (tabela.avaliacao.sobre || (linhaTeste? linhaTeste.materia : '')) : '';
-    materia_teste_data = tem_avaliacao ? (tabela.avaliacao.data || (linhaTeste? linhaTeste.data.slice(0,5):'')) : '';
+    // só mostra teste se houver avaliação com DATA marcada PRÓXIMA da referência.
+    // Isso evita ativar por textos genéricos antigos ("estudar para atividade avaliativa").
+    let avalValida = false;
+    let avalData = '';
+    if (tabela.avaliacao && tabela.avaliacao.tem && tabela.avaliacao.data) {
+      const avalNum = dataParaNum(tabela.avaliacao.data);
+      if (avalNum > 0) {
+        const diff = avalNum - refNum; // diferença em "AAAAMMDD" (aprox dias dentro do mês)
+        // janela: avaliação de até ~10 dias à frente ou ~5 dias atrás da referência
+        if (avalNum >= refNum - 5 && avalNum <= refNum + 12) {
+          avalValida = true;
+          avalData = tabela.avaliacao.data.slice(0,5);
+        }
+      }
+    }
+    tem_avaliacao = avalValida;
+    materia_teste = avalValida ? (tabela.avaliacao.sobre || (linhaTeste ? linhaTeste.materia : '')) : '';
+    materia_teste_data = avalValida ? avalData : '';
   } else {
     // matéria normal: teste semanal sempre
     tem_avaliacao = true;
