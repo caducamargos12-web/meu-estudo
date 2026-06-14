@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v10';
+const CACHE_VERSAO = 'v11';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -568,12 +568,12 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       }
       // TRAVA: a aula do dia só vale se for da data de referência.
       // Se a IA pegou de outra data (ex: aula de 08/06 quando ref é 15/06), zera.
-      const refDDMM = ref.slice(0, 5); // "15/06"
-      if (ai.aula_data && ai.aula_data.slice(0,5) !== refDDMM) {
+      const refDDMM = (dataRef || '').slice(0, 5); // "15/06"
+      if (refDDMM && ai.aula_data && ai.aula_data.slice(0,5) !== refDDMM) {
         ai.aula_hoje = '';
       }
       // se a aula_hoje contém uma data diferente da referência embutida no texto, também zera
-      if (ai.aula_hoje) {
+      if (refDDMM && ai.aula_hoje) {
         const datasNoTexto = ai.aula_hoje.match(/\b(\d{2}\/\d{2})\b/);
         if (datasNoTexto && datasNoTexto[1] !== refDDMM) {
           ai.aula_hoje = '';
