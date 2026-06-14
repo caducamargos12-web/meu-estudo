@@ -54,7 +54,7 @@
     header{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
     /* curva calma (desacelera no fim) e durações longas para clima suave e lento */
     .wc-char{animation-name:charInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.5s;background:none;-webkit-text-fill-color:var(--accent);color:var(--accent);will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
-    .wc-word{animation-name:wordInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.6s;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-word{animation-name:wordInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.6s;animation-fill-mode:both;opacity:0;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
     .wc-mark{animation-name:wcMarkM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.9s;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
     .wc-hello,.wc-loader{animation-name:wcRiseM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.6s}
     #welcome{animation-name:welcomeInM;animation-duration:1.2s}
@@ -70,10 +70,11 @@
     0%{opacity:0;transform:translateY(14px)}
     100%{opacity:1;transform:translateY(0)}
   }
-  /* frase: palavras sobem suavemente */
+  /* frase: cada palavra se materializa do nada (surge da transparência, cresce levemente) */
   @keyframes wordInM{
-    0%{opacity:0;transform:translateY(9px)}
-    100%{opacity:1;transform:translateY(0)}
+    0%{opacity:0;transform:translateY(6px) scale(.86)}
+    60%{opacity:1}
+    100%{opacity:1;transform:translateY(0) scale(1)}
   }
   /* saudação e loader: revelação calma de baixo */
   @keyframes wcRiseM{
@@ -265,7 +266,7 @@
     100%{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
   }
 
-  .wc-loader{margin-top:38px;display:flex;align-items:center;gap:10px;opacity:0;animation:wcRise 1.5s 2.8s cubic-bezier(.2,.8,.2,1) both}
+  .wc-loader{margin-top:38px;display:flex;flex-direction:column;align-items:center;gap:14px;opacity:0;animation:wcRise 1.5s 2.8s cubic-bezier(.2,.8,.2,1) both}
   .wc-dots{display:flex;gap:6px}
   .wc-dots span{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:wcWave 2s ease-in-out infinite}
   .wc-dots span:nth-child(2){animation-delay:.25s}
@@ -276,7 +277,7 @@
     30%{transform:translateY(-6px);opacity:1}
     60%{transform:translateY(0);opacity:.45}
   }
-  .wc-loader-txt{font-size:13px;color:var(--text-3);font-family:var(--mono)}
+  .wc-loader-txt{font-size:13px;color:var(--text-3);font-family:var(--mono);text-align:center;letter-spacing:.3px}
 
   /* ═══ TELA DE BOAS-VINDAS ═══ END */
   .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
@@ -350,7 +351,7 @@
     <div class="wc-quote" id="wcQuote"></div>
     <div class="wc-loader">
       <div class="wc-dots"><span></span><span></span><span></span></div>
-      <span class="wc-loader-txt">Preparando seu material…</span>
+      <span class="wc-loader-txt">Na velocidade da luz, carregando seus estudos</span>
     </div>
   </div>
   <div id="watermark"></div>
