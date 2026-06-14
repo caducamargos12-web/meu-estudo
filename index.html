@@ -560,9 +560,18 @@ function renderCard(item, idx, ehPrevia, dataRef){
 
   // controle de quais blocos aparecem conforme o tipo da matéria
   const tipo=item.tipo||'normal';
-  const temAval=item.tem_avaliacao!==false; // só false esconde
-  const mostrarTeste = tipo!=='soDever' && temAval;        // matéria do teste + simulado
-  const mostrarResumo = tipo!=='soDever';                   // resumo (some só no soDever)
+  // para matérias sem teste semanal (provaFinal/soDever), só mostra teste se a IA
+  // confirmou avaliação E há matéria de teste de verdade. Matérias normais sempre têm.
+  const temMateriaTeste=item.materia_teste&&item.materia_teste.trim().length>1;
+  let mostrarTeste;
+  if(tipo==='soDever'){
+    mostrarTeste=false;
+  }else if(tipo==='provaFinal'){
+    mostrarTeste=item.tem_avaliacao===true && temMateriaTeste; // só quando há avaliação confirmada
+  }else{
+    mostrarTeste=temMateriaTeste; // matéria normal: teste semanal
+  }
+  const mostrarResumo = tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
   const mostrarSimulado = mostrarTeste && item.questoes?.length>0;
 
   // monta os blocos condicionais
