@@ -379,7 +379,7 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-const CACHE_VERSAO = 'v8';
+const CACHE_VERSAO = 'v9';
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
@@ -482,10 +482,22 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     'ATENÇÃO: ignore COMPLETAMENTE textos de navegação/compartilhamento do site (como "Enviar por e-mail", "Postar no blog", "Compartilhar no X/Facebook/Pinterest", "Marcadores", "Postagens mais recentes", "Início", "Assinar", "Comentários"). Isso NÃO são deveres nem matéria, são botões do Blogspot. Nunca os inclua em deveres.\n' +
     'Uma linha pode ter matéria mas não ter dever (coluna de dever vazia ou "—"), ou ter dever mas não ter matéria nova. Trate as duas colunas de forma independente.\n' +
     '\n=== O QUE EXTRAIR (para a data ' + ref + ') ===\n' +
-    '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada.\n' +
+    '• AULA DO DIA = o CONTEÚDO da coluna de matéria DA LINHA cuja data é EXATAMENTE ' + ref + '. Se a linha de ' + ref + ' não tem conteúdo de matéria (só tem dever, ou nem existe), retorne "" (vazio). NUNCA use a matéria de outra data aqui. É melhor vazio do que data errada. ATENÇÃO: a AULA DO DIA e a MATÉRIA DO TESTE são campos DIFERENTES. Mesmo que exista matéria do teste (de uma aula anterior), a AULA DO DIA continua vazia se a linha de ' + ref + ' não tiver matéria. Não copie a matéria do teste para a aula do dia.\n' +
     '• DEVERES DESTA AULA = os deveres da coluna de deveres DA LINHA cuja data é EXATAMENTE ' + ref + '. São os deveres daquela data. Se a linha de ' + ref + ' não tem dever, retorne [].\n' +
     blocoTeste +
     '• DEVERES PENDENTES = os deveres das linhas com data ANTERIOR a ' + ref + '. Pegue as ÚLTIMAS 2 OU 3 datas que tenham dever (as mais recentes antes de ' + ref + '), da mais recente para a mais antiga. Use a DATA DA LINHA de cada dever. NÃO inclua os deveres da linha de ' + ref + ' aqui (esses são "desta aula"). IMPORTANTE: procure no registro inteiro, não só as linhas mais próximas; se a penúltima data com dever for bem antiga (ex: 18/05), inclua mesmo assim. Só inclua uma data se ela TIVER pelo menos um dever real. NUNCA inclua data com lista vazia. Pule linhas sem dever ("—" ou vazia).\n' +
+    '\n=== EXEMPLO REAL (siga exatamente este raciocínio) ===\n' +
+    'Suponha esta tabela e ref=15/06:\n' +
+    'Linha 18/05: matéria "Platão - política" | deveres "Págs 3-4 (41-42); 5 a 8 (49-50)"\n' +
+    'Linha 25/05: matéria "Correção da tarefa" | deveres "—"\n' +
+    'Linha 01/06: matéria "Módulo 4: Aristóteles" | deveres "Pág 52 (1-2); Págs 63-64 (1-6)"\n' +
+    'Linha 08/06: matéria "A lógica de Aristóteles" | deveres "—"\n' +
+    'Linha 15/06: matéria "" (NÃO tem matéria, a célula está vazia) | deveres "Págs 59-61 (Leitura); Pág 53-54"\n' +
+    'RESULTADO CORRETO para ref=15/06:\n' +
+    '  aula_hoje = "" (a linha 15/06 NÃO tem matéria; NÃO pegue a de 08/06 nem de outra data)\n' +
+    '  deveres_aula = ["Págs 59-61 (Leitura)","Pág 53-54"] (os deveres DA linha 15/06)\n' +
+    '  deveres_pendentes = [{"data":"01/06","deveres":["Pág 52 (1-2)","Págs 63-64 (1-6)"]},{"data":"18/05","deveres":["Págs 3-4 (41-42)","5 a 8 (49-50)"]}] (as 2 últimas datas COM dever antes de 15/06; pulou 08/06 e 25/05 que têm "—")\n' +
+    '  materia_teste = "A lógica de Aristóteles" (linha 08/06, a aula com matéria imediatamente anterior) — APENAS se tem_avaliacao for true\n' +
     '\nREGRAS: Datas DD/MM. Ano 2026 se faltar.\n' +
     (filtro ? 'Considere apenas "' + filtro + '".\n' : '') +
     '\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo. Use conhecimento geral de ' + materia + '.') +
