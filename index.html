@@ -180,6 +180,15 @@
   .blk-prox{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
   .blk-prox .blk-label{color:var(--accent)}
   .blk-sub{font-size:11px;color:var(--text-3);margin:-2px 0 9px;font-style:italic}
+  /* banner de aviso (ex: professor afastado) */
+  .blk-aviso{display:flex;gap:9px;align-items:flex-start;background:color-mix(in srgb,var(--amber) 12%,var(--bg));border:1px solid color-mix(in srgb,var(--amber) 32%,transparent);border-radius:10px;padding:11px 13px;margin-bottom:13px;font-size:12.5px;line-height:1.5;color:var(--text-2)}
+  .aviso-ic{flex-shrink:0;font-size:14px;line-height:1.3}
+  /* itens de matéria acumulada (história) */
+  .hist-mat{padding:9px 11px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));border:1px solid color-mix(in srgb,var(--accent) 16%,transparent);border-radius:9px;margin-bottom:7px}
+  .hist-mat:last-child{margin-bottom:0}
+  .hist-mat-nome{font-size:14px;color:var(--text);font-weight:600;line-height:1.4}
+  .hist-mat-data{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:700;margin-right:2px}
+  .hist-mat-res{font-size:12.5px;color:var(--text-2);line-height:1.5;margin-top:4px}
 
   .dev-group{margin-bottom:11px}
   .dev-group:last-child{margin-bottom:0}
@@ -656,19 +665,39 @@ function renderCard(item, idx, ehPrevia, dataRef){
 
   // controle de quais blocos aparecem conforme o tipo da matéria
   const tipo=item.tipo||'normal';
+  // história: bloco acumulativo especial (matérias que ainda podem cair)
+  const ehHistoria=item.historia===true;
   // para matérias sem teste semanal (provaFinal/soDever), só mostra teste se a IA
   // confirmou avaliação E há matéria de teste de verdade. Matérias normais sempre têm.
   const temMateriaTeste=item.materia_teste&&item.materia_teste.trim().length>1;
   let mostrarTeste;
-  if(tipo==='soDever'){
+  if(ehHistoria){
+    mostrarTeste=false; // história usa bloco próprio
+  }else if(tipo==='soDever'){
     mostrarTeste=false;
   }else if(tipo==='provaFinal'){
     mostrarTeste=item.tem_avaliacao===true && temMateriaTeste; // só quando há avaliação confirmada
   }else{
     mostrarTeste=temMateriaTeste; // matéria normal: teste semanal
   }
-  const mostrarResumo = tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
+  const mostrarResumo = !ehHistoria && tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
   const mostrarSimulado = mostrarTeste && item.questoes?.length>0;
+
+  // bloco especial de história: lista das matérias que podem cair no teste, com resumo
+  const blocoHistoriaHtml = (ehHistoria && item.materias_teste?.length) ? `
+        <div class="blk blk-teste">
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matérias que podem cair no teste</span></div>
+          <div class="blk-sub">Conteúdos do bimestre que ainda não foram testados</div>
+          ${item.materias_teste.map(m=>`
+            <div class="hist-mat">
+              <div class="hist-mat-nome">${m.data?`<span class="hist-mat-data">${m.data}</span> `:''}${m.materia}</div>
+              ${m.resumo?`<div class="hist-mat-res">${m.resumo}</div>`:''}
+            </div>`).join('')}
+        </div>` : (ehHistoria ? `
+        <div class="blk blk-teste">
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matérias que podem cair no teste</span></div>
+          <div class="blk-body" style="color:var(--text-3)">Nenhuma matéria pendente identificada no bimestre ainda.</div>
+        </div>` : '');
 
   // monta os blocos condicionais
   const blocoTesteHtml = mostrarTeste ? `
@@ -700,11 +729,13 @@ function renderCard(item, idx, ehPrevia, dataRef){
     </div>
     <div class="c-body">
       <div class="c-body-in">
+        ${item.aviso?`<div class="blk-aviso"><span class="aviso-ic">⚠️</span><span>${item.aviso}</span></div>`:''}
         <div class="blk blk-aula">
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
           <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje:'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
         ${blocoTesteHtml}
+        ${blocoHistoriaHtml}
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
           <div class="blk-sub">De aulas anteriores, ainda em aberto</div>

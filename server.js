@@ -356,9 +356,9 @@ const GRADE = {
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever' },
   ],
   ter: [
-    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História' },
+    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
     { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html' },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html' },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html' },
@@ -375,7 +375,7 @@ const GRADE = {
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html' },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura' },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html' },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
@@ -384,7 +384,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v19';
+const CACHE_VERSAO = 'v21';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -483,7 +483,105 @@ function dataParaNum(ddmm) {
   return ano*10000 + mes*100 + dia;
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo) {
+// ── processamento especial de HISTÓRIA (acumulativo por bimestre) ────────────
+// A matéria do teste é tudo que foi dado no 2º bimestre e ainda NÃO caiu em teste.
+async function processarHistoria(materia, professor, blogText, filtro, dataRef) {
+  const temConteudo = blogText && blogText.length > 50;
+  const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+  const refDDMM = ref.slice(0,5);
+
+  // ETAPA 1: extrai a tabela E identifica o que já caiu em teste
+  const prompt = 'Você analisa o registro de aulas de História do professor ' + professor + '. Considere SOMENTE História (ignore Sociologia ou outra disciplina misturada).' +
+    '\n\nO registro é uma TABELA com colunas separadas por " | ": DATA | CONTEÚDO | DEVERES.' +
+    '\n\n*** MARCO DO BIMESTRE ***' +
+    '\nProcure no texto onde está escrito "2º BIMESTRE" (ou "2 BIMESTRE", "SEGUNDO BIMESTRE"). Considere APENAS as aulas/matérias que aparecem DEPOIS desse marco. Ignore tudo que vem antes (é do 1º bimestre).' +
+    '\n\n*** O QUE EXTRAIR ***' +
+    '\n1. "aula_hoje": o conteúdo da matéria da linha cuja data é EXATAMENTE ' + ref + '. Se não houver matéria nessa data exata, "".' +
+    '\n2. "deveres_aula": deveres da linha de ' + ref + '. Se não houver, [].' +
+    '\n3. "deveres_pendentes": deveres das 2 últimas datas ANTERIORES a ' + ref + ' que tenham dever. Formato [{"data":"DD/MM","deveres":["..."]}].' +
+    '\n4. "materias_bimestre": LISTA de TODAS as matérias/conteúdos dados no 2º BIMESTRE (cada aula com seu conteúdo), na ordem. Formato [{"data":"DD/MM","materia":"conteúdo"}].' +
+    '\n5. "ja_cairam": LISTA das matérias que JÁ FORAM APLICADAS EM TESTE. O professor marca isso escrevendo algo como "Foi realizado testinho (Matéria: X)" ou "teste (Matéria: X)" ou "avaliação: X". Extraia o nome da matéria X de cada uma dessas anotações. Formato ["Revolução Francesa","..."].' +
+    '\n\nIGNORE textos de navegação do Blogspot (compartilhar, marcadores, etc).' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown:' +
+    '\n{"aula_hoje":"","deveres_aula":[],"deveres_pendentes":[],"materias_bimestre":[{"data":"DD/MM","materia":""}],"ja_cairam":[]}';
+
+  let dados;
+  try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = {}; }
+
+  const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment/i.test((t||'').trim());
+
+  // limpa deveres
+  let deveres_aula = (dados.deveres_aula || []).filter(d => d && d.trim() && !ehLixo(d));
+  let deveres_pendentes = (dados.deveres_pendentes || [])
+    .map(g => ({ data: (g.data||'').slice(0,5), deveres: (g.deveres||[]).filter(d => d && d.trim() && !ehLixo(d)) }))
+    .filter(g => g.deveres.length > 0)
+    .slice(0, 2);
+
+  // CÓDIGO decide o que sobrou: matérias do bimestre MENOS as que já caíram
+  const materiasBim = (dados.materias_bimestre || []).filter(m => m && m.materia && m.materia.trim());
+  const jaCairam = (dados.ja_cairam || []).map(s => (s||'').toLowerCase().trim()).filter(Boolean);
+
+  // uma matéria "já caiu" se o nome dela bate bem com algum item de jaCairam
+  function jaCaiu(materiaTexto) {
+    const t = (materiaTexto||'').toLowerCase();
+    return jaCairam.some(caiu => {
+      const palavrasCaiu = caiu.split(/\s+/).filter(p => p.length > 3);
+      if (palavrasCaiu.length === 0) return t.includes(caiu);
+      // conta quantas palavras significativas do "já caiu" aparecem na matéria
+      const batem = palavrasCaiu.filter(p => t.includes(p)).length;
+      // exige que a MAIORIA das palavras bata (evita falso positivo por 1 palavra só
+      // compartilhada, ex: "Primeiro Reinado" vs "Segundo Reinado")
+      return batem >= Math.ceil(palavrasCaiu.length * 0.6) && batem >= 1
+             && (palavrasCaiu.length === 1 ? true : batem >= 2);
+    });
+  }
+
+  // matérias que sobraram (podem cair no teste)
+  const sobraram = materiasBim.filter(m => !jaCaiu(m.materia));
+
+  // gera um resumo pequeno de cada matéria que sobrou (uma chamada só, para economizar)
+  let materiasComResumo = [];
+  if (sobraram.length > 0) {
+    const lista = sobraram.map((m,i) => (i+1) + '. ' + m.materia).join('\n');
+    const promptResumos = 'Para cada matéria de História abaixo, escreva um resumo MUITO curto (1-2 frases) do que se trata, para revisão de teste.\n\nMATÉRIAS:\n' + lista +
+      '\n\nResponda APENAS JSON sem markdown: {"resumos":[{"materia":"nome exato como veio","resumo":"1-2 frases"}]}';
+    try {
+      const r = await callAnthropic(promptResumos, 0);
+      const mapa = {};
+      (r.resumos || []).forEach(x => { if (x.materia) mapa[x.materia.toLowerCase().trim()] = x.resumo; });
+      materiasComResumo = sobraram.map(m => ({
+        data: (m.data||'').slice(0,5),
+        materia: m.materia,
+        resumo: mapa[m.materia.toLowerCase().trim()] || ''
+      }));
+    } catch (e) {
+      materiasComResumo = sobraram.map(m => ({ data:(m.data||'').slice(0,5), materia:m.materia, resumo:'' }));
+    }
+  }
+
+  const aula_hoje = (dados.aula_hoje && dados.aula_hoje.trim().length > 1) ? dados.aula_hoje.trim() : '';
+
+  return {
+    aula_hoje,
+    aula_data: aula_hoje ? refDDMM : '',
+    deveres_pendentes, deveres_aula,
+    // campos específicos de história
+    historia: true,
+    materias_teste: materiasComResumo, // lista das que podem cair, com resumo
+    // campos padrão zerados (história não usa o bloco de teste comum)
+    tem_avaliacao: false, materia_teste: '', materia_teste_data: '',
+    resumo: '', questoes: [],
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
+}
+
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres) {
+  // história tem lógica acumulativa própria
+  if (tipo === 'acumulativo') {
+    return processarHistoria(materia, professor, blogText, filtro, dataRef);
+  }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
   const refNum = dataParaNum(ref);
@@ -564,7 +662,8 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const anteriores = linhas
     .filter(l => l.num < refNum && l.deveres.length > 0)
     .sort((a,b) => b.num - a.num); // mais recente primeiro
-  const deveres_pendentes = anteriores.slice(0,2).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
+  const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
+  const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
   // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior à referência
   const aulasAnteriores = linhas
@@ -683,14 +782,16 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo);
+      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres);
       // termos de botões de compartilhar do Blogspot que não são deveres
       const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
       // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
       if (Array.isArray(ai.deveres_pendentes)) {
+        const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
         ai.deveres_pendentes = ai.deveres_pendentes
           .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixo(d)) }))
-          .filter(g => g.deveres.length > 0);
+          .filter(g => g.deveres.length > 0)
+          .slice(0, limite);
       }
       // remove deveres desta aula vazios ou que sejam botões de compartilhar
       if (Array.isArray(ai.deveres_aula)) {
