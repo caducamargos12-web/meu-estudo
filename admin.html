@@ -67,6 +67,14 @@
   .erro{color:var(--red);font-size:13px;margin-top:8px}
   .ok{color:var(--green);font-size:13px;margin-top:8px}
   .section-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .form-aluno{display:flex;gap:8px;flex-wrap:wrap}
+  .form-aluno input{flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:var(--sans)}
+  .form-aluno input:focus{outline:none;border-color:var(--accent)}
+  .btn-criar{background:var(--accent);border:none;border-radius:8px;color:#1a1611;font-weight:600;padding:10px 18px;cursor:pointer;font-size:14px;font-family:var(--sans);white-space:nowrap}
+  .btn-criar:hover{opacity:.9}
+  .form-msg{font-size:13px;margin-top:10px;min-height:18px}
+  .form-msg.ok{color:var(--green)}
+  .form-msg.erro{color:var(--red)}
 </style>
 </head>
 <body>
@@ -95,10 +103,16 @@
       <button class="small" onclick="carregar()" style="margin-top:8px">↻ Atualizar lista</button>
     </div>
     <div class="card">
-      <div class="section-label">Como adicionar / remover alunos</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.6">
-        Para <strong style="color:var(--text)">adicionar</strong> ou <strong style="color:var(--text)">remover</strong> um aluno, edite a variável <code style="background:var(--surface);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11px">ALUNOS</code> no Railway, no formato <code style="background:var(--surface);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11px">usuario:senha</code> separados por vírgula.<br><br>
-        O botão <strong style="color:var(--accent)">Liberar dispositivos</strong> abaixo serve para quando um aluno trocou de aparelho ou limpou o navegador e ficou travado. Cada aluno pode usar até <strong style="color:var(--text)">2 dispositivos</strong> (ex: celular + PC). Liberar zera os aparelhos vinculados para ele cadastrar de novo.
+      <div class="section-label">Adicionar novo aluno</div>
+      <div class="form-aluno">
+        <input id="novoUser" placeholder="Nome de usuário" autocomplete="off" />
+        <input id="novoPass" placeholder="Senha (mín. 4 caracteres)" autocomplete="off" />
+        <button class="btn-criar" onclick="criarAluno()">Cadastrar aluno</button>
+      </div>
+      <div id="criarMsg" class="form-msg"></div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px">
+        A senha é guardada de forma segura (criptografada), nunca em texto puro. Para <strong style="color:var(--text)">trocar a senha</strong> ou <strong style="color:var(--text)">remover</strong> um aluno, use os botões na lista de alunos acima.<br><br>
+        O botão <strong style="color:var(--accent)">Liberar dispositivos</strong> serve para quando um aluno trocou de aparelho ou limpou o navegador e ficou travado. Cada aluno usa até <strong style="color:var(--text)">2 dispositivos</strong>. Liberar zera os aparelhos para ele cadastrar de novo.
       </div>
     </div>
   </div>
@@ -260,6 +274,8 @@ function renderLista(alunos){
         </div>
         <div class="aluno-acoes">
           <button class="small pay" onclick="marcarPagamento('${a.user}')">✓ Marcar pago</button>
+          <button class="small" onclick="trocarSenha('${a.user}')">🔑 Senha</button>
+          <button class="small danger" onclick="removerAluno('${a.user}')">✕ Remover</button>
         </div>
       </div>
       ${historicoHtml}
@@ -302,6 +318,55 @@ async function removerDispositivo(user, deviceId){
   }catch(e){
     msg.className='erro';msg.textContent='Erro de conexão.';
   }
+}
+
+async function criarAluno(){
+  const user=document.getElementById('novoUser').value.trim();
+  const senha=document.getElementById('novoPass').value.trim();
+  const msg=document.getElementById('criarMsg');
+  if(!user||!senha){msg.className='form-msg erro';msg.textContent='Preencha usuário e senha.';return;}
+  try{
+    const res=await fetch('/api/admin/criar-aluno',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({adminSenha,user,senha})
+    });
+    const data=await res.json();
+    if(data.error){msg.className='form-msg erro';msg.textContent=data.error;return;}
+    msg.className='form-msg ok';msg.textContent='Aluno "'+user+'" cadastrado!';
+    document.getElementById('novoUser').value='';
+    document.getElementById('novoPass').value='';
+    carregar();
+  }catch(e){msg.className='form-msg erro';msg.textContent='Erro de conexão.';}
+}
+
+async function trocarSenha(user){
+  const senha=prompt('Nova senha para '+user+' (mín. 4 caracteres):');
+  if(senha===null)return;
+  const msg=document.getElementById('painelMsg');
+  try{
+    const res=await fetch('/api/admin/trocar-senha',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({adminSenha,user,senha})
+    });
+    const data=await res.json();
+    if(data.error){msg.className='erro';msg.textContent=data.error;return;}
+    msg.className='ok';msg.textContent='Senha de '+user+' alterada.';
+  }catch(e){msg.className='erro';msg.textContent='Erro de conexão.';}
+}
+
+async function removerAluno(user){
+  if(!confirm('Remover o aluno "'+user+'"? Isso apaga login, dispositivos e pagamento. Não dá pra desfazer.'))return;
+  const msg=document.getElementById('painelMsg');
+  try{
+    const res=await fetch('/api/admin/remover-aluno',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({adminSenha,user})
+    });
+    const data=await res.json();
+    if(data.error){msg.className='erro';msg.textContent=data.error;return;}
+    msg.className='ok';msg.textContent='Aluno '+user+' removido.';
+    carregar();
+  }catch(e){msg.className='erro';msg.textContent='Erro de conexão.';}
 }
 
 async function desbloquear(user){

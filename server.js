@@ -6,22 +6,48 @@ const app = express();
 
 app.use(express.json());
 
+// volume persistente do Railway em /data; se não existir, cai em /tmp
+const DATA_DIR = fs.existsSync('/data') ? '/data' : '/tmp';
+
 // ════════════════════════════════════════════════════════════════════════════
 // CONFIGURAÇÃO DE ALUNOS (logins)
-// Edite a variável de ambiente ALUNOS no Railway no formato:
-//   usuario1:senha1,usuario2:senha2,usuario3:senha3
-// Exemplo: joao:1234,maria:abcd,pedro:xyz9
+// Agora os alunos são cadastrados pelo painel admin, com senha guardada em HASH
+// (bcrypt). As senhas nunca são salvas em texto puro.
+// A variável ALUNOS antiga (texto puro) só é usada UMA VEZ para migração inicial.
 // ════════════════════════════════════════════════════════════════════════════
-function carregarAlunos() {
+const bcrypt = require('bcryptjs');
+
+// alunos = { user: { hash, criadoEm } }
+let alunos = {};
+const ALUNOS_FILE = DATA_DIR + '/alunos.json';
+function carregarAlunosDisco() {
+  try { alunos = JSON.parse(fs.readFileSync(ALUNOS_FILE, 'utf8')); } catch { alunos = {}; }
+}
+function salvarAlunos() {
+  try { fs.writeFileSync(ALUNOS_FILE, JSON.stringify(alunos)); }
+  catch (e) { console.log('Erro ao salvar alunos:', e.message); }
+}
+carregarAlunosDisco();
+
+// migração única: se não há alunos no disco mas existe a variável ALUNOS antiga,
+// importa esses logins gerando hash para cada um (só roda uma vez).
+function migrarAlunosAntigos() {
+  if (Object.keys(alunos).length > 0) return; // já migrado
   const raw = process.env.ALUNOS || '';
-  const map = {};
+  if (!raw.trim()) return;
+  let migrou = 0;
   raw.split(',').forEach(par => {
     const [user, pass] = par.split(':');
-    if (user && pass) map[user.trim()] = pass.trim();
+    if (user && pass) {
+      const u = user.trim();
+      const hash = bcrypt.hashSync(pass.trim(), 10);
+      alunos[u] = { hash, criadoEm: new Date().toISOString() };
+      migrou++;
+    }
   });
-  return map;
+  if (migrou > 0) { salvarAlunos(); console.log('Migrados ' + migrou + ' aluno(s) da variável ALUNOS para hash.'); }
 }
-const ALUNOS = carregarAlunos();
+migrarAlunosAntigos();
 
 // ── checagem de segurança no arranque ───────────────────────────────────────
 // o app se recusa a subir sem os segredos essenciais definidos
@@ -45,8 +71,6 @@ const dispositivosPorUser = {}; // user -> [{id, aparelho, data}, ...]
 const MAX_DISPOSITIVOS = 2;
 
 // ── persistência dos vínculos de dispositivo em disco ───────────────────────
-// usa o volume persistente do Railway em /data; se não existir, cai em /tmp
-const DATA_DIR = fs.existsSync('/data') ? '/data' : '/tmp';
 const DISPOSITIVOS_FILE = DATA_DIR + '/dispositivos.json';
 
 function carregarDispositivos() {
@@ -179,7 +203,7 @@ function checkAdmin(req, res, next) {
 // lista alunos e os dispositivos vinculados (com detalhes)
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   const agora = new Date();
-  const lista = Object.keys(ALUNOS).map(user => {
+  const lista = Object.keys(alunos).map(user => {
     const devs = dispositivosPorUser[user] || [];
     const pag = pagamentos[user] || null;
 
@@ -220,10 +244,49 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   res.json({ alunos: lista, total: lista.length });
 });
 
+// ── cadastrar um novo aluno (senha guardada em hash) ─────────────────────────
+app.post('/api/admin/criar-aluno', checkAdmin, (req, res) => {
+  let { user, senha } = req.body;
+  user = (user || '').trim();
+  senha = (senha || '').trim();
+  if (!user || !senha) return res.json({ error: 'Informe usuário e senha' });
+  if (user.length < 2) return res.json({ error: 'Usuário muito curto' });
+  if (senha.length < 4) return res.json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
+  if (/[,:]/.test(user)) return res.json({ error: 'Usuário não pode conter , ou :' });
+  if (alunos[user]) return res.json({ error: 'Já existe um aluno com esse nome' });
+  alunos[user] = { hash: bcrypt.hashSync(senha, 10), criadoEm: new Date().toISOString() };
+  salvarAlunos();
+  res.json({ ok: true });
+});
+
+// ── trocar a senha de um aluno ───────────────────────────────────────────────
+app.post('/api/admin/trocar-senha', checkAdmin, (req, res) => {
+  let { user, senha } = req.body;
+  user = (user || '').trim();
+  senha = (senha || '').trim();
+  if (!alunos[user]) return res.json({ error: 'Aluno não encontrado' });
+  if (senha.length < 4) return res.json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
+  alunos[user].hash = bcrypt.hashSync(senha, 10);
+  salvarAlunos();
+  res.json({ ok: true });
+});
+
+// ── remover um aluno (apaga login, dispositivos e pagamento) ─────────────────
+app.post('/api/admin/remover-aluno', checkAdmin, (req, res) => {
+  const user = (req.body.user || '').trim();
+  if (!alunos[user]) return res.json({ error: 'Aluno não encontrado' });
+  delete alunos[user];
+  salvarAlunos();
+  // limpa dados associados
+  if (dispositivosPorUser[user]) { delete dispositivosPorUser[user]; salvarDispositivos(); }
+  if (pagamentos[user]) { delete pagamentos[user]; salvarPagamentos(); }
+  res.json({ ok: true });
+});
+
 // marca um pagamento: soma 30 dias ao vencimento e registra o valor
 app.post('/api/admin/marcar-pagamento', checkAdmin, (req, res) => {
   const { user, valor } = req.body;
-  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  if (!alunos[user]) return res.json({ error: 'Aluno não encontrado' });
   if (!pagamentos[user]) registrarCadastro(user);
   const p = pagamentos[user];
   const agora = new Date();
@@ -261,7 +324,7 @@ app.post('/api/admin/desfazer-pagamento', checkAdmin, (req, res) => {
 // remove UM dispositivo específico de um aluno
 app.post('/api/admin/remover-dispositivo', checkAdmin, (req, res) => {
   const { user, deviceId } = req.body;
-  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  if (!alunos[user]) return res.json({ error: 'Aluno não encontrado' });
   const lista = dispositivosPorUser[user] || [];
   const idx = lista.findIndex(d => d.id === deviceId);
   if (idx === -1) return res.json({ error: 'Dispositivo não encontrado' });
@@ -274,7 +337,7 @@ app.post('/api/admin/remover-dispositivo', checkAdmin, (req, res) => {
 // desbloqueia TODOS os dispositivos de um aluno
 app.post('/api/admin/desbloquear', checkAdmin, (req, res) => {
   const { user } = req.body;
-  if (!ALUNOS[user]) return res.json({ error: 'Aluno não encontrado' });
+  if (!alunos[user]) return res.json({ error: 'Aluno não encontrado' });
   delete dispositivosPorUser[user];
   salvarDispositivos();
   res.json({ ok: true, msg: 'Todos os dispositivos de ' + user + ' foram liberados.' });
@@ -312,7 +375,8 @@ app.post('/api/login', (req, res) => {
   }
   const { user, pass, device } = req.body;
   if (!user || !pass || !device) return res.json({ error: 'Dados incompletos' });
-  if (ALUNOS[user] !== pass) {
+  const registro = alunos[user];
+  if (!registro || !bcrypt.compareSync(pass, registro.hash)) {
     registrarFalha(ip);
     return res.json({ error: 'Usuário ou senha incorretos' });
   }
