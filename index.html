@@ -523,24 +523,24 @@ function montarBoasVindas(){
   const nome=user.charAt(0).toUpperCase()+user.slice(1)+'!';
   const frase=FRASES[Math.floor(Math.random()*FRASES.length)];
 
-  // monta o nome letra por letra (revelação lenta e calma)
+  // monta o nome letra por letra (revelação calma, mas mais ágil)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${1.4+i*0.14}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${0.6+i*0.08}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
-  // monta a frase palavra por palavra (brecha ampla entre palavras)
+  // monta a frase palavra por palavra
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
-  const nomeFim=1.4+nome.length*0.14;
-  const inicioFrase=nomeFim+0.7;
+  const nomeFim=0.6+nome.length*0.08;
+  const inicioFrase=nomeFim+0.4;
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.95}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.5}s">${p}</span>`
   ).join(' ');
 
   // calcula quando a última palavra termina de animar (em ms)
-  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.95+1.6)*1000;
-  welcomeMinTime=Math.min(fimAnimacao+900,12000); // teto maior para a versão lenta
+  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.5+1.2)*1000;
+  welcomeMinTime=Math.min(fimAnimacao+400,7000); // teto reduzido para carregar mais rápido
 
   // força o navegador a reiniciar as animações CSS do zero
   void wc.offsetWidth;
@@ -555,7 +555,7 @@ function esconderBoasVindas(){
   const espera=Math.max(0,welcomeMinTime-decorrido);
   setTimeout(()=>{
     wc.classList.add('fade-out');
-    setTimeout(()=>{wc.style.display='none';},1300);
+    setTimeout(()=>{wc.style.display='none';},800);
   },espera);
 }
 
@@ -736,16 +736,18 @@ function renderCard(item, idx, ehPrevia, dataRef){
         </div>
         ${blocoTesteHtml}
         ${blocoHistoriaHtml}
+        ${(ehHistoria && !gruposPend.length) ? '' : `
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
           <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
           ${deveresHtml}
-        </div>
+        </div>`}
+        ${(ehHistoria && !devsAula.length) ? '' : `
         <div class="blk blk-dev-novo">
           <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula</span></div>
           <div class="blk-sub">Passados nesta aula, para entregar na próxima</div>
           ${deveresAulaHtml}
-        </div>
+        </div>`}
         ${blocoResumoHtml}
         ${blocoSimuladoHtml}
         ${proxSec}
