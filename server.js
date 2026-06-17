@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v27';
+const CACHE_VERSAO = 'v28';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -553,13 +553,13 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
   if (data.type === 'error' && data.error && data.error.type === 'not_found_error') {
     return callAnthropic(prompt, modelIndex + 1);
   }
-  // rate limit (429) ou sobrecarga (529): espera e tenta de novo (até 2 vezes)
+  // rate limit (429) ou sobrecarga (529): espera e tenta de novo (até 3 vezes)
   if (data.type === 'error' && data.error && /rate_limit|overloaded/i.test(data.error.type || '')) {
-    if (tentativa < 2) {
-      await new Promise(r => setTimeout(r, 1500 * (tentativa + 1)));
+    if (tentativa < 3) {
+      await new Promise(r => setTimeout(r, 2000 * (tentativa + 1)));
       return callAnthropic(prompt, modelIndex, tentativa + 1);
     }
-    throw new Error('IA sobrecarregada, tente recarregar');
+    throw new Error('IA sobrecarregada');
   }
   if (!data.content || !Array.isArray(data.content)) {
     throw new Error('Resposta inesperada da IA');
@@ -1066,34 +1066,47 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
   });
 
-  // processa uma matéria (retorna o resultado pronto)
+  // processa uma matéria, com até 3 tentativas (resiliente a falhas momentâneas da IA)
   async function processarMateria(item) {
-    try {
-      const blogText = await fetchBlog(item.url);
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato);
-      if (Array.isArray(ai.deveres_pendentes)) {
-        const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
-        ai.deveres_pendentes = ai.deveres_pendentes
-          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d)) }))
-          .filter(g => g.deveres.length > 0)
-          .slice(0, limite);
+    const blogText = await fetchBlog(item.url);
+    let ultimoErro = '';
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      try {
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato);
+        if (Array.isArray(ai.deveres_pendentes)) {
+          const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
+          ai.deveres_pendentes = ai.deveres_pendentes
+            .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d)) }))
+            .filter(g => g.deveres.length > 0)
+            .slice(0, limite);
+        }
+        if (Array.isArray(ai.deveres_aula)) {
+          ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d));
+        }
+        return Object.assign({}, item, ai, { ok: true, processadoOk: true });
+      } catch(e) {
+        ultimoErro = e.message;
+        // espera um pouco antes de tentar de novo (dá tempo da API se recuperar)
+        if (tentativa < 3) await new Promise(r => setTimeout(r, 800 * tentativa));
       }
-      if (Array.isArray(ai.deveres_aula)) {
-        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d));
-      }
-      return Object.assign({}, item, ai, { ok: true, processadoOk: true });
-    } catch(e) {
-      return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro ao carregar. Recarregue a página.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
     }
+    // falhou nas 3 tentativas
+    return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
   }
 
-  // dispara todas ao mesmo tempo; cada uma envia seu resultado assim que fica pronta
+  // processa em LOTES de 2 por vez (paralelo controlado): rápido sem estourar o
+  // limite da API. Processar todas de uma vez causava falhas intermitentes (rate limit).
   const resultados = new Array(materias.length);
-  await Promise.all(materias.map(async (item, i) => {
-    const result = await processarMateria(item);
-    resultados[i] = result;
-    res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
-  }));
+  const LOTE = 2;
+  for (let inicio = 0; inicio < materias.length; inicio += LOTE) {
+    const lote = materias.slice(inicio, inicio + LOTE);
+    await Promise.all(lote.map(async (item, j) => {
+      const i = inicio + j;
+      const result = await processarMateria(item);
+      resultados[i] = result;
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+    }));
+  }
 
   // só salva no cache se TODAS foram processadas com sucesso (não cacheia falhas)
   if (resultados.every(r => r && r.processadoOk === true)) {
