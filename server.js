@@ -445,10 +445,10 @@ const GRADE = {
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
-    { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html' },
-    { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html' },
+    { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html', formato:'duasAulas' },
+    { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html', formato:'rotulado' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
-    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14 },
+    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14, linkEstudo:'https://drive.google.com/file/d/1qo7bJWbUPA3Yz3W9dvBKNSYCCdHRkwpY/view?usp=drivesdk', linkEstudoLabel:'Arquivo de estudos do 2º bimestre' },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v23';
+const CACHE_VERSAO = 'v24';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -678,10 +678,98 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
   };
 }
 
+// ── processamento de GRAMÁTICA/LINGUÍSTICA (2 aulas no mesmo dia) ─────────────
+// O professor numera as aulas (AULA 9, AULA 10) e pode dar 2 no mesmo dia.
+// Mostra as aulas do dia de referência; o dever é as ATIVIDADES da última aula.
+async function processarDuasAulas(materia, professor, blogText, filtro, dataRef, maxDeveres) {
+  const temConteudo = blogText && blogText.length > 50;
+  const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+  const refDDMM = ref.slice(0,5);
+
+  const prompt = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' +
+    '\n\n*** FORMATO ***' +
+    '\nAs aulas são numeradas: "AULA 7", "AULA 8", "AULA 9", "AULA 10"... Cada uma tem "DATA: DD/MM/AAAA" e uma descrição.' +
+    '\nPode haver DUAS (ou mais) aulas no MESMO dia (ex: AULA 9 e AULA 10 ambas em 17/06).' +
+    '\nNa descrição de cada aula, procure as ATIVIDADES/DEVERES: textos como "Atividade complementar", "Atividades na apostila nas páginas X", "Páginas da apostila X", "atividades das páginas X". Essas atividades SÃO o dever do aluno.' +
+    '\n\n*** O QUE EXTRAIR ***' +
+    '\nExtraia TODAS as aulas numeradas que tiverem data. Para cada uma:' +
+    '\n- "numero": o número da aula (ex: 9, 10).' +
+    '\n- "data": a data dela (DD/MM).' +
+    '\n- "descricao": um resumo curto (1 frase) do conteúdo da aula.' +
+    '\n- "atividades": lista das atividades/deveres daquela aula (ex: "Atividades na apostila nas páginas 37-38-39"). Se não houver, [].' +
+    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, Atom, "Escolha a turma", "Pesquisar este blog", nome do professor solto) e eventos da escola (CopaAnglo, gincana, etc.).' +
+    '\nNÃO invente. Extraia só o que está escrito.' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown:' +
+    '\n{"aulas":[{"numero":9,"data":"DD/MM","descricao":"texto","atividades":["..."]}]}';
+
+  let dados;
+  try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { aulas: [] }; }
+
+  const ehLixo = (t) => ehEventoEscolar(t) || /postagens?|^páginas$|^in[ií]cio$|pesquisar este blog|ver meu perfil|denunciar|arquivo do blog/i.test((t||'').trim());
+
+  const aulas = (dados.aulas || [])
+    .map(a => ({
+      numero: a.numero,
+      data: (a.data||'').slice(0,5),
+      num: dataParaNum(a.data),
+      descricao: (a.descricao||'').trim(),
+      atividades: (a.atividades||[]).filter(d => d && d.trim() && !ehLixo(d))
+    }))
+    .filter(a => a.num > 0);
+
+  // aulas do dia de referência (pode ter 2)
+  const aulasDoDia = aulas.filter(a => a.data === refDDMM).sort((x,y) => (x.numero||0) - (y.numero||0));
+
+  // monta "aula de hoje" mostrando as 2 aulas
+  let aula_hoje = '';
+  if (aulasDoDia.length > 0) {
+    aula_hoje = aulasDoDia.map(a => 'Aula ' + (a.numero||'?') + (a.descricao ? ': ' + a.descricao : '')).join('\n');
+  }
+
+  // dever de hoje = atividades da ÚLTIMA aula do dia (maior número)
+  let deveres_aula = [];
+  if (aulasDoDia.length > 0) {
+    const ultima = aulasDoDia[aulasDoDia.length - 1];
+    deveres_aula = ultima.atividades;
+  }
+
+  // deveres pendentes = atividades das 2 últimas datas ANTERIORES ao dia que tenham atividade
+  const limite = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
+  const anteriores = aulas
+    .filter(a => a.num < refNum && a.atividades.length > 0)
+    .sort((a,b) => b.num - a.num);
+  // agrupa por data (pode ter 2 aulas na mesma data anterior)
+  const pendPorData = {};
+  for (const a of anteriores) {
+    if (!pendPorData[a.data]) pendPorData[a.data] = [];
+    pendPorData[a.data].push(...a.atividades);
+  }
+  const deveres_pendentes = Object.keys(pendPorData)
+    .map(data => ({ data, num: dataParaNum(data), deveres: pendPorData[data] }))
+    .sort((a,b) => b.num - a.num)
+    .slice(0, limite)
+    .map(g => ({ data: g.data, deveres: g.deveres }));
+
+  return {
+    aula_hoje,
+    aula_data: aulasDoDia.length ? refDDMM : '',
+    deveres_pendentes, deveres_aula,
+    tem_avaliacao: false, materia_teste: '', materia_teste_data: '',
+    resumo: '', questoes: [],
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
+}
+
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
+  }
+  // gramática/linguística: mostra 2 aulas do mesmo dia, dever = atividades da última aula
+  if (formato === 'duasAulas') {
+    return processarDuasAulas(materia, professor, blogText, filtro, dataRef, maxDeveres);
   }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
@@ -737,17 +825,17 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // com a DATA no FIM da linha, em vez de tabela com colunas. Ex: prof. de Matemática B.
   const promptRotulado = 'Você extrai dados de um registro de aulas de ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
     '\n\n*** FORMATO DESTE REGISTRO ***' +
-    '\nCada aula é uma linha com CAMPOS ROTULADOS. A DATA aparece com "DATA: DD/MM/AAAA" (geralmente no FIM da linha, não no começo).' +
-    '\nOs rótulos comuns são: "MÓDULO:", "MATÉRIA:", "PAG.:" (páginas), "TAREFA:" (o dever), "DATA:" (a data da aula).' +
-    '\nExemplo de linha: "MÓDULO: 3 MATÉRIA: PORCENTAGEM PAG.: 161, 162 E 163 - EXERCÍCIOS 3 E 4 TAREFA: TC DAS AULAS 1, 2, 3, 4 E 5 (PARA DIA 18/03) DATA: 16/03/2026"' +
-    '\nNessa linha: data=16/03, materia="Módulo 3 - Porcentagem (pág. 161-163)", dever="TC das aulas 1,2,3,4 e 5 (para dia 18/03)".' +
+    '\nCada aula é um bloco com CAMPOS ROTULADOS. A DATA aparece como "DATA: DD/MM/AAAA" (em geral no FIM ou início do bloco, não numa coluna fixa).' +
+    '\nRótulos comuns: "MÓDULO:", "MATÉRIA:" ou "CONTEÚDO:", "PAG.:"/"PÁGINA:" (páginas), "TAREFA:" ou "TAREFA PARA XX:" (o dever), "PLURALL:" (plataforma de exercícios), "DATA:" (data da aula).' +
+    '\nExemplo: "CONTEÚDO: Equações do 2º grau PÁGINA: 132 até 134 TAREFA PARA 18/03: Caderno de Estudos - Exercícios 1 ao 10 - Páginas 40 e 41 DATA: 11/03/2026"' +
+    '\nNesse exemplo: data=11/03, materia="Equações do 2º grau (pág. 132-134)", dever="Caderno de Estudos - Exercícios 1 ao 10 - Páginas 40-41 (para 18/03)".' +
     '\n\n*** O QUE EXTRAIR ***' +
     '\nPara CADA aula (cada bloco que tenha "DATA:"):' +
     '\n- "data": o valor após "DATA:" no formato DD/MM.' +
-    '\n- "materia": junte MÓDULO + MATÉRIA + PAG. num texto curto (ex: "Módulo 3 - Porcentagem (pág. 161-163)").' +
-    '\n- "deveres": o que vem após "TAREFA:". Esse é o DEVER do aluno. Inclua o "(PARA DIA XX/XX)" se houver. Se a tarefa for "*" ou vazia, use [].' +
-    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, "Ver meu perfil", nome do professor solto, Atom, novembro, etc.) e eventos da escola (CopaAnglo, gincana, festa junina, etc.).' +
-    '\nNÃO invente. Extraia só o que está escrito. Cada dever pertence à data da SUA própria linha.' +
+    '\n- "materia": junte CONTEÚDO/MATÉRIA/MÓDULO + páginas num texto curto.' +
+    '\n- "deveres": o que vem após "TAREFA:" ou "TAREFA PARA XX:". Esse é o DEVER. Inclua páginas/exercícios e o "(para dia XX)" se houver. Considere TAMBÉM como dever as ATIVIDADES e ATIVIDADES COMPLEMENTARES, se houver. Se a tarefa for "*", "—" ou vazia, use [].' +
+    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, Arquivo do blog, "Ver meu perfil", "Pesquisar este blog", nome/biografia do professor, Atom, "Escolha a turma", "janeiro 2022", etc.) e eventos da escola (CopaAnglo, gincana, festa junina, feriado, carnaval, etc.).' +
+    '\nNÃO invente. Extraia só o que está escrito. Cada dever pertence à data da SUA própria linha/bloco.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
     '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';

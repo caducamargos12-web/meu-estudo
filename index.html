@@ -183,6 +183,12 @@
   /* banner de aviso (ex: professor afastado) */
   .blk-aviso{display:flex;gap:9px;align-items:flex-start;background:color-mix(in srgb,var(--amber) 12%,var(--bg));border:1px solid color-mix(in srgb,var(--amber) 32%,transparent);border-radius:10px;padding:11px 13px;margin-bottom:13px;font-size:12.5px;line-height:1.5;color:var(--text-2)}
   .aviso-ic{flex-shrink:0;font-size:14px;line-height:1.3}
+  /* link de material de estudo (ex: arquivo de inglês) */
+  .blk-link{display:flex;align-items:center;gap:9px;background:color-mix(in srgb,var(--accent) 10%,var(--bg));border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:10px;padding:11px 13px;margin-bottom:13px;text-decoration:none;color:var(--accent);font-size:13px;font-weight:600;transition:all .2s}
+  .blk-link:hover{background:color-mix(in srgb,var(--accent) 16%,var(--bg));border-color:var(--accent)}
+  .link-ic{flex-shrink:0;font-size:15px}
+  .blk-link span:nth-child(2){flex:1}
+  .link-arrow{font-size:16px}
   /* itens de matéria acumulada (história) */
   .hist-mat{padding:9px 11px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));border:1px solid color-mix(in srgb,var(--accent) 16%,transparent);border-radius:9px;margin-bottom:7px}
   .hist-mat:last-child{margin-bottom:0}
@@ -526,21 +532,21 @@ function montarBoasVindas(){
   // monta o nome letra por letra (revelação calma, mas mais ágil)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${0.6+i*0.08}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${0.4+i*0.06}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
   // monta a frase palavra por palavra
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
-  const nomeFim=0.6+nome.length*0.08;
-  const inicioFrase=nomeFim+0.4;
+  const nomeFim=0.4+nome.length*0.06;
+  const inicioFrase=nomeFim+0.3;
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.5}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.4}s">${p}</span>`
   ).join(' ');
 
   // calcula quando a última palavra termina de animar (em ms)
-  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.5+1.2)*1000;
-  welcomeMinTime=Math.min(fimAnimacao+400,7000); // teto reduzido para carregar mais rápido
+  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.4+1.0)*1000;
+  welcomeMinTime=Math.min(fimAnimacao+300,5000); // teto reduzido para carregar mais rápido
 
   // força o navegador a reiniciar as animações CSS do zero
   void wc.offsetWidth;
@@ -730,9 +736,10 @@ function renderCard(item, idx, ehPrevia, dataRef){
     <div class="c-body">
       <div class="c-body-in">
         ${item.aviso?`<div class="blk-aviso"><span class="aviso-ic">⚠️</span><span>${item.aviso}</span></div>`:''}
+        ${item.linkEstudo?`<a class="blk-link" href="${item.linkEstudo}" target="_blank" rel="noopener"><span class="link-ic">📎</span><span>${item.linkEstudoLabel||'Material de estudo'}</span><span class="link-arrow">→</span></a>`:''}
         <div class="blk blk-aula">
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
-          <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje:'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
+          <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje.replace(/\n/g,'<br>'):'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
         ${blocoTesteHtml}
         ${blocoHistoriaHtml}
