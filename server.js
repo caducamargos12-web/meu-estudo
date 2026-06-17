@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v25';
+const CACHE_VERSAO = 'v26';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -1030,7 +1030,15 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   res.write('data: ' + JSON.stringify({ type:'section', dayKey, dayLabel:DIAS_PT[dayKey], dataRef, ehPrevia, total:materias.length, offset:offsetIndex }) + '\n\n');
 
   // cache pronto: entrega instantâneo
-  if (cache[chave]) {
+  // o cache só vale se TODAS as matérias foram processadas SEM erro.
+  // (uma matéria pode ser legitimamente vazia num dia, isso é ok; o que não vale
+  //  é cache de matéria que FALHOU no processamento)
+  function cacheValido(lista) {
+    if (!Array.isArray(lista) || lista.length === 0) return false;
+    return lista.every(item => item && item.ok !== false && item.processadoOk === true);
+  }
+
+  if (cache[chave] && cacheValido(cache[chave])) {
     cache[chave].forEach((item, i) => {
       res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item, ehPrevia, cached:true }) + '\n\n');
     });
@@ -1060,9 +1068,9 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       if (Array.isArray(ai.deveres_aula)) {
         ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d));
       }
-      return Object.assign({}, item, ai, { ok: true });
+      return Object.assign({}, item, ai, { ok: true, processadoOk: true });
     } catch(e) {
-      return Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+      return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro ao carregar. Recarregue a página.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
     }
   }
 
@@ -1074,8 +1082,11 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
   }));
 
-  cache[chave] = resultados;
-  salvarCache();
+  // só salva no cache se TODAS foram processadas com sucesso (não cacheia falhas)
+  if (resultados.every(r => r && r.processadoOk === true)) {
+    cache[chave] = resultados;
+    salvarCache();
+  }
   return offsetIndex + materias.length;
 }
 
