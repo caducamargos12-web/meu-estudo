@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v24';
+const CACHE_VERSAO = 'v25';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -534,8 +534,9 @@ function hojeStr() {
   return ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
 }
 
-async function callAnthropic(prompt, modelIndex) {
+async function callAnthropic(prompt, modelIndex, tentativa) {
   modelIndex = modelIndex || 0;
+  tentativa = tentativa || 0;
   if (modelIndex >= MODELS.length) throw new Error('Nenhum modelo disponível');
   const model = MODELS[modelIndex];
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -552,8 +553,26 @@ async function callAnthropic(prompt, modelIndex) {
   if (data.type === 'error' && data.error && data.error.type === 'not_found_error') {
     return callAnthropic(prompt, modelIndex + 1);
   }
+  // rate limit (429) ou sobrecarga (529): espera e tenta de novo (até 2 vezes)
+  if (data.type === 'error' && data.error && /rate_limit|overloaded/i.test(data.error.type || '')) {
+    if (tentativa < 2) {
+      await new Promise(r => setTimeout(r, 1500 * (tentativa + 1)));
+      return callAnthropic(prompt, modelIndex, tentativa + 1);
+    }
+    throw new Error('IA sobrecarregada, tente recarregar');
+  }
+  if (!data.content || !Array.isArray(data.content)) {
+    throw new Error('Resposta inesperada da IA');
+  }
   const raw = data.content.map(function(i){ return i.text || ''; }).join('').replace(/```json|```/g, '').trim();
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // tenta extrair o JSON de dentro do texto (a IA às vezes adiciona texto em volta)
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) { try { return JSON.parse(m[0]); } catch {} }
+    throw new Error('JSON inválido da IA');
+  }
 }
 
 // detecta textos que são eventos/atividades da escola, NÃO matéria nem dever
@@ -752,12 +771,34 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     .slice(0, limite)
     .map(g => ({ data: g.data, deveres: g.deveres }));
 
+  // MATÉRIA DO TESTE: a aula mais recente (até hoje) com descrição.
+  // Linguística tem teste semanal, então sempre mostra o que cai.
+  const aulasComDesc = aulas
+    .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
+    .sort((a,b) => b.num - a.num);
+  const linhaTeste = aulasComDesc[0] || null;
+  const materia_teste = linhaTeste ? linhaTeste.descricao : '';
+  const materia_teste_data = linhaTeste ? linhaTeste.data : '';
+
+  // gera resumo + questões sobre a matéria do teste
+  let resumo = '', questoes = [];
+  if (materia_teste) {
+    try {
+      const r = await callAnthropic(
+        'Você é tutor de ' + materia + ' do ensino médio. O aluno tem teste sobre: "' + materia_teste + '".\n' +
+        'Faça: 1) RESUMO didático de 3-4 parágrafos. 2) 4 questões de múltipla escolha (A-D) com resposta e explicação.\n' +
+        'Responda APENAS JSON sem markdown: {"resumo":"texto","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}', 0);
+      resumo = r.resumo || '';
+      questoes = Array.isArray(r.questoes) ? r.questoes : [];
+    } catch (e) { resumo = ''; questoes = []; }
+  }
+
   return {
     aula_hoje,
     aula_data: aulasDoDia.length ? refDDMM : '',
     deveres_pendentes, deveres_aula,
-    tem_avaliacao: false, materia_teste: '', materia_teste_data: '',
-    resumo: '', questoes: [],
+    tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
+    resumo, questoes,
     proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
   };
 }
@@ -996,37 +1037,43 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     return offsetIndex + materias.length;
   }
 
-  // sem cache: processa e salva
-  const resultados = [];
-  for (let i = 0; i < materias.length; i++) {
-    const item = materias[i];
+  // sem cache: processa TODAS as matérias EM PARALELO (muito mais rápido que sequencial)
+  const ehLixoGlobal = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
+
+  // avisa o frontend que todas estão carregando
+  materias.forEach((item, i) => {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
-    const blogText = await fetchBlog(item.url);
+  });
+
+  // processa uma matéria (retorna o resultado pronto)
+  async function processarMateria(item) {
     try {
+      const blogText = await fetchBlog(item.url);
       const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato);
-      // termos de botões de compartilhar do Blogspot que não são deveres
-      const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
-      // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
       if (Array.isArray(ai.deveres_pendentes)) {
         const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
         ai.deveres_pendentes = ai.deveres_pendentes
-          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixo(d)) }))
+          .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d)) }))
           .filter(g => g.deveres.length > 0)
           .slice(0, limite);
       }
-      // remove deveres desta aula vazios ou que sejam botões de compartilhar
       if (Array.isArray(ai.deveres_aula)) {
-        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixo(d));
+        ai.deveres_aula = ai.deveres_aula.filter(d => d && d.trim().length > 0 && !ehLixoGlobal(d));
       }
-      const result = Object.assign({}, item, ai, { ok: true });
-      resultados.push(result);
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+      return Object.assign({}, item, ai, { ok: true });
     } catch(e) {
-      const result = Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
-      resultados.push(result);
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+      return Object.assign({}, item, { ok:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Erro: '+e.message, questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
     }
   }
+
+  // dispara todas ao mesmo tempo; cada uma envia seu resultado assim que fica pronta
+  const resultados = new Array(materias.length);
+  await Promise.all(materias.map(async (item, i) => {
+    const result = await processarMateria(item);
+    resultados[i] = result;
+    res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+  }));
+
   cache[chave] = resultados;
   salvarCache();
   return offsetIndex + materias.length;
