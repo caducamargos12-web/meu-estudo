@@ -447,12 +447,12 @@ const GRADE = {
   qua: [
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html' },
     { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html' },
-    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html' },
+    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14 },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
-    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html' },
+    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal' },
   ],
@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v22';
+const CACHE_VERSAO = 'v23';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -678,7 +678,7 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -733,9 +733,30 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n{"linhas":[{"data":"DD/MM","materia":"texto ou vazio","deveres":["dever1"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}' +
     '\nNo campo "avaliacao": "tem"=true só se o registro mencionar explicitamente TESTE/PROVA/AVALIAÇÃO/SIMULADO com data; "data"=quando; "sobre"=o conteúdo que cai.';
 
+  // formato "rotulado": blogs que usam etiquetas (MÓDULO:, MATÉRIA:, TAREFA:, DATA:)
+  // com a DATA no FIM da linha, em vez de tabela com colunas. Ex: prof. de Matemática B.
+  const promptRotulado = 'Você extrai dados de um registro de aulas de ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
+    '\n\n*** FORMATO DESTE REGISTRO ***' +
+    '\nCada aula é uma linha com CAMPOS ROTULADOS. A DATA aparece com "DATA: DD/MM/AAAA" (geralmente no FIM da linha, não no começo).' +
+    '\nOs rótulos comuns são: "MÓDULO:", "MATÉRIA:", "PAG.:" (páginas), "TAREFA:" (o dever), "DATA:" (a data da aula).' +
+    '\nExemplo de linha: "MÓDULO: 3 MATÉRIA: PORCENTAGEM PAG.: 161, 162 E 163 - EXERCÍCIOS 3 E 4 TAREFA: TC DAS AULAS 1, 2, 3, 4 E 5 (PARA DIA 18/03) DATA: 16/03/2026"' +
+    '\nNessa linha: data=16/03, materia="Módulo 3 - Porcentagem (pág. 161-163)", dever="TC das aulas 1,2,3,4 e 5 (para dia 18/03)".' +
+    '\n\n*** O QUE EXTRAIR ***' +
+    '\nPara CADA aula (cada bloco que tenha "DATA:"):' +
+    '\n- "data": o valor após "DATA:" no formato DD/MM.' +
+    '\n- "materia": junte MÓDULO + MATÉRIA + PAG. num texto curto (ex: "Módulo 3 - Porcentagem (pág. 161-163)").' +
+    '\n- "deveres": o que vem após "TAREFA:". Esse é o DEVER do aluno. Inclua o "(PARA DIA XX/XX)" se houver. Se a tarefa for "*" ou vazia, use [].' +
+    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, "Ver meu perfil", nome do professor solto, Atom, novembro, etc.) e eventos da escola (CopaAnglo, gincana, festa junina, etc.).' +
+    '\nNÃO invente. Extraia só o que está escrito. Cada dever pertence à data da SUA própria linha.' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown:' +
+    '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
+
+  const promptEscolhido = (formato === 'rotulado') ? promptRotulado : promptTabela;
+
   let tabela;
   try {
-    const raw = await callAnthropic(promptTabela, 0);
+    const raw = await callAnthropic(promptEscolhido, 0);
     tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
   } catch (e) {
     tabela = { linhas: [], avaliacao:{tem:false} };
@@ -894,7 +915,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever);
+      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato);
       // termos de botões de compartilhar do Blogspot que não são deveres
       const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
       // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
@@ -1033,7 +1054,7 @@ app.get('/api/diag', async (req, res) => {
   const ref = req.query.ref || dataDoDia('seg');
   let resultadoFinal;
   try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever);
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato);
   } catch(e) { resultadoFinal = { erro: e.message }; }
 
   res.json({
