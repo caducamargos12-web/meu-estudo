@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v26';
+const CACHE_VERSAO = 'v27';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -877,6 +877,9 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n- "deveres": o que vem após "TAREFA:" ou "TAREFA PARA XX:". Esse é o DEVER. Inclua páginas/exercícios e o "(para dia XX)" se houver. Considere TAMBÉM como dever as ATIVIDADES e ATIVIDADES COMPLEMENTARES, se houver. Se a tarefa for "*", "—" ou vazia, use [].' +
     '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, Arquivo do blog, "Ver meu perfil", "Pesquisar este blog", nome/biografia do professor, Atom, "Escolha a turma", "janeiro 2022", etc.) e eventos da escola (CopaAnglo, gincana, festa junina, feriado, carnaval, etc.).' +
     '\nNÃO invente. Extraia só o que está escrito. Cada dever pertence à data da SUA própria linha/bloco.' +
+    '\n\n*** TABELA DE TESTES (IMPORTANTE) ***' +
+    '\nEste professor às vezes marca testes numa tabela: "Teste XX | dia da semana | DATA | Bimestre | Conteúdo: ...". Procure linhas com "Teste" + número + data.' +
+    '\nSe achar um teste COM DATA, preencha "avaliacao": tem=true, data=data do teste (DD/MM), sobre=o CONTEÚDO que cai (o texto após "Conteúdo:" ou a matéria daquele teste). NUNCA use eventos (CopaAnglo, gincana, "aula concedida a...") como conteúdo do teste.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
     '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
@@ -927,9 +930,9 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
   const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
-  // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior à referência
+  // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior (ignorando eventos)
   const aulasAnteriores = linhas
-    .filter(l => l.num < refNum && l.materia)
+    .filter(l => l.num < refNum && l.materia && !ehEventoEscolar(l.materia))
     .sort((a,b) => b.num - a.num);
   const linhaTeste = aulasAnteriores[0] || null;
 
@@ -939,14 +942,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     tem_avaliacao = false; materia_teste = ''; materia_teste_data = '';
   } else if (tipo === 'provaFinal') {
     // só mostra teste se houver avaliação com DATA marcada PRÓXIMA da referência.
-    // Isso evita ativar por textos genéricos antigos ("estudar para atividade avaliativa").
     let avalValida = false;
     let avalData = '';
     if (tabela.avaliacao && tabela.avaliacao.tem && tabela.avaliacao.data) {
       const avalNum = dataParaNum(tabela.avaliacao.data);
       if (avalNum > 0) {
-        const diff = avalNum - refNum; // diferença em "AAAAMMDD" (aprox dias dentro do mês)
-        // janela: avaliação de até ~10 dias à frente ou ~5 dias atrás da referência
         if (avalNum >= refNum - 5 && avalNum <= refNum + 12) {
           avalValida = true;
           avalData = tabela.avaliacao.data.slice(0,5);
@@ -957,8 +957,21 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     materia_teste = avalValida ? (tabela.avaliacao.sobre || (linhaTeste ? linhaTeste.materia : '')) : '';
     materia_teste_data = avalValida ? avalData : '';
   } else {
-    // matéria normal: teste semanal sempre
+    // matéria normal: teste semanal sempre.
+    // PRIORIDADE: se o professor marcou uma tabela de teste com conteúdo, usa esse conteúdo.
     tem_avaliacao = true;
+    const sobreTabela = (tabela.avaliacao && tabela.avaliacao.sobre && !ehEventoEscolar(tabela.avaliacao.sobre))
+      ? tabela.avaliacao.sobre.trim() : '';
+    if (sobreTabela) {
+      materia_teste = sobreTabela;
+      materia_teste_data = (tabela.avaliacao.data || '').slice(0,5);
+    } else {
+      materia_teste = linhaTeste ? linhaTeste.materia : '';
+      materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+    }
+  }
+  // garante que a matéria do teste nunca seja um evento escolar
+  if (materia_teste && ehEventoEscolar(materia_teste)) {
     materia_teste = linhaTeste ? linhaTeste.materia : '';
     materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
   }
