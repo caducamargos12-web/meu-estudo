@@ -1186,24 +1186,44 @@ app.get('/api/diag', async (req, res) => {
   if (!alvo) return res.json({ error: 'matéria não encontrada', materias: [...new Set(Object.values(GRADE).flat().map(x=>x.m))] });
 
   const blogText = await fetchBlog(alvo.url);
-  const ref = req.query.ref || dataDoDia('seg');
+  // descobre em que dia a matéria aparece, para usar a data certa (não sempre segunda)
+  let diaDaMateria = 'seg';
+  for (const dia of Object.keys(GRADE)) {
+    if (GRADE[dia].some(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase())) { diaDaMateria = dia; break; }
+  }
+  const ref = req.query.ref || dataDoDia(diaDaMateria);
+
+  // mostra também o que a IA extraiu (etapa intermediária) para rotulado
+  let etapaExtracao = null;
+  if (alvo.formato === 'rotulado') {
+    try {
+      const temConteudo = blogText && blogText.length > 50;
+      const promptDiag = 'Extraia as aulas deste registro de ' + alvo.m + '. Cada aula tem rótulos (CONTEÚDO/MATÉRIA, TAREFA, DATA). A data está como "DATA: DD/MM".\nResponda APENAS JSON: {"linhas":[{"data":"DD/MM","materia":"","deveres":[]}]}\n\nREGISTRO:\n' + (blogText||'');
+      etapaExtracao = await callAnthropic(promptDiag, 0);
+    } catch(e) { etapaExtracao = { erro: e.message }; }
+  }
+
   let resultadoFinal;
   try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato);
-  } catch(e) { resultadoFinal = { erro: e.message }; }
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato);
+  } catch(e) { resultadoFinal = { erro: e.message, stack: (e.stack||'').slice(0,300) }; }
 
   res.json({
     materia: alvo.m,
     tipo: alvo.tipo || 'normal',
+    formato: alvo.formato || 'tabela',
+    diaDaMateria,
+    dataReferencia: ref,
     url: alvo.url,
     blogVazio: !blogText || blogText.length < 50,
     tamanhoBlog: (blogText||'').length,
-    textoDoBlog: (blogText||'(VAZIO - não conseguiu ler o blog)').slice(-2500),
+    ETAPA_EXTRACAO_IA: etapaExtracao ? { qtdLinhas: (etapaExtracao.linhas||[]).length, primeiras3: (etapaExtracao.linhas||[]).slice(0,3), erro: etapaExtracao.erro } : 'N/A',
     RESULTADO_FINAL: {
       aula_hoje: resultadoFinal.aula_hoje,
       deveres_pendentes: resultadoFinal.deveres_pendentes,
       deveres_aula: resultadoFinal.deveres_aula,
-      materia_teste: resultadoFinal.materia_teste
+      materia_teste: resultadoFinal.materia_teste,
+      erro: resultadoFinal.erro
     }
   });
 });
