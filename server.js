@@ -151,7 +151,9 @@ function detectarAparelho(ua) {
 }
 
 function gerarToken(user, device) {
-  const payload = `${user}|${device}|${Date.now()}`;
+  const registro = alunos[user];
+  const pv = registro ? senhaVersao(registro) : '0';
+  const payload = `${user}|${device}|${Date.now()}|${pv}`;
   const assinatura = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
   return Buffer.from(payload).toString('base64') + '.' + assinatura;
 }
@@ -162,8 +164,8 @@ function validarToken(token) {
     const payload = Buffer.from(b64, 'base64').toString();
     const esperado = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
     if (assinatura !== esperado) return null;
-    const [user, device] = payload.split('|');
-    return { user, device };
+    const [user, device, ts, pv] = payload.split('|');
+    return { user, device, ts, pv };
   } catch { return null; }
 }
 
@@ -173,13 +175,31 @@ function auth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
   const dados = validarToken(token);
   if (!dados) return res.status(401).json({ error: 'Sessão inválida' });
-  // verifica se o dispositivo está entre os registrados para esse usuário
-  const lista = dispositivosPorUser[dados.user];
-  if (lista && lista.length && !lista.some(d => d.id === dados.device)) {
-    return res.status(403).json({ error: 'Limite de dispositivos atingido' });
+
+  // 1. o aluno ainda existe? (se foi removido, o token deixa de valer)
+  const registro = alunos[dados.user];
+  if (!registro) return res.status(401).json({ error: 'Conta não encontrada. Faça login novamente.' });
+
+  // 2. a senha mudou depois que o token foi emitido? (invalida tokens antigos)
+  //    o token carrega a "versão" da senha; se não bater, exige novo login
+  if (typeof dados.pv !== 'undefined' && String(dados.pv) !== String(senhaVersao(registro))) {
+    return res.status(401).json({ error: 'Senha alterada. Faça login novamente.' });
+  }
+
+  // 3. o dispositivo está entre os registrados para esse usuário?
+  const lista = dispositivosPorUser[dados.user] || [];
+  if (!lista.some(d => d.id === dados.device)) {
+    return res.status(403).json({ error: 'Dispositivo não autorizado. Faça login novamente.' });
   }
   req.user = dados.user;
   next();
+}
+
+// "versão" da senha: primeiros caracteres do hash. Quando a senha muda, o hash
+// muda, então a versão muda, e tokens antigos (com versão velha) param de valer.
+function senhaVersao(registro) {
+  if (!registro || !registro.hash) return '0';
+  return registro.hash.slice(-10); // trecho final do hash bcrypt
 }
 
 // ── PAINEL ADMIN ─────────────────────────────────────────────────────────────
@@ -428,7 +448,7 @@ const GRADE = {
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html' },
     { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html' },
-    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal' },
+    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14 },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
@@ -448,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v21';
+const CACHE_VERSAO = 'v22';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -536,6 +556,13 @@ async function callAnthropic(prompt, modelIndex) {
   return JSON.parse(raw);
 }
 
+// detecta textos que são eventos/atividades da escola, NÃO matéria nem dever
+// (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
+function ehEventoEscolar(texto) {
+  const t = (texto || '').toLowerCase();
+  return /copa\s*anglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio/i.test(t);
+}
+
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
 function dataParaNum(ddmm) {
   if (!ddmm) return 0;
@@ -545,6 +572,15 @@ function dataParaNum(ddmm) {
   let ano = m[3] ? parseInt(m[3],10) : 2026;
   if (ano < 100) ano += 2000;
   return ano*10000 + mes*100 + dia;
+}
+
+// converte AAAAMMDD de volta para objeto Date (para calcular diferença em dias)
+function numParaData(num) {
+  if (!num) return null;
+  const ano = Math.floor(num / 10000);
+  const mes = Math.floor((num % 10000) / 100) - 1;
+  const dia = num % 100;
+  return new Date(ano, mes, dia);
 }
 
 // ── processamento especial de HISTÓRIA (acumulativo por bimestre) ────────────
@@ -567,6 +603,7 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
     '\n4. "materias_bimestre": LISTA de TODAS as matérias/conteúdos dados no 2º BIMESTRE (cada aula com seu conteúdo), na ordem. Formato [{"data":"DD/MM","materia":"conteúdo"}].' +
     '\n5. "ja_cairam": LISTA das matérias que JÁ FORAM APLICADAS EM TESTE. O professor marca isso escrevendo algo como "Foi realizado testinho (Matéria: X)" ou "teste (Matéria: X)" ou "avaliação: X". Extraia o nome da matéria X de cada uma dessas anotações. Formato ["Revolução Francesa","..."].' +
     '\n\nIGNORE textos de navegação do Blogspot (compartilhar, marcadores, etc).' +
+    '\nIGNORE TAMBÉM eventos e atividades da escola que NÃO são matéria nem dever: CopaAnglo, gincana, olimpíadas, feira cultural, festa junina, festival, interclasse, recesso, feriado, sábado letivo, semana de avaliações, ensaios, excursões, formatura. Esses NUNCA são deveres nem conteúdo de aula.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
     '\n{"aula_hoje":"","deveres_aula":[],"deveres_pendentes":[],"materias_bimestre":[{"data":"DD/MM","materia":""}],"ja_cairam":[]}';
@@ -574,7 +611,7 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
   let dados;
   try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = {}; }
 
-  const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment/i.test((t||'').trim());
+  const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment/i.test((t||'').trim());
 
   // limpa deveres
   let deveres_aula = (dados.deveres_aula || []).filter(d => d && d.trim() && !ehLixo(d));
@@ -641,7 +678,7 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -689,6 +726,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se vazia, use "".' +
     '\n- "deveres": TODOS os deveres daquela data (última coluna). Se for "—" ou vazio, use []. Liste cada dever como um item separado.' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
+    '\nIGNORE TAMBÉM eventos e atividades da escola que NÃO são matéria nem dever: CopaAnglo, gincana, olimpíadas, feira cultural, festa junina, festival, interclasse, recesso, feriado, sábado letivo, semana de avaliações, ensaios, excursões, formatura. Esses NUNCA são deveres nem conteúdo de aula.' +
     '\nNÃO invente linhas nem datas. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown, no formato:' +
@@ -704,7 +742,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   }
 
   // limpa lixo de navegação dos deveres
-  const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment|pinterest|facebook|twitter/i.test((t||'').trim());
+  const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment|pinterest|facebook|twitter/i.test((t||'').trim());
   const linhas = (tabela.linhas||[])
     .map(l => ({
       data: (l.data||'').trim(),
@@ -722,10 +760,20 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // 2. DEVERES DESTA AULA: deveres da linha de referência
   const deveres_aula = linhaRef ? linhaRef.deveres : [];
 
-  // 3. DEVERES PENDENTES: as 2 últimas datas ANTERIORES à referência que têm dever
-  const anteriores = linhas
+  // 3. DEVERES PENDENTES: as últimas datas ANTERIORES à referência que têm dever
+  let anteriores = linhas
     .filter(l => l.num < refNum && l.deveres.length > 0)
     .sort((a,b) => b.num - a.num); // mais recente primeiro
+  // limite de janela temporal (ex: inglês = só deveres de até 14 dias atrás)
+  if (maxDiasDever && maxDiasDever > 0) {
+    const refData = numParaData(refNum);
+    anteriores = anteriores.filter(l => {
+      const d = numParaData(l.num);
+      if (!refData || !d) return true;
+      const diasAtras = Math.floor((refData - d) / 86400000);
+      return diasAtras <= maxDiasDever;
+    });
+  }
   const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
   const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
@@ -846,9 +894,9 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
     const blogText = await fetchBlog(item.url);
     try {
-      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres);
+      const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever);
       // termos de botões de compartilhar do Blogspot que não são deveres
-      const ehLixo = (t) => /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
+      const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
       // remove grupos de deveres pendentes que estão vazios (data sem nenhum dever)
       if (Array.isArray(ai.deveres_pendentes)) {
         const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
@@ -967,6 +1015,43 @@ app.get('/api/today', auth, async function(req, res) {
 });
 
 // ── página do painel admin ───────────────────────────────────────────────────
+// ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
+// uso: /api/diag?senha=ADMIN_SENHA&materia=Matemática A
+app.get('/api/diag', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const nomeMateria = req.query.materia;
+  let alvo = null;
+  for (const dia of Object.keys(GRADE)) {
+    const m = GRADE[dia].find(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase());
+    if (m) { alvo = m; break; }
+  }
+  if (!alvo) return res.json({ error: 'matéria não encontrada', materias: [...new Set(Object.values(GRADE).flat().map(x=>x.m))] });
+
+  const blogText = await fetchBlog(alvo.url);
+  const ref = req.query.ref || dataDoDia('seg');
+  let resultadoFinal;
+  try {
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Segunda', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever);
+  } catch(e) { resultadoFinal = { erro: e.message }; }
+
+  res.json({
+    materia: alvo.m,
+    tipo: alvo.tipo || 'normal',
+    url: alvo.url,
+    blogVazio: !blogText || blogText.length < 50,
+    tamanhoBlog: (blogText||'').length,
+    textoDoBlog: (blogText||'(VAZIO - não conseguiu ler o blog)').slice(-2500),
+    RESULTADO_FINAL: {
+      aula_hoje: resultadoFinal.aula_hoje,
+      deveres_pendentes: resultadoFinal.deveres_pendentes,
+      deveres_aula: resultadoFinal.deveres_aula,
+      materia_teste: resultadoFinal.materia_teste
+    }
+  });
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
