@@ -946,12 +946,21 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     .filter(l => l.num > 0);
 
   // ── O CÓDIGO DECIDE TUDO (determinístico, não depende da IA) ──
-  // 1. AULA DO DIA: só a linha com data EXATAMENTE igual à referência E que tenha matéria
-  const linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM);
+  // 1. AULA DO DIA: a linha com data EXATAMENTE igual à referência E que tenha matéria.
+  let linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM);
+  let aulaSomenteExibicao = false;
+  // no formato agrupado (ex: redação "Aulas 18 e 19/06"), a data registrada é a última
+  // do par, então pode não bater com hoje. Nesse caso, mostra a aula mais recente até hoje
+  // APENAS como conteúdo da aula (sem repetir o dever dela, que já entra nos pendentes).
+  if (!linhaRef && formato === 'agrupado') {
+    const recentes = linhas.filter(l => l.num <= refNum && l.materia).sort((a,b) => b.num - a.num);
+    linhaRef = recentes[0] || null;
+    aulaSomenteExibicao = true;
+  }
   const aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
 
-  // 2. DEVERES DESTA AULA: deveres da linha de referência
-  const deveres_aula = linhaRef ? linhaRef.deveres : [];
+  // 2. DEVERES DESTA AULA: deveres da linha de referência (não duplica quando é só exibição)
+  const deveres_aula = (linhaRef && !aulaSomenteExibicao) ? linhaRef.deveres : [];
 
   // 3. DEVERES PENDENTES: as últimas datas ANTERIORES à referência que têm dever
   let anteriores = linhas
@@ -1131,13 +1140,19 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
         }
         // dever fixo do bimestre (ex: química do Maurélio: "TC da Frente A" o bimestre todo)
         if (item.deverFixo) {
-          // remove qualquer versão que a IA já tenha extraído (evita duplicar)
-          ai.deveres_aula = ai.deveres_aula.filter(d => !/tarefas?\s+do\s+\d?\s*bimestre|todas?\s+as?\s+tc\s+da\s+frente/i.test(d));
+          const ehDeverFixo = (d) => /tarefas?\s+do\s+\d?\s*bimestre|todas?\s+as?\s+tc\s+da\s+frente/i.test(d);
+          // remove qualquer versão que a IA já tenha extraído, de AMBAS as listas (evita duplicar)
+          ai.deveres_aula = ai.deveres_aula.filter(d => !ehDeverFixo(d));
+          if (Array.isArray(ai.deveres_pendentes)) {
+            ai.deveres_pendentes = ai.deveres_pendentes
+              .map(g => ({ data: g.data, deveres: (g.deveres || []).filter(d => !ehDeverFixo(d)) }))
+              .filter(g => g.deveres.length > 0);
+          }
           // descobre a apostila ATUAL: a de maior número mencionada no blog.
           // o professor marca "INÍCIO DA APOSTILA N" quando começa um novo bimestre.
           const apostilas = [...(blogText || '').matchAll(/apostila\s+(\d+)/gi)].map(m => parseInt(m[1],10));
           const apostilaAtual = apostilas.length ? Math.max(...apostilas) : 0;
-          // só mostra o dever fixo enquanto estamos na apostila 2 (2º bimestre)
+          // só mostra o dever fixo (em deveres desta aula) enquanto estamos na apostila 2
           if (apostilaAtual === 2) {
             ai.deveres_aula.unshift(item.deverFixo);
           }
