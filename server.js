@@ -454,7 +454,7 @@ const GRADE = {
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
-    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado' },
+    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html' },
@@ -474,12 +474,15 @@ let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
 // limpa do disco qualquer cache que não seja da versão atual (evita servir dados velhos após deploy)
 (function limparCacheAntigo(){
+  // remove cache de dias anteriores (mantém só o de hoje). Não apaga por versão,
+  // para que um deploy não invalide o cache bom do dia.
+  const hoje = new Date().toISOString().slice(0,10);
   let mudou = false;
   Object.keys(cache).forEach(k => {
-    if (!k.endsWith('_' + CACHE_VERSAO)) { delete cache[k]; mudou = true; }
+    if (!k.startsWith(hoje + '_')) { delete cache[k]; mudou = true; }
   });
   if (mudou) {
-    try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); console.log('Cache antigo limpo (versão != ' + CACHE_VERSAO + ').'); } catch {}
+    try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); console.log('Cache de dias anteriores limpo.'); } catch {}
   }
 })();
 function salvarCache() {
@@ -489,7 +492,10 @@ function salvarCache() {
 function chaveCacheHoje(dayKey) {
   const d = new Date();
   const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
-  return `${dia}_${dayKey}_${CACHE_VERSAO}`;
+  // a versão NÃO entra mais na chave: assim um deploy não joga fora o cache bom.
+  // o cache se renova sozinho a cada dia (a data está na chave). Para forçar
+  // reprocessamento após mudar a lógica de leitura, use /api/limpar-cache.
+  return `${dia}_${dayKey}`;
 }
 
 // ── busca blog ──────────────────────────────────────────────────────────────
@@ -1065,24 +1071,23 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // cabeçalho da seção do dia
   res.write('data: ' + JSON.stringify({ type:'section', dayKey, dayLabel:DIAS_PT[dayKey], dataRef, ehPrevia, total:materias.length, offset:offsetIndex }) + '\n\n');
 
-  // cache pronto: entrega instantâneo
-  // o cache só vale se TODAS as matérias foram processadas SEM erro.
-  // (uma matéria pode ser legitimamente vazia num dia, isso é ok; o que não vale
-  //  é cache de matéria que FALHOU no processamento)
-  function cacheValido(lista) {
-    if (!Array.isArray(lista) || lista.length === 0) return false;
-    return lista.every(item => item && item.ok !== false && item.processadoOk === true);
+  // um item do cache é bom se foi processado sem erro
+  function itemBom(item) {
+    return item && item.ok !== false && item.processadoOk === true;
   }
 
-  if (cache[chave] && cacheValido(cache[chave])) {
-    cache[chave].forEach((item, i) => {
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item, ehPrevia, cached:true }) + '\n\n');
+  const ehLixoGlobal = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
+
+  // estado atual do cache deste dia (pode estar parcial)
+  const cacheDia = Array.isArray(cache[chave]) ? cache[chave] : null;
+
+  // se TODAS as matérias já estão boas no cache, entrega tudo instantâneo
+  if (cacheDia && materias.every((_, i) => itemBom(cacheDia[i]))) {
+    materias.forEach((_, i) => {
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:cacheDia[i], ehPrevia, cached:true }) + '\n\n');
     });
     return offsetIndex + materias.length;
   }
-
-  // sem cache: processa TODAS as matérias EM PARALELO (muito mais rápido que sequencial)
-  const ehLixoGlobal = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|recente)|^in[ií]cio$|assinar|reações|pinterest|facebook|twitter|^x$/i.test((t||'').trim());
 
   // avisa o frontend que todas estão carregando
   materias.forEach((item, i) => {
@@ -1132,24 +1137,29 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
   }
 
-  // processa em LOTES de 2 por vez (paralelo controlado): rápido sem estourar o
-  // limite da API. Processar todas de uma vez causava falhas intermitentes (rate limit).
+  // processa UMA matéria por vez (sequencial). Mais estável: nunca sobrecarrega a
+  // IA, então não há mais falhas aleatórias por rate limit. Com cache, a primeira
+  // carga do dia é a única lenta.
+  // IMPORTANTE: matérias que JÁ estão boas no cache são servidas direto (não
+  // reprocessam). Só processa as que faltam ou falharam. Isso impede que um deploy
+  // ou um erro em uma matéria afete as outras que já estavam certas.
   const resultados = new Array(materias.length);
-  const LOTE = 2;
-  for (let inicio = 0; inicio < materias.length; inicio += LOTE) {
-    const lote = materias.slice(inicio, inicio + LOTE);
-    await Promise.all(lote.map(async (item, j) => {
-      const i = inicio + j;
-      const result = await processarMateria(item);
-      resultados[i] = result;
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
-    }));
-  }
-
-  // só salva no cache se TODAS foram processadas com sucesso (não cacheia falhas)
-  if (resultados.every(r => r && r.processadoOk === true)) {
-    cache[chave] = resultados;
-    salvarCache();
+  for (let i = 0; i < materias.length; i++) {
+    // já tem boa no cache? serve direto, não reprocessa
+    if (cacheDia && itemBom(cacheDia[i])) {
+      resultados[i] = cacheDia[i];
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:cacheDia[i], ehPrevia, cached:true }) + '\n\n');
+      continue;
+    }
+    const result = await processarMateria(materias[i]);
+    resultados[i] = result;
+    res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+    // salva cada matéria bem-sucedida no cache IMEDIATAMENTE (incremental)
+    if (result && result.processadoOk === true) {
+      if (!Array.isArray(cache[chave])) cache[chave] = new Array(materias.length);
+      cache[chave][i] = result;
+      salvarCache();
+    }
   }
   return offsetIndex + materias.length;
 }
