@@ -463,7 +463,10 @@ const GRADE = {
   ],
 };
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
-const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4-5-20250929','claude-opus-4-8'];
+// modelos em ordem de uso. Sonnet primeiro: é mais consistente para extrair dados
+// estruturados de blogs complexos (o Haiku às vezes falhava em gerar JSON válido,
+// causando matérias vazias de forma intermitente). Haiku fica como reserva rápida.
+const MODELS = ['claude-sonnet-4-6','claude-sonnet-4-5-20250929','claude-haiku-4-5-20251001','claude-opus-4-8'];
 
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
@@ -577,6 +580,11 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
     // tenta extrair o JSON de dentro do texto (a IA às vezes adiciona texto em volta)
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) { try { return JSON.parse(m[0]); } catch {} }
+    // JSON inválido: tenta o PRÓXIMO modelo (mais capaz), em vez de desistir.
+    // isso resolve o caso do Haiku gerar JSON quebrado em blogs complexos.
+    if (modelIndex + 1 < MODELS.length) {
+      return callAnthropic(prompt, modelIndex + 1, tentativa);
+    }
     throw new Error('JSON inválido da IA');
   }
 }
@@ -893,18 +901,22 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 
   // formato "agrupado": blogs que agrupam aulas geminadas ("Aulas 21 e 22/05: REDAÇÃO")
   // onde a "Tarefa:" é UM dever só para o grupo, não um por data. Ex: prof. de Redação.
-  const promptAgrupado = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
+  const promptAgrupado = 'Você extrai dados de aulas de ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
     '\n\n*** FORMATO DESTE REGISTRO ***' +
-    '\nAs aulas são agrupadas por blocos que começam com "Aulas X e Y/MM:" ou "Aula X/MM:" seguido do tema. Cada bloco lista o conteúdo e, no fim, uma linha "Tarefa:" com o dever.' +
-    '\nExemplo de bloco:\n  "Aulas 21 e 22/05: REDAÇÃO\n  Repertório legitimado, pertinente e produtivo;\n  Atividades de produção;\n  Tarefa: redação nota 1000."' +
-    '\nNesse exemplo: é UMA aula só (mesmo tendo 2 datas, 21 e 22/05). A data é a ÚLTIMA do grupo (22/05). O dever é APENAS o que vem após "Tarefa:" → "redação nota 1000". Os outros itens (Repertório, Atividades de produção) são CONTEÚDO da aula, NÃO deveres.' +
-    '\n\n*** O QUE EXTRAIR ***' +
-    '\nPara CADA bloco "Aulas...":' +
-    '\n- "data": a ÚLTIMA data do grupo (se "Aulas 21 e 22/05", use 22/05). Formato DD/MM.' +
-    '\n- "materia": o tema do bloco + os itens de conteúdo (ex: "Redação: repertório legitimado; atividades de produção").' +
-    '\n- "deveres": SOMENTE o que vem após "Tarefa:" (um único dever, mesmo que o grupo tenha 2 datas). Se houver "Atividades no caderno" como tarefa, esse é o dever. Se não houver "Tarefa:", use [].' +
-    '\nNUNCA repita o mesmo dever em duas datas. Cada bloco "Aulas X e Y" gera UMA linha só.' +
-    '\n\nIGNORE rodapé do Blogspot e eventos da escola (CopaAnglo, gincana, etc.).' +
+    '\nO blog mistura LITERATURA e REDAÇÃO. Cada aula começa com "Aulas X e Y/MM:" ou "Aula X/MM:" seguido da disciplina (REDAÇÃO ou LITERATURA) e do tema.' +
+    '\nVocê deve considerar SOMENTE as aulas marcadas como "' + (filtro||'REDAÇÃO') + '". Ignore completamente as de outra disciplina. Quando a linha disser "REDAÇÃO E LITERATURA", considere só a parte de ' + (filtro||'REDAÇÃO') + '.' +
+    '\nCada aula pode ter, no fim, "Tarefa:" com o dever. Os outros itens (temas, "Atividades de produção", "Atividades da apostila", "Atividades no caderno") são conteúdo da aula.' +
+    '\nExemplos reais deste blog:' +
+    '\n  "Aulas 21 e 22/05: REDAÇÃO Repertório legitimado, pertinente e produtivo; Atividades de produção; Tarefa: redação nota 1000." → data=22/05, dever="redação nota 1000".' +
+    '\n  "Aulas 14 e 15/05: REDAÇÃO Competência 5 - elementos de intervenção; Atividades no caderno." → data=15/05, dever="Atividades no caderno" (aqui o dever é a atividade, não há linha "Tarefa:").' +
+    '\n\n*** REGRA DO DEVER ***' +
+    '\nO dever de cada aula é: o que vem após "Tarefa:" SE existir; senão, as "Atividades" que a aula pedir (ex: "Atividades no caderno", "Atividades da apostila páginas X"). Se a aula só tem tema/conteúdo sem atividade nem tarefa, deveres=[].' +
+    '\n"Aulas X e Y" é UMA aula só (use a ÚLTIMA data do par). NUNCA repita o mesmo dever em duas datas.' +
+    '\n\n*** O QUE EXTRAIR (só ' + (filtro||'REDAÇÃO') + ') ***' +
+    '\n- "data": última data do grupo (DD/MM).' +
+    '\n- "materia": disciplina + tema curto.' +
+    '\n- "deveres": pela regra acima (um item, ou []).' +
+    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, Arquivo do blog, perfil, Atom) e eventos da escola (excursão, recesso, feriado, etc.).' +
     '\nNÃO invente. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
