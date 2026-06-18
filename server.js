@@ -454,7 +454,7 @@ const GRADE = {
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
-    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal' },
+    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado' },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html' },
@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v30';
+const CACHE_VERSAO = 'v31';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -885,7 +885,28 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n\nResponda APENAS JSON sem markdown:' +
     '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
 
-  const promptEscolhido = (formato === 'rotulado') ? promptRotulado : promptTabela;
+  // formato "agrupado": blogs que agrupam aulas geminadas ("Aulas 21 e 22/05: REDAÇÃO")
+  // onde a "Tarefa:" é UM dever só para o grupo, não um por data. Ex: prof. de Redação.
+  const promptAgrupado = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' + instrucaoFiltro +
+    '\n\n*** FORMATO DESTE REGISTRO ***' +
+    '\nAs aulas são agrupadas por blocos que começam com "Aulas X e Y/MM:" ou "Aula X/MM:" seguido do tema. Cada bloco lista o conteúdo e, no fim, uma linha "Tarefa:" com o dever.' +
+    '\nExemplo de bloco:\n  "Aulas 21 e 22/05: REDAÇÃO\n  Repertório legitimado, pertinente e produtivo;\n  Atividades de produção;\n  Tarefa: redação nota 1000."' +
+    '\nNesse exemplo: é UMA aula só (mesmo tendo 2 datas, 21 e 22/05). A data é a ÚLTIMA do grupo (22/05). O dever é APENAS o que vem após "Tarefa:" → "redação nota 1000". Os outros itens (Repertório, Atividades de produção) são CONTEÚDO da aula, NÃO deveres.' +
+    '\n\n*** O QUE EXTRAIR ***' +
+    '\nPara CADA bloco "Aulas...":' +
+    '\n- "data": a ÚLTIMA data do grupo (se "Aulas 21 e 22/05", use 22/05). Formato DD/MM.' +
+    '\n- "materia": o tema do bloco + os itens de conteúdo (ex: "Redação: repertório legitimado; atividades de produção").' +
+    '\n- "deveres": SOMENTE o que vem após "Tarefa:" (um único dever, mesmo que o grupo tenha 2 datas). Se houver "Atividades no caderno" como tarefa, esse é o dever. Se não houver "Tarefa:", use [].' +
+    '\nNUNCA repita o mesmo dever em duas datas. Cada bloco "Aulas X e Y" gera UMA linha só.' +
+    '\n\nIGNORE rodapé do Blogspot e eventos da escola (CopaAnglo, gincana, etc.).' +
+    '\nNÃO invente. Extraia só o que está escrito.' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown:' +
+    '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
+
+  const promptEscolhido = (formato === 'rotulado') ? promptRotulado
+                        : (formato === 'agrupado') ? promptAgrupado
+                        : promptTabela;
 
   let tabela;
   try {
@@ -1087,9 +1108,18 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
         } else {
           ai.deveres_aula = [];
         }
-        // dever fixo do bimestre (ex: química do Maurélio): sempre presente, sem duplicar
-        if (item.deverFixo && !ai.deveres_aula.some(d => d.trim() === item.deverFixo.trim())) {
-          ai.deveres_aula.unshift(item.deverFixo);
+        // dever fixo do bimestre (ex: química do Maurélio: "TC da Frente A" o bimestre todo)
+        if (item.deverFixo) {
+          // remove qualquer versão que a IA já tenha extraído (evita duplicar)
+          ai.deveres_aula = ai.deveres_aula.filter(d => !/tarefas?\s+do\s+\d?\s*bimestre|todas?\s+as?\s+tc\s+da\s+frente/i.test(d));
+          // descobre a apostila ATUAL: a de maior número mencionada no blog.
+          // o professor marca "INÍCIO DA APOSTILA N" quando começa um novo bimestre.
+          const apostilas = [...(blogText || '').matchAll(/apostila\s+(\d+)/gi)].map(m => parseInt(m[1],10));
+          const apostilaAtual = apostilas.length ? Math.max(...apostilas) : 0;
+          // só mostra o dever fixo enquanto estamos na apostila 2 (2º bimestre)
+          if (apostilaAtual === 2) {
+            ai.deveres_aula.unshift(item.deverFixo);
+          }
         }
         return Object.assign({}, item, ai, { ok: true, processadoOk: true });
       } catch(e) {
