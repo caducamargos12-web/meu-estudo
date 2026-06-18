@@ -451,7 +451,7 @@ const GRADE = {
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14, linkEstudo:'https://drive.google.com/file/d/1qo7bJWbUPA3Yz3W9dvBKNSYCCdHRkwpY/view?usp=drivesdk', linkEstudoLabel:'Arquivo de estudos do 2º bimestre' },
   ],
   qui: [
-    { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
+    { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
@@ -959,8 +959,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
   // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior (ignorando eventos)
+  // linhas que são EMENTA/lista de conteúdo de avaliação, não aula real dada
+  // (ex: "Conteúdo do testinho 1: Taxonomia", "Conteúdo da avaliação: ...")
+  const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)/i.test(txt || '');
+
   const aulasAnteriores = linhas
-    .filter(l => l.num < refNum && l.materia && !ehEventoEscolar(l.materia))
+    .filter(l => l.num < refNum && l.materia && !ehEventoEscolar(l.materia) && !ehEmenta(l.materia))
     .sort((a,b) => b.num - a.num);
   const linhaTeste = aulasAnteriores[0] || null;
 
@@ -1323,6 +1327,7 @@ app.get('/api/diag', async (req, res) => {
     blogVazio: !blogText || blogText.length < 50,
     tamanhoBlog: (blogText||'').length,
     ETAPA_EXTRACAO_IA: etapaExtracao ? { qtdLinhas: (etapaExtracao.linhas||[]).length, primeiras3: (etapaExtracao.linhas||[]).slice(0,3), erro: etapaExtracao.erro } : 'N/A',
+    TEXTO_DO_BLOG: (blogText||'(vazio)').slice(-2800),
     RESULTADO_FINAL: {
       aula_hoje: resultadoFinal.aula_hoje,
       deveres_pendentes: resultadoFinal.deveres_pendentes,
