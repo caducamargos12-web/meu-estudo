@@ -453,7 +453,7 @@ const GRADE = {
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
-    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html' },
+    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal' },
   ],
   sex: [
@@ -468,7 +468,7 @@ const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
 // ════════════════════════════════════════════════════════════════════════════
-const CACHE_VERSAO = 'v28';
+const CACHE_VERSAO = 'v29';
 const CACHE_FILE = DATA_DIR + '/cache_estudo.json';
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache = {}; }
@@ -579,7 +579,7 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
 // (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
 function ehEventoEscolar(texto) {
   const t = (texto || '').toLowerCase();
-  return /copa\s*anglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio/i.test(t);
+  return /cop[ae]?\s*anglo|copanglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
 }
 
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
@@ -803,7 +803,7 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -856,6 +856,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n- "deveres": TODOS os deveres daquela data (última coluna). Se for "—" ou vazio, use []. Liste cada dever como um item separado.' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
     '\nIGNORE TAMBÉM eventos e atividades da escola que NÃO são matéria nem dever: CopaAnglo, gincana, olimpíadas, feira cultural, festa junina, festival, interclasse, recesso, feriado, sábado letivo, semana de avaliações, ensaios, excursões, formatura. Esses NUNCA são deveres nem conteúdo de aula.' +
+    '\nIGNORE listas de "conteúdo da avaliação bimestral", "matérias do bimestre" ou ementas que não têm data de aula específica. A matéria de cada linha é o que foi dado NAQUELA aula, não um resumo geral do bimestre.' +
     '\nNÃO invente linhas nem datas. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown, no formato:' +
@@ -959,8 +960,9 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   } else {
     // matéria normal: teste semanal sempre.
     // PRIORIDADE: se o professor marcou uma tabela de teste com conteúdo, usa esse conteúdo.
+    // (a menos que a matéria peça para ignorar a avaliação do blog, ex: química com data errada)
     tem_avaliacao = true;
-    const sobreTabela = (tabela.avaliacao && tabela.avaliacao.sobre && !ehEventoEscolar(tabela.avaliacao.sobre))
+    const sobreTabela = (!ignorarAvaliacao && tabela.avaliacao && tabela.avaliacao.sobre && !ehEventoEscolar(tabela.avaliacao.sobre))
       ? tabela.avaliacao.sobre.trim() : '';
     if (sobreTabela) {
       materia_teste = sobreTabela;
@@ -1072,7 +1074,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     let ultimoErro = '';
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato);
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
           ai.deveres_pendentes = ai.deveres_pendentes
@@ -1242,8 +1244,28 @@ app.get('/api/diag', async (req, res) => {
 
   let resultadoFinal;
   try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato);
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao);
   } catch(e) { resultadoFinal = { erro: e.message, stack: (e.stack||'').slice(0,300) }; }
+
+  // inspeciona o CACHE: mostra todas as chaves e se mat A/B estão lá (e com que conteúdo)
+  const chavesCache = Object.keys(cache);
+  const cacheRelacionado = {};
+  for (const ch of chavesCache) {
+    const lista = cache[ch];
+    if (Array.isArray(lista)) {
+      const achou = lista.find(it => it && it.m && it.m.toLowerCase() === (nomeMateria||'').toLowerCase());
+      if (achou) {
+        cacheRelacionado[ch] = {
+          processadoOk: achou.processadoOk,
+          ok: achou.ok,
+          temAula: !!(achou.aula_hoje && achou.aula_hoje.trim().length>1),
+          qtdDeveresPend: (achou.deveres_pendentes||[]).length,
+          qtdDeveresAula: (achou.deveres_aula||[]).length,
+          materia_teste: achou.materia_teste
+        };
+      }
+    }
+  }
 
   res.json({
     materia: alvo.m,
@@ -1261,8 +1283,23 @@ app.get('/api/diag', async (req, res) => {
       deveres_aula: resultadoFinal.deveres_aula,
       materia_teste: resultadoFinal.materia_teste,
       erro: resultadoFinal.erro
-    }
+    },
+    CACHE_VERSAO: CACHE_VERSAO,
+    CACHE_DESTA_MATERIA: cacheRelacionado,
+    TOTAL_CHAVES_CACHE: chavesCache.length
   });
+});
+
+// ── limpa todo o cache manualmente (forçar reprocessamento) ──────────────────
+// uso: /api/limpar-cache?senha=ADMIN_SENHA
+app.get('/api/limpar-cache', (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const qtd = Object.keys(cache).length;
+  for (const k of Object.keys(cache)) delete cache[k];
+  salvarCache();
+  res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
 app.get('/admin', (req, res) => {
