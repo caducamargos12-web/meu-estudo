@@ -457,7 +457,7 @@ const GRADE = {
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
   sex: [
-    { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14 },
+    { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
@@ -817,7 +817,7 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -995,6 +995,26 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     .sort((a,b) => b.num - a.num);
   const linhaTeste = aulasAnteriores[0] || null;
 
+  // matérias onde o professor MARCA explicitamente o que cai no teste daquele dia
+  // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas"). Procura essa marca
+  // nas linhas (da mais recente até hoje) e usa SÓ o conteúdo marcado.
+  let testeMarcadoTexto = '', testeMarcadoData = '';
+  if (testeMarcado) {
+    const todasAteHoje = linhas
+      .filter(l => l.num <= refNum)
+      .sort((a,b) => b.num - a.num);
+    for (const l of todasAteHoje) {
+      // procura "conteúdo do testinho N: XXX" no texto da matéria (e nos deveres, por garantia)
+      const textoCompleto = [l.materia || '', ...(l.deveres || [])].join(' . ');
+      const m = textoCompleto.match(/conte[úu]do\s+do\s+testinho[^:]*:\s*([^.;]+)/i);
+      if (m && m[1].trim()) {
+        testeMarcadoTexto = m[1].trim();
+        testeMarcadoData = l.data.slice(0,5);
+        break;
+      }
+    }
+  }
+
   // decide se mostra teste conforme o tipo
   let tem_avaliacao, materia_teste, materia_teste_data;
   if (tipo === 'soDever') {
@@ -1017,23 +1037,39 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     materia_teste_data = avalValida ? avalData : '';
   } else {
     // matéria normal: teste semanal sempre.
-    // PRIORIDADE: se o professor marcou uma tabela de teste com conteúdo, usa esse conteúdo.
-    // (a menos que a matéria peça para ignorar a avaliação do blog, ex: química com data errada)
     tem_avaliacao = true;
-    const sobreTabela = (!ignorarAvaliacao && tabela.avaliacao && tabela.avaliacao.sobre && !ehEventoEscolar(tabela.avaliacao.sobre))
-      ? tabela.avaliacao.sobre.trim() : '';
-    if (sobreTabela) {
-      materia_teste = sobreTabela;
-      materia_teste_data = (tabela.avaliacao.data || '').slice(0,5);
+    // PRIORIDADE MÁXIMA: conteúdo marcado explicitamente como teste (ex: Ulisses)
+    if (testeMarcado && testeMarcadoTexto) {
+      materia_teste = testeMarcadoTexto;
+      materia_teste_data = testeMarcadoData;
     } else {
-      materia_teste = linhaTeste ? linhaTeste.materia : '';
-      materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+      // senão: se o professor marcou uma tabela de teste com conteúdo, usa esse conteúdo
+      // (a menos que a matéria peça para ignorar a avaliação do blog)
+      const sobreTabela = (!ignorarAvaliacao && tabela.avaliacao && tabela.avaliacao.sobre && !ehEventoEscolar(tabela.avaliacao.sobre))
+        ? tabela.avaliacao.sobre.trim() : '';
+      if (sobreTabela) {
+        materia_teste = sobreTabela;
+        materia_teste_data = (tabela.avaliacao.data || '').slice(0,5);
+      } else {
+        materia_teste = linhaTeste ? linhaTeste.materia : '';
+        materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+      }
     }
   }
   // garante que a matéria do teste nunca seja um evento escolar
   if (materia_teste && ehEventoEscolar(materia_teste)) {
     materia_teste = linhaTeste ? linhaTeste.materia : '';
     materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+  }
+  // limpa a matéria do teste: remove sufixos de atividade/tarefa/páginas que não são
+  // o CONTEÚDO em si (ex: "Parnasianismo; Atividades da apostila" → "Parnasianismo")
+  if (materia_teste) {
+    materia_teste = materia_teste
+      .split(/[;.]\s*/)
+      .filter(parte => parte.trim() && !/^\s*(atividades?|tarefas?|deveres?|exerc[íi]cios?|p[áa]g(\.|inas?)?|atividade complementar)\b/i.test(parte.trim()))
+      .join('; ')
+      .replace(/[;\s]+$/, '')
+      .trim();
   }
 
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
@@ -1130,7 +1166,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     let ultimoErro = '';
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior);
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
           ai.deveres_pendentes = ai.deveres_pendentes
@@ -1346,7 +1382,7 @@ app.get('/api/diag', async (req, res) => {
 
   let resultadoFinal;
   try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao, alvo.testeAulaAnterior);
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao, alvo.testeAulaAnterior, alvo.testeMarcado);
   } catch(e) { resultadoFinal = { erro: e.message, stack: (e.stack||'').slice(0,300) }; }
 
   // inspeciona o CACHE: mostra todas as chaves e se mat A/B estão lá (e com que conteúdo)
