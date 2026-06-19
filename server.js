@@ -463,10 +463,10 @@ const GRADE = {
   ],
 };
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
-// modelos em ordem de uso. Sonnet primeiro: é mais consistente para extrair dados
-// estruturados de blogs complexos (o Haiku às vezes falhava em gerar JSON válido,
-// causando matérias vazias de forma intermitente). Haiku fica como reserva rápida.
-const MODELS = ['claude-sonnet-4-6','claude-sonnet-4-5-20250929','claude-haiku-4-5-20251001','claude-opus-4-8'];
+// modelos em ordem de uso. Haiku primeiro (barato e rápido). Se ele falhar em gerar
+// JSON válido, o sistema sobe automaticamente para o Sonnet (mais capaz). Assim, o
+// custo fica baixo no caso comum, e o Sonnet só é usado quando realmente precisa.
+const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4-5-20250929','claude-opus-4-8'];
 
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
@@ -1038,14 +1038,13 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   if (precisaResumo) {
     const promptResumo = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
       'O aluno tem um teste sobre: "' + materia_teste + '".\n' +
-      'Faça:\n1. RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
-      '2. QUESTÕES: 4 questões de múltipla escolha (A-D) sobre o conteúdo, com a resposta correta e explicação.\n' +
+      'Faça um RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
       '\nResponda APENAS JSON sem markdown:\n' +
-      '{"resumo":"texto","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}';
+      '{"resumo":"texto"}';
     try {
       const r = await callAnthropic(promptResumo, 0);
       resumo = r.resumo || '';
-      questoes = Array.isArray(r.questoes) ? r.questoes : [];
+      questoes = []; // simulado é gerado só quando o aluno clicar (economia de tokens)
     } catch (e) { resumo = ''; questoes = []; }
   } else if (tipo !== 'soDever') {
     // sem avaliação: um resumo curto da aula do dia, se houver
@@ -1198,6 +1197,25 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
 }
 
 // ── aluno envia um report de erro ────────────────────────────────────────────
+// ── gera o simulado (4 questões) sob demanda, quando o aluno clica ───────────
+// economiza tokens: só gera quando o aluno realmente quer revisar
+app.post('/api/simulado', auth, async (req, res) => {
+  const materia = (req.body.materia || '').slice(0, 60);
+  const materiaTeste = (req.body.materiaTeste || '').slice(0, 300);
+  if (!materiaTeste) return res.json({ questoes: [] });
+  try {
+    const prompt = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
+      'Crie um simulado sobre: "' + materiaTeste + '".\n' +
+      '4 questões de múltipla escolha (A-D), com a resposta correta e uma explicação curta.\n' +
+      'Responda APENAS JSON sem markdown:\n' +
+      '{"questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}';
+    const r = await callAnthropic(prompt, 0);
+    res.json({ questoes: Array.isArray(r.questoes) ? r.questoes : [] });
+  } catch (e) {
+    res.json({ questoes: [] });
+  }
+});
+
 app.post('/api/reportar', auth, (req, res) => {
   const { mensagem, contexto } = req.body;
   if (!mensagem || !mensagem.trim()) return res.json({ error: 'Mensagem vazia' });
@@ -1296,19 +1314,20 @@ app.get('/api/diag', async (req, res) => {
     return res.status(401).json({ error: 'senha invalida' });
   }
   const nomeMateria = req.query.materia;
+  const nomeProf = (req.query.prof || '').toLowerCase();
   let alvo = null;
-  for (const dia of Object.keys(GRADE)) {
-    const m = GRADE[dia].find(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase());
-    if (m) { alvo = m; break; }
-  }
-  if (!alvo) return res.json({ error: 'matéria não encontrada', materias: [...new Set(Object.values(GRADE).flat().map(x=>x.m))] });
-
-  const blogText = await fetchBlog(alvo.url);
-  // descobre em que dia a matéria aparece, para usar a data certa (não sempre segunda)
   let diaDaMateria = 'seg';
   for (const dia of Object.keys(GRADE)) {
-    if (GRADE[dia].some(x => x.m.toLowerCase() === (nomeMateria||'').toLowerCase())) { diaDaMateria = dia; break; }
+    const m = GRADE[dia].find(x => {
+      const materiaBate = x.m.toLowerCase() === (nomeMateria||'').toLowerCase();
+      const profBate = !nomeProf || (x.p||'').toLowerCase().includes(nomeProf);
+      return materiaBate && profBate;
+    });
+    if (m) { alvo = m; diaDaMateria = dia; break; }
   }
+  if (!alvo) return res.json({ error: 'matéria não encontrada', dica: 'use &prof=sobrenome para diferenciar professores', materias: [...new Set(Object.values(GRADE).flat().map(x=>x.m + ' (' + x.p + ')'))] });
+
+  const blogText = await fetchBlog(alvo.url);
   const ref = req.query.ref || dataDoDia(diaDaMateria);
 
   // mostra também o que a IA extraiu (etapa intermediária) para rotulado

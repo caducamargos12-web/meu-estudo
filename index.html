@@ -176,6 +176,9 @@
   .blk-res{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
   .blk-res .blk-label{color:var(--accent)}
   .blk-quiz{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
+  .btn-gerar-quiz{background:color-mix(in srgb,var(--green) 16%,var(--bg));border:1px solid color-mix(in srgb,var(--green) 40%,transparent);color:var(--green);border-radius:9px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);margin-top:4px;transition:all .2s}
+  .btn-gerar-quiz:hover{background:color-mix(in srgb,var(--green) 24%,var(--bg))}
+  .btn-gerar-quiz:disabled{opacity:.6;cursor:wait}
   .blk-quiz .blk-label{color:var(--green)}
   .blk-prox{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
   .blk-prox .blk-label{color:var(--accent)}
@@ -474,6 +477,46 @@ async function enviarReporte(){
 }
 
 function abrirReporteGlobalInit(){}
+async function gerarSimulado(materia, materiaTeste, cardId){
+  const wrap=document.getElementById('quiz-wrap-'+cardId);
+  if(!wrap)return;
+  const btn=wrap.querySelector('.btn-gerar-quiz');
+  if(btn){btn.disabled=true;btn.textContent='Gerando simulado...';}
+  try{
+    const res=await fetch('/api/simulado',{
+      method:'POST',headers:{'Content-Type':'application/json','x-session-token':localStorage.getItem('sessionToken')||''},
+      body:JSON.stringify({materia,materiaTeste})
+    });
+    const data=await res.json();
+    if(!data.questoes||!data.questoes.length){
+      if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}
+      return;
+    }
+    // monta as questões na tela
+    let html=data.questoes.map((q,qi)=>`
+      <div class="quiz-q">
+        <div class="quiz-enun">${qi+1}. ${q.enunciado}</div>
+        ${Object.keys(q.opcoes||{}).map(op=>`
+          <label class="quiz-op">
+            <input type="radio" name="q-${cardId}-${qi}" value="${op}" onchange="checarResposta('${cardId}',${qi},'${op}','${q.correta}',this)">
+            <span>${op}) ${q.opcoes[op]}</span>
+          </label>`).join('')}
+        <div class="quiz-exp" id="exp-${cardId}-${qi}" style="display:none">${q.explicacao||''}</div>
+      </div>`).join('');
+    wrap.innerHTML='<div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>'+html+'<div class="score" id="score-'+cardId+'">Responda as questões acima</div>';
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}
+  }
+}
+
+function checarResposta(cardId,qi,escolha,correta,el){
+  const exp=document.getElementById('exp-'+cardId+'-'+qi);
+  if(exp)exp.style.display='block';
+  const label=el.closest('.quiz-op');
+  if(escolha===correta){label.classList.add('certo');}
+  else{label.classList.add('errado');}
+}
+
 function toggleMusic(){
   const audio=document.getElementById('bgMusic');
   const btn=document.getElementById('musicBtn');
@@ -687,7 +730,10 @@ function renderCard(item, idx, ehPrevia, dataRef){
     mostrarTeste=temMateriaTeste; // matéria normal: teste semanal
   }
   const mostrarResumo = !ehHistoria && tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
-  const mostrarSimulado = mostrarTeste && item.questoes?.length>0;
+  // mostra o simulado se a matéria tem teste. Se as questões ainda não foram geradas,
+  // mostra um botão para o aluno gerar sob demanda (economiza tokens).
+  const podeSimulado = mostrarTeste && item.materia_teste && item.materia_teste.trim().length>1;
+  const temQuestoes = item.questoes?.length>0;
 
   // bloco especial de história: lista das matérias que podem cair no teste, com resumo
   const blocoHistoriaHtml = (ehHistoria && item.materias_teste?.length) ? `
@@ -716,11 +762,11 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">${mostrarTeste?'Resumo da matéria do teste':'Resumo da aula'}</span></div>
           <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')||'—'}</div>
         </div>` : '';
-  const blocoSimuladoHtml = mostrarSimulado ? `
-        <div class="blk blk-quiz">
+  const blocoSimuladoHtml = podeSimulado ? `
+        <div class="blk blk-quiz" id="quiz-wrap-${cardId}">
           <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
-          ${quizHtml}
-          <div class="score" id="score-${cardId}">Responda as questões acima</div>
+          ${temQuestoes ? `${quizHtml}<div class="score" id="score-${cardId}">Responda as questões acima</div>`
+            : `<button class="btn-gerar-quiz" onclick="gerarSimulado('${item.m}','${item.materia_teste.replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${cardId}')">Gerar simulado de revisão</button>`}
         </div>` : '';
 
   return `<div class="card${ehPrevia?' card-previa':''}" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
