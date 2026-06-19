@@ -979,13 +979,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
   const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
-  // 4. MATÉRIA DO TESTE: a aula COM matéria imediatamente anterior (ignorando eventos)
+  // 4. MATÉRIA DO TESTE: a aula mais recente ATÉ hoje (inclui a de hoje), ignorando
+  // eventos e ementas. Inclui hoje porque o teste costuma ser sobre a aula atual
+  // (ex: literatura, cuja aula de hoje é o próprio "Testinho: Parnasianismo").
   // linhas que são EMENTA/lista de conteúdo de avaliação, não aula real dada
-  // (ex: "Conteúdo do testinho 1: Taxonomia", "Conteúdo da avaliação: ...")
-  const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)/i.test(txt || '');
+  // (ex: "Conteúdo do testinho 1: Taxonomia", "Avaliação bimestral", "Conteúdo da avaliação")
+  const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral/i.test(txt || '');
 
   const aulasAnteriores = linhas
-    .filter(l => l.num < refNum && l.materia && !ehEventoEscolar(l.materia) && !ehEmenta(l.materia))
+    .filter(l => l.num <= refNum && l.materia && !ehEventoEscolar(l.materia) && !ehEmenta(l.materia))
     .sort((a,b) => b.num - a.num);
   const linhaTeste = aulasAnteriores[0] || null;
 
