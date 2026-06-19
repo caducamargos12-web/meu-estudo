@@ -867,6 +867,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n\nExtraia TODAS as linhas que tenham uma data, na ordem em que aparecem. Para cada linha:' +
     '\n- "data": a data da linha (formato DD/MM)' +
     '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se vazia, use "".' +
+    '\n  IMPORTANTE: inclua o conteúdo COMPLETO da aula na "materia", incluindo o tema E as atividades/exercícios mencionados junto ao conteúdo (ex: "Testinho: Parnasianismo e Simbolismo; Atividades da apostila"). NÃO resuma nem corte partes do conteúdo da aula. Preserve o texto inteiro do que foi dado naquela aula.' +
     '\n- "deveres": TODOS os deveres daquela data (última coluna). Se for "—" ou vazio, use []. Liste cada dever como um item separado.' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
     '\nIGNORE TAMBÉM eventos e atividades da escola que NÃO são matéria nem dever: CopaAnglo, gincana, olimpíadas, feira cultural, festa junina, festival, interclasse, recesso, feriado, sábado letivo, semana de avaliações, ensaios, excursões, formatura. Esses NUNCA são deveres nem conteúdo de aula.' +
