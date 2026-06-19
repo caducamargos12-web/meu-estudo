@@ -457,7 +457,7 @@ const GRADE = {
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
   sex: [
-    { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true },
+    { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
@@ -996,22 +996,20 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const linhaTeste = aulasAnteriores[0] || null;
 
   // matérias onde o professor MARCA explicitamente o que cai no teste daquele dia
-  // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas"). Procura essa marca
-  // nas linhas (da mais recente até hoje) e usa SÓ o conteúdo marcado.
+  // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas").
+  // Busca DIRETO no texto bruto do blog todas as marcas "Conteúdo do testinho N: XXX"
+  // e usa a de MAIOR número (a mais recente / atual).
   let testeMarcadoTexto = '', testeMarcadoData = '';
   if (testeMarcado) {
-    const todasAteHoje = linhas
-      .filter(l => l.num <= refNum)
-      .sort((a,b) => b.num - a.num);
-    for (const l of todasAteHoje) {
-      // procura "conteúdo do testinho N: XXX" no texto da matéria (e nos deveres, por garantia)
-      const textoCompleto = [l.materia || '', ...(l.deveres || [])].join(' . ');
-      const m = textoCompleto.match(/conte[úu]do\s+do\s+testinho[^:]*:\s*([^.;]+)/i);
-      if (m && m[1].trim()) {
-        testeMarcadoTexto = m[1].trim();
-        testeMarcadoData = l.data.slice(0,5);
-        break;
+    const todas = [...(blogText || '').matchAll(/conte[úu]do\s+do\s+testinho\s*(\d+)?\s*:\s*([^.;\n]+)/gi)];
+    if (todas.length) {
+      // escolhe a de maior número de testinho; se não houver número, a última que aparece
+      let melhor = todas[0], melhorNum = parseInt(todas[0][1] || '0', 10);
+      for (const mt of todas) {
+        const n = parseInt(mt[1] || '0', 10);
+        if (n >= melhorNum) { melhorNum = n; melhor = mt; }
       }
+      testeMarcadoTexto = (melhor[2] || '').trim();
     }
   }
 
