@@ -442,7 +442,7 @@ const GRADE = {
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
     { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html' },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html', formato:'duasAulas' },
@@ -458,8 +458,8 @@ const GRADE = {
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14 },
-    { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura' },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
+    { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
@@ -817,7 +817,7 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -986,8 +986,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // (ex: "Conteúdo do testinho 1: Taxonomia", "Avaliação bimestral", "Conteúdo da avaliação")
   const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral/i.test(txt || '');
 
+  // Para a matéria do teste, normalmente incluímos a aula de HOJE (o teste costuma ser
+  // sobre a aula atual, ex: literatura). Mas algumas matérias o teste é sobre a aula
+  // ANTERIOR (ex: física) — nesse caso testeAulaAnterior=true exclui hoje.
+  const limiteTeste = testeAulaAnterior ? (l => l.num < refNum) : (l => l.num <= refNum);
   const aulasAnteriores = linhas
-    .filter(l => l.num <= refNum && l.materia && !ehEventoEscolar(l.materia) && !ehEmenta(l.materia))
+    .filter(l => limiteTeste(l) && l.materia && !ehEventoEscolar(l.materia) && !ehEmenta(l.materia))
     .sort((a,b) => b.num - a.num);
   const linhaTeste = aulasAnteriores[0] || null;
 
@@ -1126,7 +1130,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     let ultimoErro = '';
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao);
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
           ai.deveres_pendentes = ai.deveres_pendentes
@@ -1342,7 +1346,7 @@ app.get('/api/diag', async (req, res) => {
 
   let resultadoFinal;
   try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao);
+    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao, alvo.testeAulaAnterior);
   } catch(e) { resultadoFinal = { erro: e.message, stack: (e.stack||'').slice(0,300) }; }
 
   // inspeciona o CACHE: mostra todas as chaves e se mat A/B estão lá (e com que conteúdo)
