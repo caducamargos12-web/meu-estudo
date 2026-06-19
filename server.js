@@ -593,7 +593,7 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
 // (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
 function ehEventoEscolar(texto) {
   const t = (texto || '').toLowerCase();
-  return /cop[ae]?\s*anglo|copanglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
+  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
 }
 
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
@@ -997,19 +997,13 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 
   // matérias onde o professor MARCA explicitamente o que cai no teste daquele dia
   // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas").
-  // Busca DIRETO no texto bruto do blog todas as marcas "Conteúdo do testinho N: XXX"
-  // e usa a de MAIOR número (a mais recente / atual).
+  // O blog lista da data MAIS RECENTE para a mais antiga, então o PRIMEIRO
+  // "Conteúdo do testinho" que aparece é o da aula atual. É esse que vale.
   let testeMarcadoTexto = '', testeMarcadoData = '';
   if (testeMarcado) {
-    const todas = [...(blogText || '').matchAll(/conte[úu]do\s+do\s+testinho\s*(\d+)?\s*:\s*([^.;\n]+)/gi)];
-    if (todas.length) {
-      // escolhe a de maior número de testinho; se não houver número, a última que aparece
-      let melhor = todas[0], melhorNum = parseInt(todas[0][1] || '0', 10);
-      for (const mt of todas) {
-        const n = parseInt(mt[1] || '0', 10);
-        if (n >= melhorNum) { melhorNum = n; melhor = mt; }
-      }
-      testeMarcadoTexto = (melhor[2] || '').trim();
+    const m = (blogText || '').match(/conte[úu]do\s+do\s+testinho\s*\d*\s*:\s*([^.;\n]+)/i);
+    if (m && m[1].trim()) {
+      testeMarcadoTexto = m[1].trim();
     }
   }
 
