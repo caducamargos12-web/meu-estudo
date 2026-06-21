@@ -304,10 +304,10 @@
   /* botão e modal de reportar erro */
   .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
-  .rep-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px}
+  .rep-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .rep-overlay.aberto{display:flex;animation:repFade .25s ease}
   @keyframes repFade{from{opacity:0}to{opacity:1}}
-  .rep-modal{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:16px;padding:22px;max-width:420px;width:100%;animation:repUp .3s cubic-bezier(.2,.8,.2,1)}
+  .rep-modal{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:16px;padding:22px;max-width:420px;width:100%;max-height:calc(100vh - 40px);overflow-y:auto;margin:auto;animation:repUp .3s cubic-bezier(.2,.8,.2,1)}
   @keyframes repUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
   .rep-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:5px}
   .rep-sub{font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.5}
