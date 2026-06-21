@@ -442,7 +442,7 @@ const GRADE = {
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
     { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html' },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html', formato:'duasAulas' },
@@ -459,7 +459,7 @@ const GRADE = {
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, testeAulaAnterior:true, aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
@@ -593,7 +593,7 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
 // (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
 function ehEventoEscolar(texto) {
   const t = (texto || '').toLowerCase();
-  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
+  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|prova\s+anglo|simulado\s+anglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
 }
 
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
@@ -817,6 +817,83 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   };
 }
 
+// ── processamento de FÍSICA (formato TAREFA/TESTE/CONTEUDO com data no rótulo) ─
+// O blog usa: "TAREFA DD/MM <descrição>" (dever), "TESTE DD/MM <conteúdo>" (teste),
+// "CONTEUDO DO TESTE DD/MM <conteúdo>", "CONTEUDO DA PROVA <conteúdo>".
+async function processarFisica(materia, professor, blogText, dataRef, maxDeveres) {
+  const temConteudo = blogText && blogText.length > 50;
+  const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+
+  const prompt = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' +
+    '\n\n*** FORMATO DESTE REGISTRO ***' +
+    '\nO blog usa marcadores seguidos de data DD/MM e descrição:' +
+    '\n- "TAREFA DD/MM <descrição>" = um DEVER do aluno com a data dele. Ex: "TAREFA 19/6 TRABALHO E POTENCIA".' +
+    '\n- "TESTE DD/MM <conteúdo>" ou "CONTEUDO DO TESTE DD/MM <conteúdo>" = o conteúdo de um teste com a data dele. Ex: "TESTE 22/5 LEIS DE NEWTON".' +
+    '\n- "CONTEUDO DA PROVA <conteúdo>" = conteúdo de prova (sem data clara).' +
+    '\n\n*** O QUE EXTRAIR ***' +
+    '\n1. "deveres": lista de TAREFAS. Para cada "TAREFA DD/MM X", extraia {data:"DD/MM", dever:"X"}.' +
+    '\n2. "testes": lista de TESTES. Para cada "TESTE DD/MM X" ou "CONTEUDO DO TESTE DD/MM X", extraia {data:"DD/MM", conteudo:"X"}.' +
+    '\nIGNORE eventos da escola (olimpíadas, copaanglo, gincana) e rodapé do blog (Postagens, perfil, Escolha a turma, Atom).' +
+    '\nNÃO invente. Extraia só o que está escrito. Use o ano 2026 para todas as datas.' +
+    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+    '\n\nResponda APENAS JSON sem markdown:' +
+    '\n{"deveres":[{"data":"DD/MM","dever":"texto"}],"testes":[{"data":"DD/MM","conteudo":"texto"}]}';
+
+  let dados;
+  try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { deveres: [], testes: [] }; }
+
+  const ehLixo = (t) => ehEventoEscolar(t) || /postagens?|^páginas$|^in[ií]cio$|pesquisar este blog|ver meu perfil|denunciar|escolha a turma|fevereiro 20/i.test((t||'').trim());
+
+  // deveres com data <= hoje, mais recentes primeiro
+  const deveres = (dados.deveres || [])
+    .map(d => ({ data: (d.data||'').slice(0,5), num: dataParaNum(d.data), dever: (d.dever||'').trim() }))
+    .filter(d => d.num > 0 && d.dever && !ehLixo(d.dever))
+    .sort((a,b) => b.num - a.num);
+
+  // testes com data, mais recentes primeiro
+  const testes = (dados.testes || [])
+    .map(t => ({ data: (t.data||'').slice(0,5), num: dataParaNum(t.data), conteudo: (t.conteudo||'').trim() }))
+    .filter(t => t.num > 0 && t.conteudo && !ehLixo(t.conteudo))
+    .sort((a,b) => b.num - a.num);
+
+  // AULA E DEVER DE HOJE: a tarefa da data de hoje (ou a mais recente até hoje)
+  const deveresAteHoje = deveres.filter(d => d.num <= refNum);
+  const deverHoje = deveresAteHoje[0] || null;
+  const aula_hoje = deverHoje ? deverHoje.dever : '';
+  const deveres_aula = deverHoje ? [deverHoje.dever] : [];
+
+  // DEVERES PENDENTES: as tarefas ANTERIORES ao dever de hoje (limita por maxDeveres)
+  const limite = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
+  const deveres_pendentes = deveresAteHoje
+    .filter(d => !deverHoje || d.num < deverHoje.num)
+    .slice(0, limite)
+    .map(d => ({ data: d.data, deveres: [d.dever] }));
+
+  // MATÉRIA DO TESTE: o teste mais recente até hoje
+  const testesAteHoje = testes.filter(t => t.num <= refNum);
+  const testeAtual = testesAteHoje[0] || null;
+  const materia_teste = testeAtual ? testeAtual.conteudo : '';
+  const materia_teste_data = testeAtual ? testeAtual.data : '';
+
+  let resumo = '';
+  if (materia_teste) {
+    try {
+      const r = await callAnthropic('Você é tutor de ' + materia + '. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + materia_teste + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
+      resumo = r.resumo || '';
+    } catch (e) { resumo = ''; }
+  }
+
+  return {
+    aula_hoje,
+    aula_data: deverHoje ? deverHoje.data : '',
+    deveres_pendentes, deveres_aula,
+    tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
+    resumo, questoes: [],
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
+}
+
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
@@ -825,6 +902,10 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // gramática/linguística: mostra 2 aulas do mesmo dia, dever = atividades da última aula
   if (formato === 'duasAulas') {
     return processarDuasAulas(materia, professor, blogText, filtro, dataRef, maxDeveres);
+  }
+  // física: formato "TAREFA DD/MM ...", "TESTE DD/MM ...", "CONTEUDO DO TESTE DD/MM ..."
+  if (formato === 'fisica') {
+    return processarFisica(materia, professor, blogText, dataRef, maxDeveres);
   }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
@@ -869,6 +950,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n- "materia": o texto da coluna do meio (conteúdo da aula). Se vazia, use "".' +
     '\n  IMPORTANTE: inclua o conteúdo COMPLETO da aula na "materia", incluindo o tema E as atividades/exercícios mencionados junto ao conteúdo (ex: "Testinho: Parnasianismo e Simbolismo; Atividades da apostila"). NÃO resuma nem corte partes do conteúdo da aula. Preserve o texto inteiro do que foi dado naquela aula.' +
     '\n- "deveres": TODOS os deveres daquela data (última coluna). Se for "—" ou vazio, use []. Liste cada dever como um item separado.' +
+    '\n  ATENÇÃO: alguns professores escrevem o dever junto ao conteúdo da aula, não numa coluna separada. Se o texto da aula mencionar "Exercício(s)", "Atividade(s)", "Tarefa", "Fazer exercícios", "Apostila página X", "Visto na folha/caderno", trate isso TAMBÉM como dever daquela data (ex: "Exercício apostila 1" → dever "Exercício apostila 1").' +
     '\n\nIGNORE textos de navegação do Blogspot (Enviar por e-mail, Postar no blog, Compartilhar, Marcadores, Início, Assinar, Comentários, Reações). Nunca os inclua.' +
     '\nIGNORE TAMBÉM eventos e atividades da escola que NÃO são matéria nem dever: CopaAnglo, gincana, olimpíadas, feira cultural, festa junina, festival, interclasse, recesso, feriado, sábado letivo, semana de avaliações, ensaios, excursões, formatura. Esses NUNCA são deveres nem conteúdo de aula.' +
     '\nIGNORE listas de "conteúdo da avaliação bimestral", "matérias do bimestre" ou ementas que não têm data de aula específica. A matéria de cada linha é o que foi dado NAQUELA aula, não um resumo geral do bimestre.' +
