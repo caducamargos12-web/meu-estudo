@@ -4,7 +4,39 @@ const crypto = require('crypto');
 const fs = require('fs');
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' })); // limita tamanho do corpo (evita abuso)
+
+// ── headers de segurança em todas as respostas ──────────────────────────────
+app.use((req, res, next) => {
+  // impede o navegador de "adivinhar" o tipo do conteúdo (evita alguns XSS)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // impede que o app seja embutido em iframe de outro site (clickjacking)
+  res.setHeader('X-Frame-Options', 'DENY');
+  // proteção XSS legada de alguns navegadores
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // não vaza a URL completa do app para sites externos
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Content Security Policy: controla de onde scripts/estilos podem vir.
+  // 'unsafe-inline' é necessário porque o app usa estilos e scripts inline;
+  // restringe o resto a 'self' (o próprio domínio) + o necessário.
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data: https:; " +
+    "media-src 'self'; " +
+    "connect-src 'self'; " +
+    "frame-ancestors 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self'"
+  );
+  next();
+});
+
+// valida a origem das requisições POST (proteção CSRF). Definida mais abaixo;
+// registrada aqui para proteger TODAS as rotas (app.use só afeta rotas seguintes).
+app.use(checkOrigin);
 
 // volume persistente do Railway em /data; se não existir, cai em /tmp
 const DATA_DIR = fs.existsSync('/data') ? '/data' : '/tmp';
@@ -212,6 +244,20 @@ function senhaIgual(a, b) {
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
+// ── proteção CSRF: valida a origem das requisições que mudam estado ─────────
+// como o app usa token no header (não cookie), o CSRF clássico já é mitigado,
+// mas validar a Origin é uma camada extra. Só aplica a POST (que alteram dados).
+function checkOrigin(req, res, next) {
+  if (req.method !== 'POST') return next();
+  const origin = req.headers.origin || '';
+  const referer = req.headers.referer || '';
+  const host = req.headers.host || '';
+  if (!origin && !referer) return next();
+  const fonte = origin || referer;
+  if (host && fonte.includes(host)) return next();
+  return res.status(403).json({ error: 'Origem não autorizada' });
+}
+
 function checkAdmin(req, res, next) {
   const senha = req.headers['x-admin-senha'] || req.query.adminSenha || (req.body && req.body.adminSenha);
   if (!senha || !senhaIgual(senha, process.env.ADMIN_SENHA)) {

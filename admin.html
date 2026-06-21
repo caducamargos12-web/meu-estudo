@@ -154,6 +154,16 @@ async function carregarReports(){
   }catch(e){}
 }
 
+// escapa HTML para evitar XSS ao renderizar conteúdo vindo de usuários
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
 function fmtDataHora(iso){
   const d=new Date(iso);
   return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -168,14 +178,14 @@ function renderReports(reps, pendentes){
   cont.innerHTML=reps.map(r=>`
     <div class="rep-item ${r.resolvido?'resolvido':''}">
       <div class="rep-item-top">
-        <span class="rep-user">${r.user}</span>
+        <span class="rep-user">${esc(r.user)}</span>
         <span class="rep-data">${fmtDataHora(r.data)}</span>
       </div>
-      <div class="rep-texto">${r.mensagem.replace(/</g,'&lt;')}</div>
-      ${r.contexto?`<div class="rep-contexto">${r.contexto.replace(/</g,'&lt;')}</div>`:''}
+      <div class="rep-texto">${esc(r.mensagem)}</div>
+      ${r.contexto?`<div class="rep-contexto">${esc(r.contexto)}</div>`:''}
       <div class="rep-item-acoes">
-        <button class="mini-link" onclick="resolverReport('${r.id}')">${r.resolvido?'Reabrir':'✓ Marcar resolvido'}</button>
-        <button class="mini-link danger" onclick="apagarReport('${r.id}')">Apagar</button>
+        <button class="mini-link" onclick="resolverReport('${esc(r.id)}')">${r.resolvido?'Reabrir':'✓ Marcar resolvido'}</button>
+        <button class="mini-link danger" onclick="apagarReport('${esc(r.id)}')">Apagar</button>
       </div>
     </div>`).join('');
 }
@@ -236,8 +246,8 @@ function renderLista(alunos){
       ? a.dispositivos.map(d => `
           <div class="dev-item">
             <div class="dev-info">
-              <div class="dev-aparelho">📱 ${d.aparelho}</div>
-              <div class="dev-data">Conectou em ${d.data} · ${d.id.slice(0,10)}…</div>
+              <div class="dev-aparelho">📱 ${esc(d.aparelho)}</div>
+              <div class="dev-data">Conectou em ${esc(d.data)} · ${esc(d.id.slice(0,10))}…</div>
             </div>
             <button class="small danger" onclick="removerDispositivo('${a.user}','${d.id}')">Remover</button>
           </div>`).join('')
@@ -269,7 +279,7 @@ function renderLista(alunos){
     <div class="aluno-block status-${a.statusPag}">
       <div class="aluno-top">
         <div style="flex:1">
-          <div class="aluno-nome">${a.user} ${badge}</div>
+          <div class="aluno-nome">${esc(a.user)} ${badge}</div>
           <div class="venc-info">${vencInfo}</div>
         </div>
         <div class="aluno-acoes">
