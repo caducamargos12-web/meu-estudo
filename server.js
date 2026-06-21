@@ -436,7 +436,7 @@ app.post('/api/login', (req, res) => {
 const GRADE = {
   seg: [
     { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal' },
-    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html' },
+    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true },
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever' },
   ],
   ter: [
@@ -1067,7 +1067,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // (ex: literatura, cuja aula de hoje é o próprio "Testinho: Parnasianismo").
   // linhas que são EMENTA/lista de conteúdo de avaliação, não aula real dada
   // (ex: "Conteúdo do testinho 1: Taxonomia", "Avaliação bimestral", "Conteúdo da avaliação")
-  const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral/i.test(txt || '');
+  const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral|conte[úu]do\s+do\s+\d?\s*[º°]?\s*bimestre|revis[ãa]o\s+(para|da)\s+(avalia|prova)|corre[çc][ãa]o\s+(da\s+)?avalia/i.test(txt || '');
 
   // Para a matéria do teste, normalmente incluímos a aula de HOJE (o teste costuma ser
   // sobre a aula atual, ex: literatura). Mas algumas matérias o teste é sobre a aula
@@ -1131,10 +1131,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       }
     }
   }
-  // garante que a matéria do teste nunca seja um evento escolar
-  if (materia_teste && ehEventoEscolar(materia_teste)) {
-    materia_teste = linhaTeste ? linhaTeste.materia : '';
-    materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+  // garante que a matéria do teste nunca seja um evento escolar nem uma ementa
+  if (materia_teste && (ehEventoEscolar(materia_teste) || ehEmenta(materia_teste))) {
+    // procura a aula real mais recente que não seja evento nem ementa
+    const aulaReal = aulasAnteriores.find(l => !ehEmenta(l.materia));
+    materia_teste = aulaReal ? aulaReal.materia : '';
+    materia_teste_data = aulaReal ? aulaReal.data.slice(0,5) : '';
   }
   // limpa a matéria do teste: remove sufixos de atividade/tarefa/páginas que não são
   // o CONTEÚDO em si (ex: "Parnasianismo; Atividades da apostila" → "Parnasianismo")
