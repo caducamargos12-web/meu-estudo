@@ -304,10 +304,10 @@
   /* botão e modal de reportar erro */
   .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
-  .rep-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .rep-overlay.aberto{display:flex;animation:repFade .25s ease}
+  .rep-overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:2147483600;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:20px;box-sizing:border-box}
+  .rep-overlay.aberto{display:flex !important;align-items:center !important;justify-content:center !important;animation:repFade .25s ease}
   @keyframes repFade{from{opacity:0}to{opacity:1}}
-  .rep-modal{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:16px;padding:22px;max-width:420px;width:100%;max-height:calc(100vh - 40px);overflow-y:auto;margin:auto;animation:repUp .3s cubic-bezier(.2,.8,.2,1)}
+  .rep-modal{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:16px;padding:22px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;box-sizing:border-box;animation:repUp .3s cubic-bezier(.2,.8,.2,1)}
   @keyframes repUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
   .rep-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:5px}
   .rep-sub{font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.5}
@@ -404,20 +404,8 @@
       </div>
     </div>
 
-    <!-- modal de reportar erro -->
-    <div id="reporteOverlay" class="rep-overlay" onclick="if(event.target===this)fecharReporte()">
-      <div class="rep-modal">
-        <div class="rep-title">Reportar um erro</div>
-        <div class="rep-sub">Viu algo errado? Conta pra gente que arrumamos rápido.</div>
-        <textarea id="reporteTexto" class="rep-textarea" placeholder="Ex: o dever de matemática do dia 10 está na matéria errada..." maxlength="1000"></textarea>
-        <div class="rep-ctx" id="reporteContexto"></div>
-        <div class="rep-acoes">
-          <button class="rep-cancelar" onclick="fecharReporte()">Cancelar</button>
-          <button class="rep-enviar" id="reporteEnviar" onclick="enviarReporte()">Enviar</button>
-        </div>
-        <div class="rep-msg" id="reporteMsg"></div>
-      </div>
-    </div>
+    <!-- modal de reportar erro: movido para o fim do body (fora do header)
+         para o position:fixed funcionar; backdrop-filter no header prendia ele -->
   </header>
   <main id="main">
     <div class="big-load">
@@ -435,6 +423,10 @@ const scores={};
 function abrirReporte(){
   const ov=document.getElementById('reporteOverlay');
   ov.classList.add('aberto');
+  // "portal": move o modal para ser filho direto do body, escapando de qualquer
+  // ancestral com backdrop-filter/transform que possa prender o position:fixed
+  if(ov.parentElement !== document.body){ document.body.appendChild(ov); }
+  document.body.style.overflow='hidden'; // trava o scroll do fundo enquanto o modal está aberto
   document.getElementById('reporteTexto').value='';
   document.getElementById('reporteMsg').textContent='';
   document.getElementById('reporteEnviar').disabled=false;
@@ -450,6 +442,7 @@ function abrirReporte(){
 }
 function fecharReporte(){
   document.getElementById('reporteOverlay').classList.remove('aberto');
+  document.body.style.overflow=''; // libera o scroll do fundo
 }
 async function enviarReporte(){
   const txt=document.getElementById('reporteTexto').value.trim();
@@ -952,5 +945,20 @@ document.addEventListener('keydown',function(e){
   else{document.getElementById('loginScreen').style.display='flex';}
 })();
 </script>
+
+<!-- modal de reportar erro (filho direto do body para position:fixed centralizar certo) -->
+<div id="reporteOverlay" class="rep-overlay" onclick="if(event.target===this)fecharReporte()">
+  <div class="rep-modal">
+    <div class="rep-title">Reportar um erro</div>
+    <div class="rep-sub">Viu algo errado? Conta pra gente que arrumamos rápido.</div>
+    <textarea id="reporteTexto" class="rep-textarea" placeholder="Ex: o dever de matemática do dia 10 está na matéria errada..." maxlength="1000"></textarea>
+    <div class="rep-ctx" id="reporteContexto"></div>
+    <div class="rep-acoes">
+      <button class="rep-cancelar" onclick="fecharReporte()">Cancelar</button>
+      <button class="rep-enviar" id="reporteEnviar" onclick="enviarReporte()">Enviar</button>
+    </div>
+    <div class="rep-msg" id="reporteMsg"></div>
+  </div>
+</div>
 </body>
 </html>
