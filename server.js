@@ -482,12 +482,12 @@ app.post('/api/login', (req, res) => {
 const GRADE = {
   seg: [
     { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal' },
-    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true },
+    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true },
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever' },
   ],
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
-    { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html' },
+    { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html', formato:'testesPorData' },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
@@ -721,27 +721,34 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
   // matérias que sobraram (podem cair no teste)
   const sobraram = materiasBim.filter(m => !jaCaiu(m.materia));
 
-  // gera um resumo pequeno de cada matéria que sobrou (uma chamada só, para economizar)
-  let materiasComResumo = [];
-  if (sobraram.length > 0) {
-    const lista = sobraram.map((m,i) => (i+1) + '. ' + m.materia).join('\n');
-    const promptResumos = 'Para cada matéria de História abaixo, escreva um resumo MUITO curto (1-2 frases) do que se trata, para revisão de teste.\n\nMATÉRIAS:\n' + lista +
-      '\n\nResponda APENAS JSON sem markdown: {"resumos":[{"materia":"nome exato como veio","resumo":"1-2 frases"}]}';
-    try {
-      const r = await callAnthropic(promptResumos, 0);
-      const mapa = {};
-      (r.resumos || []).forEach(x => { if (x.materia) mapa[x.materia.toLowerCase().trim()] = x.resumo; });
-      materiasComResumo = sobraram.map(m => ({
-        data: (m.data||'').slice(0,5),
-        materia: m.materia,
-        resumo: mapa[m.materia.toLowerCase().trim()] || ''
-      }));
-    } catch (e) {
-      materiasComResumo = sobraram.map(m => ({ data:(m.data||'').slice(0,5), materia:m.materia, resumo:'' }));
-    }
-  }
+  // matérias que sobraram (podem cair no teste) — mantido só como dado de apoio,
+  // sem gerar resumo (o front não usa mais a lista; economiza tokens)
+  const materiasComResumo = sobraram.map(m => ({ data:(m.data||'').slice(0,5), materia:m.materia, resumo:'' }));
 
   const aula_hoje = (dados.aula_hoje && dados.aula_hoje.trim().length > 1) ? dados.aula_hoje.trim() : '';
+
+  // NOVA LÓGICA: a matéria do teste é o "Foi realizado testinho (Matéria: X)" marcado
+  // na data de REFERÊNCIA. Busca direto no blog a linha da data de hoje e extrai o testinho.
+  // formato real: "Data:23/.06 - Aula: 14 -Matéria: Segundo Reinado - Foi realizado testinho (Matéria: Período Joanino)"
+  let testeMateria = '', testeData = '';
+  const refSlash = refDDMM; // ex "23/06"
+  const refRegex = refSlash.replace('/', '\\/?\\.?'); // tolera "23/.06" e "23/06"
+  // tenta achar o trecho da data de referência e o testinho logo após
+  const reLinha = new RegExp('data\\s*:?\\s*' + refRegex + '[\\s\\S]{0,260}?foi\\s+realizado\\s+testinho\\s*\\(mat[ée]ria:\\s*([^)]+)\\)', 'i');
+  const mLinha = (blogText || '').match(reLinha);
+  if (mLinha && mLinha[1].trim()) {
+    testeMateria = mLinha[1].trim();
+    testeData = refDDMM;
+  }
+
+  // resumo da matéria do teste do dia
+  let resumoTeste = '';
+  if (testeMateria) {
+    try {
+      const r = await callAnthropic('Você é tutor de História. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + testeMateria + '", para revisão de teste do ensino médio. Responda APENAS JSON: {"resumo":"texto"}', 0);
+      resumoTeste = r.resumo || '';
+    } catch (e) { resumoTeste = ''; }
+  }
 
   return {
     aula_hoje,
@@ -749,10 +756,10 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
     deveres_pendentes, deveres_aula,
     // campos específicos de história
     historia: true,
-    materias_teste: materiasComResumo, // lista das que podem cair, com resumo
-    // campos padrão zerados (história não usa o bloco de teste comum)
-    tem_avaliacao: false, materia_teste: '', materia_teste_data: '',
-    resumo: '', questoes: [],
+    materias_teste: materiasComResumo, // lista das que podem cair, com resumo (mantido como apoio)
+    // matéria do teste do dia (testinho marcado na data de referência)
+    tem_avaliacao: !!testeMateria, materia_teste: testeMateria, materia_teste_data: testeData,
+    resumo: resumoTeste, questoes: [],
     proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
   };
 }
@@ -940,6 +947,43 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
   };
 }
 
+// ── química A: blog é uma lista de "DD/MM - TESTE N - CONTEÚDO" ──────────────
+// a matéria do teste é o TESTE da data de referência (ou o mais recente até hoje).
+async function processarTestesPorData(materia, professor, blogText, dataRef) {
+  const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+
+  // extrai todos os "DD/MM - TESTE N - CONTEÚDO" (para no próximo "DD/MM -" ou fim)
+  const matches = [...(blogText || '').matchAll(/(\d{1,2}\/\d{1,2})\s*[-–]\s*TESTE\s+[IVXLC0-9]+\s*[-–]\s*(.+?)(?=\s+\d{1,2}\/\d{1,2}\s*[-–]|\s*\\n|$)/gi)];
+  const testes = matches
+    .map(m => ({ data: m[1], num: dataParaNum(m[1]), conteudo: m[2].trim().replace(/\s+/g,' ') }))
+    .filter(t => t.num > 0 && t.conteudo && !ehEventoEscolar(t.conteudo))
+    .sort((a,b) => b.num - a.num);
+
+  // o teste atual: o da data de hoje, ou o mais recente até hoje
+  const ateHoje = testes.filter(t => t.num <= refNum);
+  const testeAtual = ateHoje[0] || testes[0] || null; // se nenhum até hoje, o mais recente
+  const materia_teste = testeAtual ? testeAtual.conteudo : '';
+  const materia_teste_data = testeAtual ? testeAtual.data : '';
+
+  let resumo = '';
+  if (materia_teste) {
+    try {
+      const r = await callAnthropic('Você é tutor de ' + materia + '. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + materia_teste + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
+      resumo = r.resumo || '';
+    } catch (e) { resumo = ''; }
+  }
+
+  return {
+    aula_hoje: materia_teste ? ('Teste: ' + materia_teste) : '',
+    aula_data: materia_teste_data,
+    deveres_pendentes: [], deveres_aula: [],
+    tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
+    resumo, questoes: [],
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
+}
+
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
@@ -952,6 +996,10 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // física: formato "TAREFA DD/MM ...", "TESTE DD/MM ...", "CONTEUDO DO TESTE DD/MM ..."
   if (formato === 'fisica') {
     return processarFisica(materia, professor, blogText, dataRef, maxDeveres);
+  }
+  // química A: blog é uma lista de "DD/MM - TESTE N - CONTEÚDO"
+  if (formato === 'testesPorData') {
+    return processarTestesPorData(materia, professor, blogText, dataRef);
   }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();

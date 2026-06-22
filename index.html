@@ -714,7 +714,8 @@ function renderCard(item, idx, ehPrevia, dataRef){
   const temMateriaTeste=item.materia_teste&&item.materia_teste.trim().length>1;
   let mostrarTeste;
   if(ehHistoria){
-    mostrarTeste=false; // história usa bloco próprio
+    // história agora mostra a matéria do teste do dia (testinho marcado), se houver
+    mostrarTeste=temMateriaTeste;
   }else if(tipo==='soDever'){
     mostrarTeste=false;
   }else if(tipo==='provaFinal'){
@@ -722,27 +723,15 @@ function renderCard(item, idx, ehPrevia, dataRef){
   }else{
     mostrarTeste=temMateriaTeste; // matéria normal: teste semanal
   }
-  const mostrarResumo = !ehHistoria && tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
+  const mostrarResumo = tipo!=='soDever' && (item.resumo&&item.resumo.trim().length>1);
   // mostra o simulado se a matéria tem teste. Se as questões ainda não foram geradas,
   // mostra um botão para o aluno gerar sob demanda (economiza tokens).
   const podeSimulado = mostrarTeste && item.materia_teste && item.materia_teste.trim().length>1;
   const temQuestoes = item.questoes?.length>0;
 
-  // bloco especial de história: lista das matérias que podem cair no teste, com resumo
-  const blocoHistoriaHtml = (ehHistoria && item.materias_teste?.length) ? `
-        <div class="blk blk-teste">
-          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matérias que podem cair no teste</span></div>
-          <div class="blk-sub">Conteúdos do bimestre que ainda não foram testados</div>
-          ${item.materias_teste.map(m=>`
-            <div class="hist-mat">
-              <div class="hist-mat-nome">${m.data?`<span class="hist-mat-data">${m.data}</span> `:''}${m.materia}</div>
-              ${m.resumo?`<div class="hist-mat-res">${m.resumo}</div>`:''}
-            </div>`).join('')}
-        </div>` : (ehHistoria ? `
-        <div class="blk blk-teste">
-          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matérias que podem cair no teste</span></div>
-          <div class="blk-body" style="color:var(--text-3)">Nenhuma matéria pendente identificada no bimestre ainda.</div>
-        </div>` : '');
+  // bloco especial de história: agora NÃO usa mais a lista de matérias do bimestre;
+  // a matéria do teste do dia é exibida pelo bloco de teste comum (blocoTesteHtml).
+  const blocoHistoriaHtml = '';
 
   // monta os blocos condicionais
   const blocoTesteHtml = mostrarTeste ? `
