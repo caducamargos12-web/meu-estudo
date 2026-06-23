@@ -782,7 +782,7 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     '\nExtraia TODAS as aulas numeradas que tiverem data. Para cada uma:' +
     '\n- "numero": o número da aula (ex: 9, 10).' +
     '\n- "data": a data dela (DD/MM).' +
-    '\n- "descricao": um resumo curto (1 frase) do conteúdo da aula.' +
+    '\n- "descricao": o conteúdo da aula COMO ESTÁ ESCRITO no blog, completo (não resuma nem encurte). Ex: "aula expositiva sobre discurso citado, abordando os discursos direto, indireto e indireto livre". Copie a explicação inteira do que foi dado na aula.' +
     '\n- "atividades": lista das atividades/deveres daquela aula (ex: "Atividades na apostila nas páginas 37-38-39"). Se não houver, [].' +
     '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, Atom, "Escolha a turma", "Pesquisar este blog", nome do professor solto) e eventos da escola (CopaAnglo, gincana, etc.).' +
     '\nNÃO invente. Extraia só o que está escrito.' +
@@ -923,11 +923,19 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     .slice(0, limite)
     .map(d => ({ data: d.data, deveres: [d.dever] }));
 
-  // MATÉRIA DO TESTE: o teste mais recente até hoje
+  // MATÉRIA DO TESTE: as DUAS mais recentes até hoje (a de hoje e a anterior),
+  // porque o professor pode aplicar qualquer uma das duas. Formato "ANTERIOR ou HOJE".
   const testesAteHoje = testes.filter(t => t.num <= refNum);
-  const testeAtual = testesAteHoje[0] || null;
-  const materia_teste = testeAtual ? testeAtual.conteudo : '';
-  const materia_teste_data = testeAtual ? testeAtual.data : '';
+  const doisTestes = testesAteHoje.slice(0, 2); // [mais recente, anterior]
+  let materia_teste = '', materia_teste_data = '';
+  if (doisTestes.length >= 2) {
+    // ordem de leitura: anterior primeiro, depois a de hoje (cronológica)
+    materia_teste = doisTestes[1].conteudo + ' ou ' + doisTestes[0].conteudo;
+    materia_teste_data = doisTestes[0].data;
+  } else if (doisTestes.length === 1) {
+    materia_teste = doisTestes[0].conteudo;
+    materia_teste_data = doisTestes[0].data;
+  }
 
   let resumo = '';
   if (materia_teste) {
