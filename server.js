@@ -923,18 +923,23 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     .slice(0, limite)
     .map(d => ({ data: d.data, deveres: [d.dever] }));
 
-  // MATÉRIA DO TESTE: as DUAS mais recentes até hoje (a de hoje e a anterior),
-  // porque o professor pode aplicar qualquer uma das duas. Formato "ANTERIOR ou HOJE".
+  // MATÉRIA DO TESTE: o professor pode aplicar (a) o conteúdo da última TAREFA/aula de
+  // hoje, ou (b) o último TESTE marcado. Mostra os dois como "TESTE_ANTERIOR ou AULA_HOJE".
+  // Ex: TESTE 22/5 LEIS DE NEWTON (teste) + TAREFA 19/6 TRABALHO E POTENCIA (aula de hoje)
+  //  -> "LEIS DE NEWTON ou TRABALHO E POTENCIA".
   const testesAteHoje = testes.filter(t => t.num <= refNum);
-  const doisTestes = testesAteHoje.slice(0, 2); // [mais recente, anterior]
+  const ultimoTeste = testesAteHoje[0] || null;        // ex: Leis de Newton
+  const conteudoHoje = deverHoje ? deverHoje.dever : ''; // ex: Trabalho e Potencia (tarefa de hoje)
   let materia_teste = '', materia_teste_data = '';
-  if (doisTestes.length >= 2) {
-    // ordem de leitura: anterior primeiro, depois a de hoje (cronológica)
-    materia_teste = doisTestes[1].conteudo + ' ou ' + doisTestes[0].conteudo;
-    materia_teste_data = doisTestes[0].data;
-  } else if (doisTestes.length === 1) {
-    materia_teste = doisTestes[0].conteudo;
-    materia_teste_data = doisTestes[0].data;
+  const partes = [];
+  if (ultimoTeste && ultimoTeste.conteudo) partes.push(ultimoTeste.conteudo);
+  // só adiciona a aula de hoje se for diferente do último teste (evita repetir)
+  if (conteudoHoje && conteudoHoje.toLowerCase() !== (ultimoTeste ? ultimoTeste.conteudo.toLowerCase() : '')) {
+    partes.push(conteudoHoje);
+  }
+  if (partes.length) {
+    materia_teste = partes.join(' ou ');
+    materia_teste_data = deverHoje ? deverHoje.data : (ultimoTeste ? ultimoTeste.data : '');
   }
 
   let resumo = '';
