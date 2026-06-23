@@ -838,14 +838,32 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     .slice(0, limite)
     .map(g => ({ data: g.data, deveres: g.deveres }));
 
-  // MATÉRIA DO TESTE: a aula mais recente (até hoje) com descrição.
+  // MATÉRIA DO TESTE: a aula mais recente (maior número, até hoje) com descrição.
   // Linguística tem teste semanal, então sempre mostra o que cai.
   const aulasComDesc = aulas
     .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
-    .sort((a,b) => b.num - a.num);
+    .sort((a,b) => (b.numero||0) - (a.numero||0) || b.num - a.num); // maior nº de aula primeiro
   const linhaTeste = aulasComDesc[0] || null;
-  const materia_teste = linhaTeste ? linhaTeste.descricao : '';
+  let materia_teste = linhaTeste ? linhaTeste.descricao : '';
   const materia_teste_data = linhaTeste ? linhaTeste.data : '';
+
+  // limpa a descrição: a matéria do teste é o CONTEÚDO EXPOSITIVO da aula, sem a parte
+  // de "aplicação de testinho" (início) nem "atividades de fixação" (fim).
+  // Ex: "Aplicação do testinho... Em seguida, aula expositiva sobre discurso citado,
+  //  abordando os discursos direto, indireto e indireto livre, com exemplos. Posteriormente,
+  //  os alunos realizaram atividades de fixação..." -> "aula expositiva sobre discurso
+  //  citado, abordando os discursos direto, indireto e indireto livre".
+  if (materia_teste) {
+    let t = materia_teste;
+    // se há "Em seguida," / "Na sequência," pega o que vem depois (o conteúdo principal)
+    const mApos = t.match(/(?:em\s+seguida|na\s+sequ[êe]ncia|posteriormente)\s*,?\s*(aula\s+expositiva[^]*)/i);
+    if (mApos) t = mApos[1];
+    // corta a parte final de atividades/fixação/exercícios
+    t = t.split(/\.\s*(?:posteriormente|por\s+fim|em\s+seguida|ao\s+final|os\s+alunos\s+realizaram|atividades?\s+de\s+fixa|atividade\s+complementar)/i)[0];
+    // corta "com exemplos e explicações" e similares no fim (são acessórios, não conteúdo)
+    t = t.replace(/,?\s*com\s+exemplos?(\s+e\s+explica[çc][õo]es?)?\.?\s*$/i, '');
+    materia_teste = t.replace(/[.;\s]+$/,'').trim();
+  }
 
   // gera resumo + questões sobre a matéria do teste
   let resumo = '', questoes = [];
@@ -1122,6 +1140,29 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
   } catch (e) {
     tabela = { linhas: [], avaliacao:{tem:false} };
+  }
+
+  // EXTRAÇÃO DIRETA DO QUADRO DE TESTE (rotulado, ex: Matemática A do Tiago).
+  // O professor marca o teste num quadro fixo:
+  // "Teste 04 | Quarta-feira | 24/06/2026 | 2° Bimestre  Conteúdo: Introdução ao modelo
+  //  exponencial  Páginas: 139 até 141". Pegamos o Conteúdo do teste cuja data bate com
+  // a referência (ou o mais recente até a referência). Isso é mais confiável que a IA.
+  if (formato === 'rotulado') {
+    const quadros = [...(blogText || '').matchAll(/Teste\s+\d+\s*\|[^|]*\|\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*\|[^]*?Conte[úu]do:\s*([^]*?)(?=\s*P[áa]ginas:|\s*Teste\s+\d+\s*\||\s*DATA:|$)/gi)];
+    const testesQuadro = quadros
+      .map(m => ({ data: (m[1]||'').slice(0,5), num: dataParaNum(m[1]), conteudo: (m[2]||'').replace(/\s+/g,' ').trim() }))
+      .filter(t => t.num > 0 && t.conteudo)
+      .sort((a,b) => b.num - a.num);
+    if (testesQuadro.length) {
+      const refN = dataParaNum(dataRef || hojeStr());
+      // o teste da data de referência, ou o mais recente até ela, ou o próximo
+      const doDia = testesQuadro.find(t => t.data === (dataRef||'').slice(0,5));
+      const ateRef = testesQuadro.filter(t => t.num <= refN);
+      const escolhido = doDia || ateRef[0] || testesQuadro[0];
+      if (escolhido) {
+        tabela.avaliacao = { tem: true, data: escolhido.data, sobre: escolhido.conteudo };
+      }
+    }
   }
 
   // limpa lixo de navegação dos deveres
