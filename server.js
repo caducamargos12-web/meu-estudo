@@ -1434,29 +1434,38 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
   }
 
-  // processa UMA matéria por vez (sequencial). Mais estável: nunca sobrecarrega a
-  // IA, então não há mais falhas aleatórias por rate limit. Com cache, a primeira
-  // carga do dia é a única lenta.
-  // IMPORTANTE: matérias que JÁ estão boas no cache são servidas direto (não
-  // reprocessam). Só processa as que faltam ou falharam. Isso impede que um deploy
-  // ou um erro em uma matéria afete as outras que já estavam certas.
+  // processa as matérias em PARALELO, mas em lotes de no máximo 3 ao mesmo tempo.
+  // Isso é bem mais rápido que uma-por-vez (antes), sem sobrecarregar a IA (o que
+  // causava falhas em cascata quando todas rodavam juntas).
+  // Matérias que JÁ estão boas no cache são servidas direto (não reprocessam).
   const resultados = new Array(materias.length);
+  const LOTE = 3; // quantas matérias processar simultaneamente
+
+  // primeiro, serve as que já estão boas no cache (instantâneo)
+  const aProcessar = [];
   for (let i = 0; i < materias.length; i++) {
-    // já tem boa no cache? serve direto, não reprocessa
     if (cacheDia && itemBom(cacheDia[i])) {
       resultados[i] = cacheDia[i];
       res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:cacheDia[i], ehPrevia, cached:true }) + '\n\n');
-      continue;
+    } else {
+      aProcessar.push(i); // precisa processar
     }
-    const result = await processarMateria(materias[i]);
-    resultados[i] = result;
-    res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
-    // salva cada matéria bem-sucedida no cache IMEDIATAMENTE (incremental)
-    if (result && result.processadoOk === true) {
-      if (!Array.isArray(cache[chave])) cache[chave] = new Array(materias.length);
-      cache[chave][i] = result;
-      salvarCache();
-    }
+  }
+
+  // processa as que faltam, em lotes de LOTE por vez
+  for (let inicio = 0; inicio < aProcessar.length; inicio += LOTE) {
+    const lote = aProcessar.slice(inicio, inicio + LOTE);
+    await Promise.all(lote.map(async (i) => {
+      const result = await processarMateria(materias[i]);
+      resultados[i] = result;
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
+      // salva cada matéria bem-sucedida no cache imediatamente (incremental)
+      if (result && result.processadoOk === true) {
+        if (!Array.isArray(cache[chave])) cache[chave] = new Array(materias.length);
+        cache[chave][i] = result;
+        salvarCache();
+      }
+    }));
   }
   return offsetIndex + materias.length;
 }
