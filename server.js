@@ -565,43 +565,34 @@ async function obterHtml(url) {
     'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
     'Cache-Control': 'no-cache'
   };
-  // estratégias de busca, em ordem de preferência. Cada uma recebe a URL alvo.
+  // estratégias de busca, em ordem de preferência. Timeouts CURTOS para não travar o app:
+  // se uma estratégia demora, passa rápido para a próxima.
   const estrategias = [
-    // 1) direto (mais rápido quando o blog não bloqueia)
+    // 1) direto (rápido quando o blog não bloqueia)
     async () => {
-      const r = await fetch(url, { headers: headersNavegador, signal: AbortSignal.timeout(12000) });
+      const r = await fetch(url, { headers: headersNavegador, signal: AbortSignal.timeout(8000) });
       return r.ok ? await r.text() : null;
     },
     // 2) AllOrigins (proxy que devolve o conteúdo bruto)
     async () => {
-      const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
+      const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(10000) });
       return r.ok ? await r.text() : null;
     },
     // 3) corsproxy.io
     async () => {
-      const r = await fetch('https://corsproxy.io/?url=' + encodeURIComponent(url), { headers: headersNavegador, signal: AbortSignal.timeout(15000) });
-      return r.ok ? await r.text() : null;
-    },
-    // 4) Jina Reader (devolve texto já limpo; ainda assim passa pelo nosso parser)
-    async () => {
-      const r = await fetch('https://r.jina.ai/' + url, { signal: AbortSignal.timeout(20000) });
+      const r = await fetch('https://corsproxy.io/?url=' + encodeURIComponent(url), { headers: headersNavegador, signal: AbortSignal.timeout(10000) });
       return r.ok ? await r.text() : null;
     }
   ];
-  const nomes = ['direto', 'allorigins', 'corsproxy', 'jina'];
+  const nomes = ['direto', 'allorigins', 'corsproxy'];
   for (let idx = 0; idx < estrategias.length; idx++) {
-    const tentar = estrategias[idx];
-    for (let rep = 0; rep < 2; rep++) { // cada estratégia, 2 tentativas
-      try {
-        const html = await tentar();
-        // considera válido só se veio conteúdo de verdade (não página de erro curta)
-        if (html && html.length > 400) {
-          ultimaEstrategia = nomes[idx];
-          return html;
-        }
-      } catch (e) { /* tenta a próxima */ }
-      await new Promise(r => setTimeout(r, 600));
-    }
+    try {
+      const html = await estrategias[idx](); // UMA tentativa por estratégia (sem repetir)
+      if (html && html.length > 400) {
+        ultimaEstrategia = nomes[idx];
+        return html;
+      }
+    } catch (e) { /* tenta a próxima estratégia */ }
   }
   return null;
 }
@@ -1469,7 +1460,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // causava falhas em cascata quando todas rodavam juntas).
   // Matérias que JÁ estão boas no cache são servidas direto (não reprocessam).
   const resultados = new Array(materias.length);
-  const LOTE = 3; // quantas matérias processar simultaneamente
+  const LOTE = 2; // matérias simultâneas (2 é seguro p/ não sobrecarregar proxies públicos)
 
   // primeiro, serve as que já estão boas no cache (instantâneo)
   const aProcessar = [];
