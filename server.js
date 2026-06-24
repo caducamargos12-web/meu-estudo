@@ -1400,18 +1400,20 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     res.write('data: ' + JSON.stringify({ type:'loading', index:offsetIndex+i, materia:item.m, ehPrevia }) + '\n\n');
   });
 
-  // processa uma matéria, com até 3 tentativas (resiliente a falhas momentâneas da IA)
+  // processa uma matéria. O blog é buscado UMA vez (já tenta direto + proxies internamente).
+  // Só a chamada de IA tem retry, porque o gargalo lento (fetch com proxies) não deve ser
+  // multiplicado pelas tentativas — isso travava o app inteiro.
   async function processarMateria(item) {
     let ultimoErro = '';
+    // 1) busca o blog uma vez só
+    const blogText = await fetchBlog(item.url);
+    if (!blogText || blogText.length < 30) {
+      // blog indisponível (ex: Blogspot bloqueando). Não trava: retorna com aviso.
+      return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar o blog desta matéria agora. Recarregue em alguns instantes.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+    }
+    // 2) processa com IA, com até 3 tentativas (resiliente a falhas momentâneas da IA)
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        // busca o blog DENTRO do loop: se o blog falhar (timeout/fora do ar), uma nova
-        // tentativa busca de novo, em vez de desistir com blog vazio. Isso resolve o
-        // "não puxou nada" quando o blog do professor estava lento no momento.
-        const blogText = await fetchBlog(item.url);
-        if (!blogText || blogText.length < 30) {
-          throw new Error('blog vazio ou indisponível');
-        }
         const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
@@ -1621,6 +1623,34 @@ app.get('/api/today', auth, async function(req, res) {
 // ── página do painel admin ───────────────────────────────────────────────────
 // ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
 // uso: /api/diag?senha=ADMIN_SENHA&materia=Matemática A
+// teste de busca de blog: mostra qual estratégia funciona, sem usar IA.
+// Ex: /api/testar-fetch?senha=ADMIN&url=https://profsauloanglo.blogspot.com/p/mat-b.html
+app.get('/api/testar-fetch', async (req, res) => {
+  if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
+  const url = req.query.url || 'https://profsauloanglo.blogspot.com/p/mat-b.html';
+  const resultado = { url, estrategias: [] };
+  const headersNavegador = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+  };
+  const testes = [
+    ['direto', url, { headers: headersNavegador }],
+    ['allorigins', 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}],
+    ['corsproxy', 'https://corsproxy.io/?url=' + encodeURIComponent(url), { headers: headersNavegador }]
+  ];
+  for (const [nome, u, opts] of testes) {
+    const t0 = Date.now();
+    try {
+      const r = await fetch(u, Object.assign({ signal: AbortSignal.timeout(12000) }, opts));
+      const txt = await r.text();
+      resultado.estrategias.push({ nome, status: r.status, tamanho: txt.length, ms: Date.now()-t0, ok: r.ok && txt.length > 400 });
+    } catch (e) {
+      resultado.estrategias.push({ nome, erro: e.message, ms: Date.now()-t0 });
+    }
+  }
+  res.json(resultado);
+});
+
 app.get('/api/diag', async (req, res) => {
   if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
     return res.status(401).json({ error: 'senha invalida' });
