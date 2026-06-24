@@ -657,8 +657,10 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
     signal: AbortSignal.timeout(45000)
   });
   const data = await res.json();
+  // qualquer erro da API: se for not_found (modelo não existe), tenta o próximo modelo
   if (data.type === 'error' && data.error && data.error.type === 'not_found_error') {
-    return callAnthropic(prompt, modelIndex + 1);
+    if (modelIndex + 1 < MODELS.length) return callAnthropic(prompt, modelIndex + 1);
+    throw new Error('Modelo não encontrado: ' + (data.error.message || ''));
   }
   // rate limit (429) ou sobrecarga (529): espera e tenta de novo (até 3 vezes)
   if (data.type === 'error' && data.error && /rate_limit|overloaded/i.test(data.error.type || '')) {
@@ -668,8 +670,13 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
     }
     throw new Error('IA sobrecarregada');
   }
+  // qualquer OUTRO erro da API (auth, permissão, billing, request inválido): expõe a
+  // mensagem real, em vez de "resposta inesperada". Isso facilita o diagnóstico.
+  if (data.type === 'error' && data.error) {
+    throw new Error('Erro da API [' + (data.error.type||'?') + ']: ' + (data.error.message || 'sem detalhe'));
+  }
   if (!data.content || !Array.isArray(data.content)) {
-    throw new Error('Resposta inesperada da IA');
+    throw new Error('Resposta sem conteúdo: ' + JSON.stringify(data).slice(0, 300));
   }
   const raw = data.content.map(function(i){ return i.text || ''; }).join('').replace(/```json|```/g, '').trim();
   try {
@@ -1626,14 +1633,27 @@ app.get('/api/today', auth, async function(req, res) {
 app.get('/api/testar-ia', async (req, res) => {
   if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
   const inicio = Date.now();
-  const temKey = !!process.env.ANTHROPIC_API_KEY;
-  const tamanhoKey = (process.env.ANTHROPIC_API_KEY || '').length;
+  const key = process.env.ANTHROPIC_API_KEY || '';
+  const temKey = !!key;
+  const tamanhoKey = key.length;
+  // checa se a chave tem espaços/quebras invisíveis (causa comum de erro de auth)
+  const keyTemEspaco = /\s/.test(key);
+  const keyComeca = key.slice(0, 7); // ex: "sk-ant-" (não expõe a chave toda)
+  // faz a chamada CRUA à API, capturando status e corpo, para diagnóstico completo
+  let diagBruto = {};
   try {
-    const r = await callAnthropic('Responda APENAS com este JSON exato: {"ok":"sim"}', 0);
-    res.json({ temKey, tamanhoKey, sucesso: true, resposta: r, ms: Date.now()-inicio });
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key.trim(), 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 50, messages: [{ role:'user', content:'diga: ok' }] }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const corpo = await r.json();
+    diagBruto = { status: r.status, corpo };
   } catch (e) {
-    res.json({ temKey, tamanhoKey, sucesso: false, erro: e.message, ms: Date.now()-inicio });
+    diagBruto = { erroFetch: e.message };
   }
+  res.json({ temKey, tamanhoKey, keyTemEspaco, keyComeca, ms: Date.now()-inicio, apiBruta: diagBruto });
 });
 
 // ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
