@@ -1621,10 +1621,22 @@ app.get('/api/today', auth, async function(req, res) {
 });
 
 // ── página do painel admin ───────────────────────────────────────────────────
+// teste da chamada de IA isolada: mostra se a API da Anthropic responde no Railway.
+// uso: /api/testar-ia?senha=ADMIN_SENHA
+app.get('/api/testar-ia', async (req, res) => {
+  if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
+  const inicio = Date.now();
+  const temKey = !!process.env.ANTHROPIC_API_KEY;
+  const tamanhoKey = (process.env.ANTHROPIC_API_KEY || '').length;
+  try {
+    const r = await callAnthropic('Responda APENAS com este JSON exato: {"ok":"sim"}', 0);
+    res.json({ temKey, tamanhoKey, sucesso: true, resposta: r, ms: Date.now()-inicio });
+  } catch (e) {
+    res.json({ temKey, tamanhoKey, sucesso: false, erro: e.message, ms: Date.now()-inicio });
+  }
+});
+
 // ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
-// uso: /api/diag?senha=ADMIN_SENHA&materia=Matemática A
-// teste de busca de blog: mostra qual estratégia funciona, sem usar IA.
-// Ex: /api/testar-fetch?senha=ADMIN&url=https://profsauloanglo.blogspot.com/p/mat-b.html
 app.get('/api/testar-fetch', async (req, res) => {
   if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
   const url = req.query.url || 'https://profsauloanglo.blogspot.com/p/mat-b.html';
