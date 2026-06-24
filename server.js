@@ -493,12 +493,12 @@ const GRADE = {
   qua: [
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html', formato:'duasAulas' },
     { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html', formato:'rotulado' },
-    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
+    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14, linkEstudo:'https://drive.google.com/file/d/1qo7bJWbUPA3Yz3W9dvBKNSYCCdHRkwpY/view?usp=drivesdk', linkEstudoLabel:'Arquivo de estudos do 2º bimestre' },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true },
-    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulado' },
+    { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
@@ -512,7 +512,10 @@ const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'
 // modelos em ordem de uso. Haiku primeiro (barato e rápido). Se ele falhar em gerar
 // JSON válido, o sistema sobe automaticamente para o Sonnet (mais capaz). Assim, o
 // custo fica baixo no caso comum, e o Sonnet só é usado quando realmente precisa.
-const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6','claude-sonnet-4-5-20250929','claude-opus-4-8'];
+// Haiku é o principal (barato e rápido). Sonnet 4.6 é a ÚNICA reserva, usada só se o
+// Haiku gerar JSON inválido. O Opus foi removido da cadeia: é caro demais para extração
+// de blog e disparava o custo quando entrava no fallback.
+const MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-6'];
 
 // ════════════════════════════════════════════════════════════════════════════
 // CACHE DE 24H — processa cada matéria 1x por dia, salva em disco
@@ -630,7 +633,9 @@ async function fetchBlog(url) {
     // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
     const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
     texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
-    const textoFinal = texto.length > 14000 ? texto.slice(texto.length - 14000) : texto;
+    // envia só os 7000 caracteres finais (aulas mais recentes) à IA. Cortar pela metade
+    // reduz o custo por matéria, sem perder as aulas recentes que importam para o teste.
+    const textoFinal = texto.length > 7000 ? texto.slice(texto.length - 7000) : texto;
     blogCache[url] = { texto: textoFinal, ts: Date.now() }; // guarda no cache de memória
     return textoFinal;
   } catch { return null; }
@@ -1026,6 +1031,68 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
 
 // ── química A: blog é uma lista de "DD/MM - TESTE N - CONTEÚDO" ──────────────
 // a matéria do teste é o TESTE da data de referência (ou o mais recente até hoje).
+// Matemática B (Saulo): blog em texto corrido com rótulos.
+// Formato: "DATA: DD/MM/AAAA MÓDULO: N MATÉRIA: X PAG: Y TAREFA: Z" (repetido).
+// Extração determinística (sem IA): mais confiável e custo zero.
+async function processarRotulosSaulo(materia, professor, blogText, dataRef) {
+  const ref = dataRef || hojeStr();
+  const refNum = dataParaNum(ref);
+  const refDDMM = ref.slice(0,5);
+
+  // extrai cada bloco DATA/MATÉRIA/TAREFA
+  const re = /DATA:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(?:M[ÓO]DULO:\s*\d+\s*)?MAT[ÉE]RIA:\s*(.+?)\s*(?:PAG\.?:\s*.+?\s*)?TAREFA:\s*(.+?)(?=\s*DATA:|$)/gi;
+  const linhas = [...(blogText || '').matchAll(re)]
+    .map(m => ({
+      data: m[1].slice(0,5),
+      num: dataParaNum(m[1]),
+      materia: (m[2] || '').replace(/\s+/g,' ').trim(),
+      tarefa: (m[3] || '').replace(/\s+/g,' ').trim()
+    }))
+    .filter(l => l.num > 0 && l.materia && !ehEventoEscolar(l.materia));
+
+  // AULA DE HOJE: a linha com data igual à referência (ou a mais recente até hoje)
+  const ateHoje = linhas.filter(l => l.num <= refNum).sort((a,b) => b.num - a.num);
+  const linhaHoje = linhas.find(l => l.data === refDDMM) || ateHoje[0] || null;
+  const aula_hoje = linhaHoje ? linhaHoje.materia : '';
+
+  // DEVER DESTA AULA: a TAREFA da linha de hoje (se não for "testinho", que é avaliação)
+  const deveres_aula = [];
+  if (linhaHoje && linhaHoje.tarefa && !/testinho|teste\b/i.test(linhaHoje.tarefa)) {
+    deveres_aula.push(linhaHoje.tarefa);
+  }
+
+  // DEVERES PENDENTES: tarefas das aulas recentes anteriores a hoje (até 2), que sejam
+  // tarefas de verdade (não "testinho"), agrupadas por data.
+  const pendentes = [];
+  for (const l of ateHoje) {
+    if (l.data === refDDMM) continue; // a de hoje não é pendente
+    if (l.tarefa && !/testinho|teste\b/i.test(l.tarefa)) {
+      pendentes.push({ data: l.data, deveres: [l.tarefa] });
+    }
+    if (pendentes.length >= 2) break;
+  }
+
+  // MATÉRIA DO TESTE: o "testinho" marcado. No blog do Saulo, quando uma aula tem
+  // TAREFA: TESTINHO, o conteúdo do teste é a matéria daquela aula. Pega o testinho
+  // mais recente até hoje.
+  let materia_teste = '', materia_teste_data = '';
+  const comTestinho = ateHoje.filter(l => /testinho/i.test(l.tarefa));
+  if (comTestinho.length) {
+    materia_teste = comTestinho[0].materia;
+    materia_teste_data = comTestinho[0].data;
+  }
+
+  return {
+    aula_hoje,
+    aula_data: linhaHoje ? linhaHoje.data : '',
+    deveres_pendentes: pendentes,
+    deveres_aula,
+    tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
+    resumo: '', questoes: [],
+    proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
+  };
+}
+
 async function processarTestesPorData(materia, professor, blogText, dataRef) {
   const ref = dataRef || hojeStr();
   const refNum = dataParaNum(ref);
@@ -1071,6 +1138,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // química A: blog é uma lista de "DD/MM - TESTE N - CONTEÚDO"
   if (formato === 'testesPorData') {
     return processarTestesPorData(materia, professor, blogText, dataRef);
+  }
+  // Matemática B (Saulo): blog com rótulos "DATA: DD/MM/AAAA MÓDULO: N MATÉRIA: X PAG: Y
+  // TAREFA: Z" em texto corrido (não é tabela com barras). Extração 100% por código.
+  if (formato === 'rotulosSaulo') {
+    return processarRotulosSaulo(materia, professor, blogText, dataRef);
   }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
