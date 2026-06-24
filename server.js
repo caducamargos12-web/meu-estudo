@@ -548,7 +548,18 @@ function chaveCacheHoje(dayKey) {
 }
 
 // ── busca blog ──────────────────────────────────────────────────────────────
+// cache de blogs em memória: o mesmo blog (URL) é usado por várias matérias e dias
+// (ex: Mat B aparece quarta e quinta). Sem isso, o mesmo blog era baixado várias vezes,
+// o que deixava o carregamento MUITO lento. Cada blog fica em cache por 10 minutos.
+const blogCache = {}; // url -> { texto, ts }
+const BLOG_CACHE_MS = 10 * 60 * 1000; // 10 minutos
+
 async function fetchBlog(url) {
+  // serve do cache de memória se foi buscado há menos de 10 min
+  const cached = blogCache[url];
+  if (cached && (Date.now() - cached.ts) < BLOG_CACHE_MS) {
+    return cached.texto;
+  }
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StudyBot/1.0)' },
@@ -580,7 +591,9 @@ async function fetchBlog(url) {
     // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
     const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
     texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
-    return texto.length > 14000 ? texto.slice(texto.length - 14000) : texto;
+    const textoFinal = texto.length > 14000 ? texto.slice(texto.length - 14000) : texto;
+    blogCache[url] = { texto: textoFinal, ts: Date.now() }; // guarda no cache de memória
+    return textoFinal;
   } catch { return null; }
 }
 
@@ -782,13 +795,14 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     '\nExtraia TODAS as aulas numeradas que tiverem data. Para cada uma:' +
     '\n- "numero": o número da aula (ex: 9, 10).' +
     '\n- "data": a data dela (DD/MM).' +
-    '\n- "descricao": o conteúdo da aula COMO ESTÁ ESCRITO no blog, completo (não resuma nem encurte). Ex: "aula expositiva sobre discurso citado, abordando os discursos direto, indireto e indireto livre". Copie a explicação inteira do que foi dado na aula.' +
+    '\n- "descricao": o conteúdo da aula como está escrito no blog (completo). Ex: "aula expositiva sobre discurso citado, abordando os discursos direto, indireto e indireto livre".' +
+    '\n- "tema": o TÓPICO central da aula em poucas palavras, SÓ o assunto estudado, sem verbos nem "aula expositiva sobre". Ex: para a descrição acima, o tema é "discurso direto, indireto e indireto livre". Para "estudo das orações subordinadas substantivas", o tema é "orações subordinadas substantivas".' +
     '\n- "atividades": lista das atividades/deveres daquela aula (ex: "Atividades na apostila nas páginas 37-38-39"). Se não houver, [].' +
     '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, Atom, "Escolha a turma", "Pesquisar este blog", nome do professor solto) e eventos da escola (CopaAnglo, gincana, etc.).' +
     '\nNÃO invente. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
-    '\n{"aulas":[{"numero":9,"data":"DD/MM","descricao":"texto","atividades":["..."]}]}';
+    '\n{"aulas":[{"numero":9,"data":"DD/MM","descricao":"texto","tema":"tópico curto","atividades":["..."]}]}';
 
   let dados;
   try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { aulas: [] }; }
@@ -801,6 +815,7 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
       data: (a.data||'').slice(0,5),
       num: dataParaNum(a.data),
       descricao: (a.descricao||'').trim(),
+      tema: (a.tema||'').trim(),
       atividades: (a.atividades||[]).filter(d => d && d.trim() && !ehLixo(d))
     }))
     .filter(a => a.num > 0);
@@ -844,16 +859,14 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
     .sort((a,b) => (b.numero||0) - (a.numero||0) || b.num - a.num); // maior nº de aula primeiro
   const linhaTeste = aulasComDesc[0] || null;
-  let materia_teste = linhaTeste ? linhaTeste.descricao : '';
+  // a matéria do teste é o TEMA curto (ex: "discurso direto, indireto e indireto livre").
+  // Se a IA não extraiu o tema, cai na descrição limpa como reserva.
+  let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
   const materia_teste_data = linhaTeste ? linhaTeste.data : '';
 
-  // limpa a descrição: a matéria do teste é o CONTEÚDO EXPOSITIVO da aula, sem a parte
-  // de "aplicação de testinho" (início) nem "atividades de fixação" (fim).
-  // Ex: "Aplicação do testinho... Em seguida, aula expositiva sobre discurso citado,
-  //  abordando os discursos direto, indireto e indireto livre, com exemplos. Posteriormente,
-  //  os alunos realizaram atividades de fixação..." -> "aula expositiva sobre discurso
-  //  citado, abordando os discursos direto, indireto e indireto livre".
-  if (materia_teste) {
+  // se usou a descrição (sem tema), limpa: remove "aplicação de testinho" (início) e
+  // "atividades de fixação" (fim), deixando o conteúdo expositivo.
+  if (materia_teste && linhaTeste && !linhaTeste.tema) {
     let t = materia_teste;
     // se há "Em seguida," / "Na sequência," pega o que vem depois (o conteúdo principal)
     const mApos = t.match(/(?:em\s+seguida|na\s+sequ[êe]ncia|posteriormente)\s*,?\s*(aula\s+expositiva[^]*)/i);
@@ -1298,28 +1311,10 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   }
 
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
+  // RESUMO e SIMULADO agora são gerados SOB DEMANDA (quando o aluno abre a matéria),
+  // não no carregamento. Isso deixa a carga do dia quase 2x mais rápida, porque elimina
+  // uma chamada de IA por matéria. O front pede o resumo via /api/resumo ao expandir.
   let resumo = '', questoes = [];
-  const precisaResumo = (tipo !== 'soDever') && tem_avaliacao && materia_teste;
-  if (precisaResumo) {
-    const promptResumo = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
-      'O aluno tem um teste sobre: "' + materia_teste + '".\n' +
-      'Faça um RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
-      '\nResponda APENAS JSON sem markdown:\n' +
-      '{"resumo":"texto"}';
-    try {
-      const r = await callAnthropic(promptResumo, 0);
-      resumo = r.resumo || '';
-      questoes = []; // simulado é gerado só quando o aluno clicar (economia de tokens)
-    } catch (e) { resumo = ''; questoes = []; }
-  } else if (tipo !== 'soDever') {
-    // sem avaliação: um resumo curto da aula do dia, se houver
-    if (aula_hoje) {
-      try {
-        const r = await callAnthropic('Resuma em 2-3 frases, de forma didática, o conteúdo desta aula de ' + materia + ': "' + aula_hoje + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
-        resumo = r.resumo || '';
-      } catch(e){ resumo=''; }
-    }
-  }
 
   return {
     aula_hoje, aula_data: linhaRef ? linhaRef.data.slice(0,5) : '',
@@ -1387,10 +1382,16 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
 
   // processa uma matéria, com até 3 tentativas (resiliente a falhas momentâneas da IA)
   async function processarMateria(item) {
-    const blogText = await fetchBlog(item.url);
     let ultimoErro = '';
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
+        // busca o blog DENTRO do loop: se o blog falhar (timeout/fora do ar), uma nova
+        // tentativa busca de novo, em vez de desistir com blog vazio. Isso resolve o
+        // "não puxou nada" quando o blog do professor estava lento no momento.
+        const blogText = await fetchBlog(item.url);
+        if (!blogText || blogText.length < 30) {
+          throw new Error('blog vazio ou indisponível');
+        }
         const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
@@ -1473,6 +1474,23 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
 // ── aluno envia um report de erro ────────────────────────────────────────────
 // ── gera o simulado (4 questões) sob demanda, quando o aluno clica ───────────
 // economiza tokens: só gera quando o aluno realmente quer revisar
+// ── gera o RESUMO da matéria do teste sob demanda (quando o aluno abre a matéria) ──
+app.post('/api/resumo', auth, async (req, res) => {
+  const materia = (req.body.materia || '').slice(0, 60);
+  const assunto = (req.body.assunto || '').slice(0, 300);
+  if (!assunto) return res.json({ resumo: '' });
+  try {
+    const prompt = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
+      'O aluno tem um teste sobre: "' + assunto + '".\n' +
+      'Faça um RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
+      'Responda APENAS JSON sem markdown:\n{"resumo":"texto"}';
+    const r = await callAnthropic(prompt, 0);
+    res.json({ resumo: r.resumo || '' });
+  } catch (e) {
+    res.json({ resumo: '' });
+  }
+});
+
 app.post('/api/simulado', auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const materiaTeste = (req.body.materiaTeste || '').slice(0, 300);

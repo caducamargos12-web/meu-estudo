@@ -619,8 +619,41 @@ function toggleCard(idx){
   // se o clicado não estava aberto, abre ele
   if(!jaAberto){
     alvo.classList.add('open');
+    carregarResumo(idx); // gera o resumo sob demanda (só na primeira vez que abre)
     // rola suave até o card aberto
     setTimeout(()=>{alvo.scrollIntoView({behavior:'smooth',block:'start'});},120);
+  }
+}
+
+// gera o resumo da matéria quando o aluno abre o card (sob demanda, cacheado na sessão)
+const resumosGerados = {};
+async function carregarResumo(idx){
+  const card=document.getElementById('card-'+idx);
+  if(!card)return;
+  const alvo=card.querySelector('[id^="resumo-"]');
+  if(!alvo)return;
+  const cardId=alvo.id.replace('resumo-','');
+  if(resumosGerados[cardId])return; // já gerado nesta sessão
+  const assunto=alvo.getAttribute('data-assunto')||'';
+  const materia=alvo.getAttribute('data-materia')||'';
+  if(!assunto)return;
+  resumosGerados[cardId]='loading';
+  try{
+    const res=await fetch('/api/resumo',{
+      method:'POST',headers:{'Content-Type':'application/json','x-session-token':localStorage.getItem('sessionToken')||''},
+      body:JSON.stringify({materia,assunto})
+    });
+    const data=await res.json();
+    if(data.resumo){
+      alvo.innerHTML=data.resumo.replace(/\n/g,'<br>');
+      resumosGerados[cardId]='done';
+    }else{
+      alvo.innerHTML='<span class="muted">Resumo indisponível no momento.</span>';
+      resumosGerados[cardId]=null; // permite tentar de novo
+    }
+  }catch(e){
+    alvo.innerHTML='<span class="muted">Resumo indisponível no momento.</span>';
+    resumosGerados[cardId]=null;
   }
 }
 
@@ -739,10 +772,13 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}</span></div>
           <div class="blk-body">${item.materia_teste||'—'}</div>
         </div>` : '';
-  const blocoResumoHtml = mostrarResumo ? `
+  // o resumo é gerado SOB DEMANDA quando o card abre (deixa o carregamento do dia rápido)
+  const assuntoResumo = mostrarTeste ? (item.materia_teste||'') : (item.aula_hoje||'');
+  const podeResumo = tipo!=='soDever' && assuntoResumo && assuntoResumo.trim().length>1;
+  const blocoResumoHtml = podeResumo ? `
         <div class="blk blk-res">
           <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">${mostrarTeste?'Resumo da matéria do teste':'Resumo da aula'}</span></div>
-          <div class="blk-body">${(item.resumo||'').replace(/\n/g,'<br>')||'—'}</div>
+          <div class="blk-body" id="resumo-${cardId}" data-assunto="${assuntoResumo.replace(/"/g,'&quot;')}" data-materia="${(item.m||'').replace(/"/g,'&quot;')}"><span class="resumo-loading">Gerando resumo…</span></div>
         </div>` : '';
   const blocoSimuladoHtml = podeSimulado ? `
         <div class="blk blk-quiz" id="quiz-wrap-${cardId}">
