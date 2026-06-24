@@ -560,13 +560,28 @@ async function fetchBlog(url) {
   if (cached && (Date.now() - cached.ts) < BLOG_CACHE_MS) {
     return cached.texto;
   }
+  // o Blogspot às vezes bloqueia (403) requisições automatizadas. Tentamos algumas
+  // vezes, com User-Agent de navegador real e headers que parecem um acesso normal.
+  const headersNavegador = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'no-cache'
+  };
+  let html = null;
+  for (let tent = 0; tent < 3; tent++) {
+    try {
+      const res = await fetch(url, { headers: headersNavegador, signal: AbortSignal.timeout(12000) });
+      if (res.ok) { html = await res.text(); break; }
+      // 403/429/5xx: espera e tenta de novo (o bloqueio do Blogspot costuma ser temporário)
+      if (tent < 2) await new Promise(r => setTimeout(r, 1200 * (tent + 1)));
+    } catch (e) {
+      if (tent < 2) await new Promise(r => setTimeout(r, 1200 * (tent + 1)));
+    }
+  }
+  if (!html) return null; // falhou nas 3 tentativas; NÃO cacheia (deixa tentar de novo depois)
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StudyBot/1.0)' },
-      signal: AbortSignal.timeout(12000)
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
     let texto = html
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -754,14 +769,8 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
     testeData = refDDMM;
   }
 
-  // resumo da matéria do teste do dia
+  // resumo gerado sob demanda (quando o aluno abre a matéria), não aqui
   let resumoTeste = '';
-  if (testeMateria) {
-    try {
-      const r = await callAnthropic('Você é tutor de História. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + testeMateria + '", para revisão de teste do ensino médio. Responda APENAS JSON: {"resumo":"texto"}', 0);
-      resumoTeste = r.resumo || '';
-    } catch (e) { resumoTeste = ''; }
-  }
 
   return {
     aula_hoje,
@@ -853,12 +862,20 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     .slice(0, limite)
     .map(g => ({ data: g.data, deveres: g.deveres }));
 
-  // MATÉRIA DO TESTE: a aula mais recente (maior número, até hoje) com descrição.
-  // Linguística tem teste semanal, então sempre mostra o que cai.
-  const aulasComDesc = aulas
-    .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
-    .sort((a,b) => (b.numero||0) - (a.numero||0) || b.num - a.num); // maior nº de aula primeiro
-  const linhaTeste = aulasComDesc[0] || null;
+  // MATÉRIA DO TESTE: a PRIMEIRA aula do dia da referência (menor número de aula daquela
+  // data). Ex: hoje tem aula 11 e 12; a matéria do teste está na aula 11.
+  // Se não houver aula exatamente na data de hoje, usa a aula mais recente até hoje.
+  const aulasDoDiaRef = aulas
+    .filter(a => a.descricao && a.descricao.length > 3 && a.data === refDDMM)
+    .sort((a,b) => (a.numero||0) - (b.numero||0)); // menor nº de aula primeiro (a primeira)
+  let linhaTeste = aulasDoDiaRef[0] || null;
+  if (!linhaTeste) {
+    // sem aula hoje: pega a aula mais recente até hoje (maior número)
+    const recentes = aulas
+      .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
+      .sort((a,b) => (b.numero||0) - (a.numero||0) || b.num - a.num);
+    linhaTeste = recentes[0] || null;
+  }
   // a matéria do teste é o TEMA curto (ex: "discurso direto, indireto e indireto livre").
   // Se a IA não extraiu o tema, cai na descrição limpa como reserva.
   let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
@@ -879,17 +896,8 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   }
 
   // gera resumo + questões sobre a matéria do teste
+  // resumo e simulado são gerados SOB DEMANDA (quando o aluno abre a matéria), não aqui.
   let resumo = '', questoes = [];
-  if (materia_teste) {
-    try {
-      const r = await callAnthropic(
-        'Você é tutor de ' + materia + ' do ensino médio. O aluno tem teste sobre: "' + materia_teste + '".\n' +
-        'Faça: 1) RESUMO didático de 3-4 parágrafos. 2) 4 questões de múltipla escolha (A-D) com resposta e explicação.\n' +
-        'Responda APENAS JSON sem markdown: {"resumo":"texto","questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}', 0);
-      resumo = r.resumo || '';
-      questoes = Array.isArray(r.questoes) ? r.questoes : [];
-    } catch (e) { resumo = ''; questoes = []; }
-  }
 
   return {
     aula_hoje,
@@ -973,13 +981,7 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     materia_teste_data = deverHoje ? deverHoje.data : (ultimoTeste ? ultimoTeste.data : '');
   }
 
-  let resumo = '';
-  if (materia_teste) {
-    try {
-      const r = await callAnthropic('Você é tutor de ' + materia + '. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + materia_teste + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
-      resumo = r.resumo || '';
-    } catch (e) { resumo = ''; }
-  }
+  let resumo = ''; // resumo gerado sob demanda (ao abrir a matéria)
 
   return {
     aula_hoje,
@@ -1010,13 +1012,7 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   const materia_teste = testeAtual ? testeAtual.conteudo : '';
   const materia_teste_data = testeAtual ? testeAtual.data : '';
 
-  let resumo = '';
-  if (materia_teste) {
-    try {
-      const r = await callAnthropic('Você é tutor de ' + materia + '. Faça um RESUMO didático de 3-4 parágrafos sobre: "' + materia_teste + '". Responda APENAS JSON: {"resumo":"texto"}', 0);
-      resumo = r.resumo || '';
-    } catch (e) { resumo = ''; }
-  }
+  let resumo = ''; // resumo gerado sob demanda (ao abrir a matéria)
 
   return {
     aula_hoje: materia_teste ? ('Teste: ' + materia_teste) : '',
