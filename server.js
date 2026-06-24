@@ -552,7 +552,59 @@ function chaveCacheHoje(dayKey) {
 // (ex: Mat B aparece quarta e quinta). Sem isso, o mesmo blog era baixado várias vezes,
 // o que deixava o carregamento MUITO lento. Cada blog fica em cache por 10 minutos.
 const blogCache = {}; // url -> { texto, ts }
-const BLOG_CACHE_MS = 10 * 60 * 1000; // 10 minutos
+const BLOG_CACHE_MS = 30 * 60 * 1000; // 30 minutos (blogs mudam pouco; reduz buscas e uso de proxy)
+
+let ultimaEstrategia = ''; // qual estratégia de busca funcionou por último (p/ diagnóstico)
+// busca o HTML de uma URL. Tenta DIRETO primeiro; se falhar (ex: Blogspot bloqueia com
+// 403 o IP do servidor), tenta por proxies de leitura públicos, em cascata, até um
+// funcionar. Isso resolve o "não puxou nada" causado pelo bloqueio do Blogspot.
+async function obterHtml(url) {
+  const headersNavegador = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+    'Cache-Control': 'no-cache'
+  };
+  // estratégias de busca, em ordem de preferência. Cada uma recebe a URL alvo.
+  const estrategias = [
+    // 1) direto (mais rápido quando o blog não bloqueia)
+    async () => {
+      const r = await fetch(url, { headers: headersNavegador, signal: AbortSignal.timeout(12000) });
+      return r.ok ? await r.text() : null;
+    },
+    // 2) AllOrigins (proxy que devolve o conteúdo bruto)
+    async () => {
+      const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
+      return r.ok ? await r.text() : null;
+    },
+    // 3) corsproxy.io
+    async () => {
+      const r = await fetch('https://corsproxy.io/?url=' + encodeURIComponent(url), { headers: headersNavegador, signal: AbortSignal.timeout(15000) });
+      return r.ok ? await r.text() : null;
+    },
+    // 4) Jina Reader (devolve texto já limpo; ainda assim passa pelo nosso parser)
+    async () => {
+      const r = await fetch('https://r.jina.ai/' + url, { signal: AbortSignal.timeout(20000) });
+      return r.ok ? await r.text() : null;
+    }
+  ];
+  const nomes = ['direto', 'allorigins', 'corsproxy', 'jina'];
+  for (let idx = 0; idx < estrategias.length; idx++) {
+    const tentar = estrategias[idx];
+    for (let rep = 0; rep < 2; rep++) { // cada estratégia, 2 tentativas
+      try {
+        const html = await tentar();
+        // considera válido só se veio conteúdo de verdade (não página de erro curta)
+        if (html && html.length > 400) {
+          ultimaEstrategia = nomes[idx];
+          return html;
+        }
+      } catch (e) { /* tenta a próxima */ }
+      await new Promise(r => setTimeout(r, 600));
+    }
+  }
+  return null;
+}
 
 async function fetchBlog(url) {
   // serve do cache de memória se foi buscado há menos de 10 min
@@ -560,27 +612,8 @@ async function fetchBlog(url) {
   if (cached && (Date.now() - cached.ts) < BLOG_CACHE_MS) {
     return cached.texto;
   }
-  // o Blogspot às vezes bloqueia (403) requisições automatizadas. Tentamos algumas
-  // vezes, com User-Agent de navegador real e headers que parecem um acesso normal.
-  const headersNavegador = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Cache-Control': 'no-cache'
-  };
-  let html = null;
-  for (let tent = 0; tent < 3; tent++) {
-    try {
-      const res = await fetch(url, { headers: headersNavegador, signal: AbortSignal.timeout(12000) });
-      if (res.ok) { html = await res.text(); break; }
-      // 403/429/5xx: espera e tenta de novo (o bloqueio do Blogspot costuma ser temporário)
-      if (tent < 2) await new Promise(r => setTimeout(r, 1200 * (tent + 1)));
-    } catch (e) {
-      if (tent < 2) await new Promise(r => setTimeout(r, 1200 * (tent + 1)));
-    }
-  }
-  if (!html) return null; // falhou nas 3 tentativas; NÃO cacheia (deixa tentar de novo depois)
+  const html = await obterHtml(url);
+  if (!html) return null; // todas as estratégias falharam; NÃO cacheia (tenta de novo depois)
   try {
     let texto = html
       .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -1663,6 +1696,7 @@ app.get('/api/diag', async (req, res) => {
     blogVazio: !blogText || blogText.length < 50,
     tamanhoBlog: (blogText||'').length,
     ETAPA_EXTRACAO_IA: etapaExtracao ? { qtdLinhas: (etapaExtracao.linhas||[]).length, primeiras3: (etapaExtracao.linhas||[]).slice(0,3), erro: etapaExtracao.erro } : 'N/A',
+    METODO_DE_BUSCA: ultimaEstrategia || '(nao buscou)',
     TEXTO_DO_BLOG: (blogText||'(vazio)').slice(-2800),
     RESULTADO_FINAL: {
       aula_hoje: resultadoFinal.aula_hoje,
