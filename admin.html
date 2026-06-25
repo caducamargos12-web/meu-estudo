@@ -114,6 +114,21 @@
         A senha é guardada de forma segura (criptografada), nunca em texto puro. Para <strong style="color:var(--text)">trocar a senha</strong> ou <strong style="color:var(--text)">remover</strong> um aluno, use os botões na lista de alunos acima.<br><br>
         O botão <strong style="color:var(--accent)">Liberar dispositivos</strong> serve para quando um aluno trocou de aparelho ou limpou o navegador e ficou travado. Cada aluno usa até <strong style="color:var(--text)">2 dispositivos</strong>. Liberar zera os aparelhos para ele cadastrar de novo.
       </div>
+    <div class="card">
+      <div class="section-label">⚠️ Plano de contingência: sobrescrever matéria</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Use isto quando o blog de um professor estiver fora do ar, quebrado, ou desatualizado perto de uma prova. O conteúdo que você digitar aqui aparece para os alunos no lugar do blog, e vale até você remover. Deixe campos em branco se não quiser preenchê-los.
+      </div>
+      <div class="form-aluno" style="flex-direction:column;gap:10px">
+        <select id="sobMateria" style="width:100%"></select>
+        <input id="sobAula" placeholder="Aula de hoje (ex: Geometria métrica plana I)" autocomplete="off" />
+        <input id="sobTeste" placeholder="Matéria para o teste (ex: Ângulos em polígonos)" autocomplete="off" />
+        <textarea id="sobDeveres" placeholder="Deveres (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
+        <button class="btn-criar" onclick="salvarSobrescrita()">Salvar sobrescrita</button>
+      </div>
+      <div id="sobMsg" class="form-msg"></div>
+      <div class="section-label" style="margin-top:18px">Sobrescritas ativas</div>
+      <div id="listaSobrescritas"></div>
     </div>
   </div>
 </div>
@@ -151,6 +166,74 @@ async function carregarReports(){
     const data = await res.json();
     if(data.error)return;
     renderReports(data.reports, data.pendentes);
+  }catch(e){}
+  carregarSobrescritas();
+}
+
+// ── sobrescritas manuais (contingência) ──
+async function carregarSobrescritas(){
+  try{
+    const res = await fetch('/api/admin/materias?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error)return;
+    // preenche o select de matérias (uma vez)
+    const sel = document.getElementById('sobMateria');
+    if(sel && !sel.dataset.preenchido){
+      const diaNome = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta'};
+      sel.innerHTML = '<option value="">Escolha a matéria e o dia…</option>' +
+        data.materias.map(m=>`<option value="${esc(m.materia)}|${esc(m.dia)}">${esc(m.materia)} (${esc(m.professor)}) — ${diaNome[m.dia]||m.dia}</option>`).join('');
+      sel.dataset.preenchido = '1';
+    }
+    renderSobrescritas(data.sobrescritas||{});
+  }catch(e){}
+}
+
+function renderSobrescritas(sob){
+  const div = document.getElementById('listaSobrescritas');
+  const chaves = Object.keys(sob);
+  if(!chaves.length){ div.innerHTML = '<div style="font-size:12px;color:var(--muted)">Nenhuma sobrescrita ativa. O app está lendo todos os blogs normalmente.</div>'; return; }
+  const diaNome = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta'};
+  div.innerHTML = chaves.map(ch=>{
+    const s = sob[ch];
+    return `<div class="sob-item" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-weight:700;color:var(--accent)">${esc(s.materia)} — ${diaNome[s.dia]||s.dia}</div>
+      ${s.aula_hoje?`<div style="font-size:13px;margin-top:4px"><b>Aula:</b> ${esc(s.aula_hoje)}</div>`:''}
+      ${s.materia_teste?`<div style="font-size:13px"><b>Teste:</b> ${esc(s.materia_teste)}</div>`:''}
+      ${s.deveres?`<div style="font-size:13px"><b>Deveres:</b> ${esc(s.deveres).replace(/\n/g,'; ')}</div>`:''}
+      <button class="small" style="margin-top:8px" onclick="removerSobrescrita('${esc(ch)}')">Remover (voltar a ler o blog)</button>
+    </div>`;
+  }).join('');
+}
+
+async function salvarSobrescrita(){
+  const val = document.getElementById('sobMateria').value;
+  const msg = document.getElementById('sobMsg');
+  if(!val){ msg.textContent='Escolha a matéria e o dia.'; msg.style.color='#e08a8a'; return; }
+  const [materia, dia] = val.split('|');
+  const body = {
+    adminSenha,
+    materia, dia,
+    aula_hoje: document.getElementById('sobAula').value,
+    materia_teste: document.getElementById('sobTeste').value,
+    deveres: document.getElementById('sobDeveres').value
+  };
+  try{
+    const res = await fetch('/api/admin/sobrescrever', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if(data.error){ msg.textContent=data.error; msg.style.color='#e08a8a'; return; }
+    msg.textContent = data.mensagem || 'Salvo!'; msg.style.color='#a8c08a';
+    document.getElementById('sobAula').value='';
+    document.getElementById('sobTeste').value='';
+    document.getElementById('sobDeveres').value='';
+    carregarSobrescritas();
+  }catch(e){ msg.textContent='Erro de conexão.'; msg.style.color='#e08a8a'; }
+}
+
+async function removerSobrescrita(chave){
+  try{
+    const res = await fetch('/api/admin/remover-sobrescrita', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminSenha, chave }) });
+    const data = await res.json();
+    carregarSobrescritas();
   }catch(e){}
 }
 

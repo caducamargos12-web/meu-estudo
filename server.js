@@ -148,6 +148,24 @@ function salvarReports() {
   try { fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports)); }
   catch (e) { console.log('Erro ao salvar reports:', e.message); }
 }
+
+// SOBRESCRITAS MANUAIS (plano de contingência): se um blog de professor quebrar ou sair
+// do ar perto de uma prova, o admin pode digitar o conteúdo manualmente pelo painel. A
+// sobrescrita vale por matéria+dia e tem prioridade sobre a leitura do blog (e nem chama
+// a IA). Vale até ser removida pelo admin. Chave: "materia|dia" (ex: "Física|sex").
+let sobrescritas = {};
+const SOBRESCRITAS_FILE = DATA_DIR + '/sobrescritas.json';
+function carregarSobrescritas() {
+  try { sobrescritas = JSON.parse(fs.readFileSync(SOBRESCRITAS_FILE, 'utf8')); } catch { sobrescritas = {}; }
+}
+function salvarSobrescritas() {
+  try { fs.writeFileSync(SOBRESCRITAS_FILE, JSON.stringify(sobrescritas)); }
+  catch (e) { console.log('Erro ao salvar sobrescritas:', e.message); }
+}
+function chaveSobrescrita(materia, dia) {
+  return (materia + '|' + dia).toLowerCase().trim();
+}
+carregarSobrescritas();
 carregarReports();
 
 // registra o cadastro de um aluno na primeira vez que ele loga
@@ -1515,6 +1533,25 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
         aula_hoje:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[] });
     }
     let ultimoErro = '';
+    // 0) SOBRESCRITA MANUAL (contingência): se o admin digitou conteúdo manual para esta
+    // matéria+dia, usa ele e nem lê o blog nem chama a IA. Vale até o admin remover.
+    const ckSobre = chaveSobrescrita(item.m, dayKey);
+    if (sobrescritas[ckSobre]) {
+      const s = sobrescritas[ckSobre];
+      const deveresLista = (s.deveres || '').split('\n').map(d => d.trim()).filter(Boolean);
+      return Object.assign({}, item, {
+        ok: true, processadoOk: true, manual: true,
+        aula_hoje: s.aula_hoje || '—',
+        aula_data: '',
+        materia_teste: s.materia_teste || '',
+        materia_teste_data: '',
+        tem_avaliacao: !!s.materia_teste,
+        deveres_pendentes: deveresLista.length ? [{ data: 'Anotado', deveres: deveresLista }] : [],
+        deveres_aula: [],
+        resumo: '', questoes: [],
+        proxima_aula: '', proxima_resumo: '', proxima_deveres: []
+      });
+    }
     // 1) busca o blog uma vez só
     const blogText = await fetchBlog(item.url);
     if (!blogText || blogText.length < 30) {
@@ -1705,6 +1742,53 @@ app.post('/api/admin/apagar-report', checkAdmin, (req, res) => {
   reports = reports.filter(x => x.id !== id);
   salvarReports();
   res.json({ ok: true });
+});
+
+// ── SOBRESCRITAS MANUAIS (contingência) ──────────────────────────────────────
+// lista as matérias disponíveis (matéria + dia) para o admin escolher, e as sobrescritas ativas
+app.get('/api/admin/materias', checkAdmin, (req, res) => {
+  const lista = [];
+  for (const dia of Object.keys(GRADE)) {
+    for (const m of GRADE[dia]) {
+      lista.push({ materia: m.m, professor: m.p, dia, chave: chaveSobrescrita(m.m, dia) });
+    }
+  }
+  res.json({ materias: lista, sobrescritas });
+});
+
+// cria ou atualiza uma sobrescrita manual
+app.post('/api/admin/sobrescrever', checkAdmin, (req, res) => {
+  const materia = (req.body.materia || '').slice(0, 60).trim();
+  const dia = (req.body.dia || '').slice(0, 3).trim();
+  const aula_hoje = (req.body.aula_hoje || '').slice(0, 500).trim();
+  const materia_teste = (req.body.materia_teste || '').slice(0, 300).trim();
+  const deveres = (req.body.deveres || '').slice(0, 1000).trim();
+  if (!materia || !dia) return res.json({ error: 'Informe matéria e dia.' });
+  if (!aula_hoje && !materia_teste && !deveres) return res.json({ error: 'Preencha ao menos um campo.' });
+  const chave = chaveSobrescrita(materia, dia);
+  sobrescritas[chave] = {
+    materia, dia, aula_hoje, materia_teste, deveres,
+    criadoEm: new Date().toISOString()
+  };
+  salvarSobrescritas();
+  // limpa o cache do dia para a sobrescrita valer já
+  for (const k of Object.keys(cache)) { if (k.endsWith('_' + dia)) delete cache[k]; }
+  salvarCache();
+  res.json({ ok: true, mensagem: 'Sobrescrita salva. Os alunos já verão o conteúdo manual.' });
+});
+
+// remove uma sobrescrita (volta a ler o blog normalmente)
+app.post('/api/admin/remover-sobrescrita', checkAdmin, (req, res) => {
+  const chave = (req.body.chave || '').toLowerCase().trim();
+  if (sobrescritas[chave]) {
+    const dia = sobrescritas[chave].dia;
+    delete sobrescritas[chave];
+    salvarSobrescritas();
+    for (const k of Object.keys(cache)) { if (k.endsWith('_' + dia)) delete cache[k]; }
+    salvarCache();
+    return res.json({ ok: true, mensagem: 'Sobrescrita removida. Voltou a ler o blog.' });
+  }
+  res.json({ error: 'Sobrescrita não encontrada.' });
 });
 
 app.get('/api/today', auth, async function(req, res) {
