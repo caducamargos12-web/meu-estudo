@@ -1234,16 +1234,17 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     '\n  "Aulas 14 e 15/05: REDAÇÃO Competência 5 - elementos de intervenção; Atividades no caderno." → data=15/05, dever="Atividades no caderno" (aqui o dever é a atividade, não há linha "Tarefa:").' +
     '\n\n*** REGRA DO DEVER ***' +
     '\nO dever de cada aula é: o que vem após "Tarefa:" SE existir; senão, as "Atividades" que a aula pedir (ex: "Atividades no caderno", "Atividades da apostila páginas X"). Se a aula só tem tema/conteúdo sem atividade nem tarefa, deveres=[].' +
-    '\n"Aulas X e Y" é UMA aula só (use a ÚLTIMA data do par). NUNCA repita o mesmo dever em duas datas.' +
+    '\n"Aulas X e Y" é UMA aula só que acontece em DOIS dias (X e Y). NUNCA repita o mesmo dever em datas diferentes.' +
     '\n\n*** O QUE EXTRAIR (só ' + (filtro||'REDAÇÃO') + ') ***' +
     '\n- "data": última data do grupo (DD/MM).' +
+    '\n- "data_inicio": a PRIMEIRA data do par (DD/MM). Para "Aulas 25 e 26/06", data_inicio="25/06" e data="26/06". Para "Aula 17/04" (uma só), data_inicio e data são iguais ("17/04").' +
     '\n- "materia": disciplina + tema curto.' +
     '\n- "deveres": pela regra acima (um item, ou []).' +
     '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, Arquivo do blog, perfil, Atom) e eventos da escola (excursão, recesso, feriado, etc.).' +
     '\nNÃO invente. Extraia só o que está escrito.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
-    '\n{"linhas":[{"data":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
+    '\n{"linhas":[{"data":"DD/MM","data_inicio":"DD/MM","materia":"texto","deveres":["tarefa"]}],"avaliacao":{"tem":false,"data":"","sobre":""}}';
 
   const promptEscolhido = (formato === 'rotulado') ? promptRotulado
                         : (formato === 'agrupado') ? promptAgrupado
@@ -1285,19 +1286,22 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const linhas = (tabela.linhas||[])
     .map(l => ({
       data: (l.data||'').trim(),
+      dataInicio: (l.data_inicio||l.data||'').trim(), // primeira data do par (agrupado)
       num: dataParaNum(l.data),
+      numInicio: dataParaNum(l.data_inicio||l.data),
       materia: (l.materia||'').trim(),
       deveres: (l.deveres||[]).filter(d => d && d.trim() && !ehLixo(d))
     }))
     .filter(l => l.num > 0);
 
   // ── O CÓDIGO DECIDE TUDO (determinístico, não depende da IA) ──
-  // 1. AULA DO DIA: a linha com data EXATAMENTE igual à referência E que tenha matéria.
-  let linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM);
+  // 1. AULA DO DIA: a linha cuja data bate com a referência. No formato agrupado, a aula
+  // "Aulas 25 e 26/06" vale para OS DOIS dias (25 e 26), então bate se a referência for
+  // qualquer uma das duas datas do par. Assim quinta (25) e sexta (26) mostram o mesmo.
+  let linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM || (l.dataInicio && l.dataInicio.slice(0,5) === refDDMM));
   let aulaSomenteExibicao = false;
-  // no formato agrupado (ex: redação "Aulas 18 e 19/06"), a data registrada é a última
-  // do par, então pode não bater com hoje. Nesse caso, mostra a aula mais recente até hoje
-  // APENAS como conteúdo da aula (sem repetir o dever dela, que já entra nos pendentes).
+  // se mesmo assim não achou (data fora do par), mostra a aula mais recente até hoje
+  // APENAS como conteúdo (sem repetir o dever, que já entra nos pendentes).
   if (!linhaRef && formato === 'agrupado') {
     const recentes = linhas.filter(l => l.num <= refNum && l.materia).sort((a,b) => b.num - a.num);
     linhaRef = recentes[0] || null;

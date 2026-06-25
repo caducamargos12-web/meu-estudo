@@ -683,30 +683,50 @@ function renderCard(item, idx, ehPrevia, dataRef){
   const emoji=EMOJIS[item.m]||'📖';
 
   // CARD COMBINADO (ex: "Redação e Literatura" na sexta): mostra cada matéria numa seção
-  // separada, dentro do mesmo card.
+  // separada, dentro do mesmo card, usando a MESMA estrutura visual dos cards normais.
   if(item.combinada && Array.isArray(item.secoes)){
+    function devCheckComb(texto, grupo, chaveDev){
+      const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
+      const marcado=localStorage.getItem(id)==='1';
+      return `<label class="dev-check ${marcado?'feito':''}">
+        <input type="checkbox" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
+        <span class="dev-box"></span>
+        <span class="dev-txt">${texto}</span>
+      </label>`;
+    }
     const secoesHtml=item.secoes.map(sec=>{
       const d=sec.dados||{};
+      const chaveDev=`${sec.materia}`.replace(/\s/g,'_');
       const pend=(d.deveres_pendentes||[]).filter(g=>g&&(g.deveres||[]).filter(x=>x&&x.trim()).length>0);
       const devAula=(d.deveres_aula||[]).filter(x=>x&&x.trim());
       const temTeste=d.materia_teste&&d.materia_teste.trim().length>1;
-      let html=`<div class="sub-sec"><div class="sub-titulo">${sec.materia}</div>`;
-      if(d.aula_hoje&&d.aula_hoje.trim()&&d.aula_hoje!=='—'){
-        html+=`<div class="blk blk-aula"><div class="blk-head"><span class="blk-ic">📘</span><span class="blk-label">Aula de hoje</span></div><div class="blk-body">${d.aula_hoje.replace(/\n/g,'<br>')}</div></div>`;
-      }
-      if(temTeste){
-        html+=`<div class="blk materia-teste"><div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div><div class="blk-body">${d.materia_teste}</div></div>`;
-      }
-      if(pend.length){
-        html+=`<div class="blk blk-dev"><div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres pendentes</span></div><div class="blk-body">`+
-          pend.map(g=>`<div class="dev-group"><div class="dev-date">${g.data}</div>${(g.deveres||[]).filter(x=>x&&x.trim()).map(x=>`<div class="dev-simple">• ${x}</div>`).join('')}</div>`).join('')+`</div></div>`;
-      }
-      if(devAula.length){
-        html+=`<div class="blk blk-dev"><div class="blk-head"><span class="blk-ic">✏️</span><span class="blk-label">Tarefa desta aula</span></div><div class="blk-body">`+
-          devAula.map(x=>`<div class="dev-simple">• ${x}</div>`).join('')+`</div></div>`;
-      }
-      html+=`</div>`;
-      return html;
+      const pendHtml=pend.length
+        ?pend.map(g=>`<div class="dev-group"><div class="dev-date">${g.data}</div>${(g.deveres||[]).filter(x=>x&&x.trim()).map(x=>devCheckComb(x,'pend_'+g.data,chaveDev)).join('')}</div>`).join('')
+        :'<div class="muted">Nenhum dever pendente das aulas anteriores.</div>';
+      const devAulaHtml=devAula.length
+        ?devAula.map(x=>devCheckComb(x,'aula',chaveDev)).join('')
+        :'<div class="muted">Nenhum dever novo passado nesta aula.</div>';
+      return `<div class="sub-sec">
+        <div class="sub-titulo">${sec.materia}</div>
+        <div class="blk blk-aula">
+          <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+          <div class="blk-body">${(d.aula_hoje&&d.aula_hoje.trim().length>1)?d.aula_hoje.replace(/\n/g,'<br>'):'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
+        </div>
+        ${temTeste?`<div class="blk blk-teste">
+          <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div>
+          <div class="blk-body">${d.materia_teste}</div>
+        </div>`:''}
+        <div class="blk blk-dev">
+          <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+          <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
+          ${pendHtml}
+        </div>
+        <div class="blk blk-dev-novo">
+          <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
+          <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
+          ${devAulaHtml}
+        </div>
+      </div>`;
     }).join('<div class="sub-divisor"></div>');
 
     return `<div class="card" id="card-${idx}" style="--cor:${cor}">
@@ -857,8 +877,8 @@ function renderCard(item, idx, ehPrevia, dataRef){
         </div>`}
         ${(ehHistoria && !devsAula.length) ? '' : `
         <div class="blk blk-dev-novo">
-          <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula</span></div>
-          <div class="blk-sub">Passados nesta aula, para entregar na próxima</div>
+          <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
+          <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
           ${deveresAulaHtml}
         </div>`}
         ${blocoResumoHtml}
