@@ -730,11 +730,15 @@ function renderCard(item, idx, ehPrevia, dataRef){
     }).join('<div class="sub-divisor"></div>');
 
     return `<div class="card" id="card-${idx}" style="--cor:${cor}">
-      <button class="c-head" onclick="toggleCard(${idx})">
-        <span class="c-emoji">${emoji}</span>
-        <span class="c-subj-wrap"><span class="c-subj">${item.m}</span><span class="c-prof">${item.p||''}</span></span>
+      <div class="card-glow"></div>
+      <div class="c-head" onclick="toggleCard(${idx})">
+        <div class="c-icon">${emoji}</div>
+        <div class="c-meta">
+          <div class="c-subj">${item.m}${ehPrevia?' <span class="tag-previa">prévia</span>':''}</div>
+          <div class="c-prof">${item.p||''}</div>
+        </div>
         <span class="c-chevron">⌄</span>
-      </button>
+      </div>
       <div class="c-body"><div class="c-body-in">${secoesHtml}</div></div>
     </div>`;
   }
