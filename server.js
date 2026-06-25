@@ -1572,7 +1572,8 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // causava falhas em cascata quando todas rodavam juntas).
   // Matérias que JÁ estão boas no cache são servidas direto (não reprocessam).
   const resultados = new Array(materias.length);
-  const LOTE = 2; // matérias simultâneas (2 é seguro p/ não sobrecarregar proxies públicos)
+  const LOTE = 3; // matérias simultâneas. O fetch é direto e cacheado, e o cache de blog
+  // evita downloads repetidos, então 3 é seguro e mais rápido. Há retry p/ rate limit.
 
   // primeiro, serve as que já estão boas no cache (instantâneo)
   const aProcessar = [];
@@ -1607,17 +1608,35 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
 // ── gera o simulado (4 questões) sob demanda, quando o aluno clica ───────────
 // economiza tokens: só gera quando o aluno realmente quer revisar
 // ── gera o RESUMO da matéria do teste sob demanda (quando o aluno abre a matéria) ──
+// cache compartilhado de resumos e simulados, por assunto. O assunto do teste é o mesmo
+// para todos os alunos, então geramos UMA vez e reusamos. Isso evita pagar o mesmo
+// resumo/simulado várias vezes (um por aluno). Persistido em disco.
+const RESUMO_CACHE_FILE = DATA_DIR + '/resumo_cache.json';
+let resumoCache = {};
+try { resumoCache = JSON.parse(fs.readFileSync(RESUMO_CACHE_FILE, 'utf8')); } catch { resumoCache = {}; }
+function salvarResumoCache() {
+  try { fs.writeFileSync(RESUMO_CACHE_FILE, JSON.stringify(resumoCache)); } catch {}
+}
+function chaveAssunto(tipo, materia, assunto) {
+  return (tipo + '|' + materia + '|' + assunto).toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 250);
+}
+
 app.post('/api/resumo', auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const assunto = (req.body.assunto || '').slice(0, 300);
   if (!assunto) return res.json({ resumo: '' });
+  const ck = chaveAssunto('resumo', materia, assunto);
+  // já tem no cache compartilhado? devolve sem gastar IA
+  if (resumoCache[ck]) return res.json({ resumo: resumoCache[ck], cached: true });
   try {
     const prompt = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
       'O aluno tem um teste sobre: "' + assunto + '".\n' +
       'Faça um RESUMO didático de 3-4 parágrafos sobre esse conteúdo, claro e objetivo para revisão.\n' +
       'Responda APENAS JSON sem markdown:\n{"resumo":"texto"}';
     const r = await callAnthropic(prompt, 0);
-    res.json({ resumo: r.resumo || '' });
+    const resumo = r.resumo || '';
+    if (resumo) { resumoCache[ck] = resumo; salvarResumoCache(); }
+    res.json({ resumo });
   } catch (e) {
     res.json({ resumo: '' });
   }
@@ -1627,6 +1646,8 @@ app.post('/api/simulado', auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const materiaTeste = (req.body.materiaTeste || '').slice(0, 300);
   if (!materiaTeste) return res.json({ questoes: [] });
+  const ck = chaveAssunto('simulado', materia, materiaTeste);
+  if (resumoCache[ck]) return res.json({ questoes: resumoCache[ck], cached: true });
   try {
     const prompt = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
       'Crie um simulado sobre: "' + materiaTeste + '".\n' +
@@ -1634,7 +1655,9 @@ app.post('/api/simulado', auth, async (req, res) => {
       'Responda APENAS JSON sem markdown:\n' +
       '{"questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}';
     const r = await callAnthropic(prompt, 0);
-    res.json({ questoes: Array.isArray(r.questoes) ? r.questoes : [] });
+    const questoes = Array.isArray(r.questoes) ? r.questoes : [];
+    if (questoes.length) { resumoCache[ck] = questoes; salvarResumoCache(); }
+    res.json({ questoes });
   } catch (e) {
     res.json({ questoes: [] });
   }
