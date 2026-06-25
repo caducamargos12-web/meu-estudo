@@ -1753,147 +1753,15 @@ app.get('/api/today', auth, async function(req, res) {
   res.end();
 });
 
-// ── página do painel admin ───────────────────────────────────────────────────
-// teste da chamada de IA isolada: mostra se a API da Anthropic responde no Railway.
-// uso: /api/testar-ia?senha=ADMIN_SENHA
-app.get('/api/testar-ia', async (req, res) => {
-  if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
-  const inicio = Date.now();
-  const key = process.env.ANTHROPIC_API_KEY || '';
-  const temKey = !!key;
-  const tamanhoKey = key.length;
-  // checa se a chave tem espaços/quebras invisíveis (causa comum de erro de auth)
-  const keyTemEspaco = /\s/.test(key);
-  const keyComeca = key.slice(0, 7); // ex: "sk-ant-" (não expõe a chave toda)
-  // faz a chamada CRUA à API, capturando status e corpo, para diagnóstico completo
-  let diagBruto = {};
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key.trim(), 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 50, messages: [{ role:'user', content:'diga: ok' }] }),
-      signal: AbortSignal.timeout(20000)
-    });
-    const corpo = await r.json();
-    diagBruto = { status: r.status, corpo };
-  } catch (e) {
-    diagBruto = { erroFetch: e.message };
-  }
-  res.json({ temKey, tamanhoKey, keyTemEspaco, keyComeca, ms: Date.now()-inicio, apiBruta: diagBruto });
-});
-
-// ── rota de diagnóstico: mostra o que a IA extrai de um blog ─────────────────
-app.get('/api/testar-fetch', async (req, res) => {
-  if (req.query.senha !== process.env.ADMIN_SENHA) return res.status(401).json({ error: 'senha' });
-  const url = req.query.url || 'https://profsauloanglo.blogspot.com/p/mat-b.html';
-  const resultado = { url, estrategias: [] };
-  const headersNavegador = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-  };
-  const testes = [
-    ['direto', url, { headers: headersNavegador }],
-    ['allorigins', 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}],
-    ['corsproxy', 'https://corsproxy.io/?url=' + encodeURIComponent(url), { headers: headersNavegador }]
-  ];
-  for (const [nome, u, opts] of testes) {
-    const t0 = Date.now();
-    try {
-      const r = await fetch(u, Object.assign({ signal: AbortSignal.timeout(12000) }, opts));
-      const txt = await r.text();
-      resultado.estrategias.push({ nome, status: r.status, tamanho: txt.length, ms: Date.now()-t0, ok: r.ok && txt.length > 400 });
-    } catch (e) {
-      resultado.estrategias.push({ nome, erro: e.message, ms: Date.now()-t0 });
-    }
-  }
-  res.json(resultado);
-});
-
-app.get('/api/diag', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const nomeMateria = req.query.materia;
-  const nomeProf = (req.query.prof || '').toLowerCase();
-  let alvo = null;
-  let diaDaMateria = 'seg';
-  for (const dia of Object.keys(GRADE)) {
-    const m = GRADE[dia].find(x => {
-      const materiaBate = x.m.toLowerCase() === (nomeMateria||'').toLowerCase();
-      const profBate = !nomeProf || (x.p||'').toLowerCase().includes(nomeProf);
-      return materiaBate && profBate;
-    });
-    if (m) { alvo = m; diaDaMateria = dia; break; }
-  }
-  if (!alvo) return res.json({ error: 'matéria não encontrada', dica: 'use &prof=sobrenome para diferenciar professores', materias: [...new Set(Object.values(GRADE).flat().map(x=>x.m + ' (' + x.p + ')'))] });
-
-  const blogText = await fetchBlog(alvo.url);
-  const ref = req.query.ref || dataDoDia(diaDaMateria);
-
-  // mostra também o que a IA extraiu (etapa intermediária) para rotulado
-  let etapaExtracao = null;
-  if (alvo.formato === 'rotulado') {
-    try {
-      const temConteudo = blogText && blogText.length > 50;
-      const promptDiag = 'Extraia as aulas deste registro de ' + alvo.m + '. Cada aula tem rótulos (CONTEÚDO/MATÉRIA, TAREFA, DATA). A data está como "DATA: DD/MM".\nResponda APENAS JSON: {"linhas":[{"data":"DD/MM","materia":"","deveres":[]}]}\n\nREGISTRO:\n' + (blogText||'');
-      etapaExtracao = await callAnthropic(promptDiag, 0);
-    } catch(e) { etapaExtracao = { erro: e.message }; }
-  }
-
-  let resultadoFinal;
-  try {
-    resultadoFinal = await processWithAI(alvo.m, alvo.p, blogText, alvo.filtro, ref, 'Hoje', alvo.tipo, alvo.maxDeveres, alvo.maxDiasDever, alvo.formato, alvo.ignorarAvaliacao, alvo.testeAulaAnterior, alvo.testeMarcado);
-  } catch(e) { resultadoFinal = { erro: e.message, stack: (e.stack||'').slice(0,300) }; }
-
-  // inspeciona o CACHE: mostra todas as chaves e se mat A/B estão lá (e com que conteúdo)
-  const chavesCache = Object.keys(cache);
-  const cacheRelacionado = {};
-  for (const ch of chavesCache) {
-    const lista = cache[ch];
-    if (Array.isArray(lista)) {
-      const achou = lista.find(it => it && it.m && it.m.toLowerCase() === (nomeMateria||'').toLowerCase());
-      if (achou) {
-        cacheRelacionado[ch] = {
-          processadoOk: achou.processadoOk,
-          ok: achou.ok,
-          temAula: !!(achou.aula_hoje && achou.aula_hoje.trim().length>1),
-          qtdDeveresPend: (achou.deveres_pendentes||[]).length,
-          qtdDeveresAula: (achou.deveres_aula||[]).length,
-          materia_teste: achou.materia_teste
-        };
-      }
-    }
-  }
-
-  res.json({
-    materia: alvo.m,
-    tipo: alvo.tipo || 'normal',
-    formato: alvo.formato || 'tabela',
-    diaDaMateria,
-    dataReferencia: ref,
-    url: alvo.url,
-    blogVazio: !blogText || blogText.length < 50,
-    tamanhoBlog: (blogText||'').length,
-    ETAPA_EXTRACAO_IA: etapaExtracao ? { qtdLinhas: (etapaExtracao.linhas||[]).length, primeiras3: (etapaExtracao.linhas||[]).slice(0,3), erro: etapaExtracao.erro } : 'N/A',
-    METODO_DE_BUSCA: ultimaEstrategia || '(nao buscou)',
-    TEXTO_DO_BLOG: (blogText||'(vazio)').slice(-2800),
-    RESULTADO_FINAL: {
-      aula_hoje: resultadoFinal.aula_hoje,
-      deveres_pendentes: resultadoFinal.deveres_pendentes,
-      deveres_aula: resultadoFinal.deveres_aula,
-      materia_teste: resultadoFinal.materia_teste,
-      erro: resultadoFinal.erro
-    },
-    CACHE_VERSAO: CACHE_VERSAO,
-    CACHE_DESTA_MATERIA: cacheRelacionado,
-    TOTAL_CHAVES_CACHE: chavesCache.length
-  });
-});
-
 // ── limpa todo o cache manualmente (forçar reprocessamento) ──────────────────
 // uso: /api/limpar-cache?senha=ADMIN_SENHA
 app.get('/api/limpar-cache', (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido';
+  if (!checarRateLimit(ip)) {
+    return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  }
   if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    registrarFalha(ip);
     return res.status(401).json({ error: 'senha invalida' });
   }
   const qtd = Object.keys(cache).length;
