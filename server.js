@@ -1538,7 +1538,8 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     const ckSobre = chaveSobrescrita(item.m, dayKey);
     if (sobrescritas[ckSobre]) {
       const s = sobrescritas[ckSobre];
-      const deveresLista = (s.deveres || '').split('\n').map(d => d.trim()).filter(Boolean);
+      const pendLista = (s.deveres_pendentes || '').split('\n').map(d => d.trim()).filter(Boolean);
+      const aulaLista = (s.deveres_aula || '').split('\n').map(d => d.trim()).filter(Boolean);
       return Object.assign({}, item, {
         ok: true, processadoOk: true, manual: true,
         aula_hoje: s.aula_hoje || '—',
@@ -1546,8 +1547,8 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
         materia_teste: s.materia_teste || '',
         materia_teste_data: '',
         tem_avaliacao: !!s.materia_teste,
-        deveres_pendentes: deveresLista.length ? [{ data: 'Anotado', deveres: deveresLista }] : [],
-        deveres_aula: [],
+        deveres_pendentes: pendLista.length ? [{ data: 'Anotado', deveres: pendLista }] : [],
+        deveres_aula: aulaLista,
         resumo: '', questoes: [],
         proxima_aula: '', proxima_resumo: '', proxima_deveres: []
       });
@@ -1762,12 +1763,13 @@ app.post('/api/admin/sobrescrever', checkAdmin, (req, res) => {
   const dia = (req.body.dia || '').slice(0, 3).trim();
   const aula_hoje = (req.body.aula_hoje || '').slice(0, 500).trim();
   const materia_teste = (req.body.materia_teste || '').slice(0, 300).trim();
-  const deveres = (req.body.deveres || '').slice(0, 1000).trim();
+  const deveres_pendentes = (req.body.deveres_pendentes || '').slice(0, 1000).trim();
+  const deveres_aula = (req.body.deveres_aula || '').slice(0, 1000).trim();
   if (!materia || !dia) return res.json({ error: 'Informe matéria e dia.' });
-  if (!aula_hoje && !materia_teste && !deveres) return res.json({ error: 'Preencha ao menos um campo.' });
+  if (!aula_hoje && !materia_teste && !deveres_pendentes && !deveres_aula) return res.json({ error: 'Preencha ao menos um campo.' });
   const chave = chaveSobrescrita(materia, dia);
   sobrescritas[chave] = {
-    materia, dia, aula_hoje, materia_teste, deveres,
+    materia, dia, aula_hoje, materia_teste, deveres_pendentes, deveres_aula,
     criadoEm: new Date().toISOString()
   };
   salvarSobrescritas();

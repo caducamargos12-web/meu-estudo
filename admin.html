@@ -123,7 +123,8 @@
         <select id="sobMateria" style="width:100%"></select>
         <input id="sobAula" placeholder="Aula de hoje (ex: Geometria métrica plana I)" autocomplete="off" />
         <input id="sobTeste" placeholder="Matéria para o teste (ex: Ângulos em polígonos)" autocomplete="off" />
-        <textarea id="sobDeveres" placeholder="Deveres (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
+        <textarea id="sobPendentes" placeholder="Deveres pendentes, de aulas anteriores (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
+        <textarea id="sobDevAula" placeholder="Deveres desta aula, para a próxima semana (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
         <button class="btn-criar" onclick="salvarSobrescrita()">Salvar sobrescrita</button>
       </div>
       <div id="sobMsg" class="form-msg"></div>
@@ -199,7 +200,8 @@ function renderSobrescritas(sob){
       <div style="font-weight:700;color:var(--accent)">${esc(s.materia)} — ${diaNome[s.dia]||s.dia}</div>
       ${s.aula_hoje?`<div style="font-size:13px;margin-top:4px"><b>Aula:</b> ${esc(s.aula_hoje)}</div>`:''}
       ${s.materia_teste?`<div style="font-size:13px"><b>Teste:</b> ${esc(s.materia_teste)}</div>`:''}
-      ${s.deveres?`<div style="font-size:13px"><b>Deveres:</b> ${esc(s.deveres).replace(/\n/g,'; ')}</div>`:''}
+      ${s.deveres_pendentes?`<div style="font-size:13px"><b>Pendentes:</b> ${esc(s.deveres_pendentes).replace(/\n/g,'; ')}</div>`:''}
+      ${s.deveres_aula?`<div style="font-size:13px"><b>Desta aula:</b> ${esc(s.deveres_aula).replace(/\n/g,'; ')}</div>`:''}
       <button class="small" style="margin-top:8px" onclick="removerSobrescrita('${esc(ch)}')">Remover (voltar a ler o blog)</button>
     </div>`;
   }).join('');
@@ -215,7 +217,8 @@ async function salvarSobrescrita(){
     materia, dia,
     aula_hoje: document.getElementById('sobAula').value,
     materia_teste: document.getElementById('sobTeste').value,
-    deveres: document.getElementById('sobDeveres').value
+    deveres_pendentes: document.getElementById('sobPendentes').value,
+    deveres_aula: document.getElementById('sobDevAula').value
   };
   try{
     const res = await fetch('/api/admin/sobrescrever', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -224,7 +227,8 @@ async function salvarSobrescrita(){
     msg.textContent = data.mensagem || 'Salvo!'; msg.style.color='#a8c08a';
     document.getElementById('sobAula').value='';
     document.getElementById('sobTeste').value='';
-    document.getElementById('sobDeveres').value='';
+    document.getElementById('sobPendentes').value='';
+    document.getElementById('sobDevAula').value='';
     carregarSobrescritas();
   }catch(e){ msg.textContent='Erro de conexão.'; msg.style.color='#e08a8a'; }
 }
