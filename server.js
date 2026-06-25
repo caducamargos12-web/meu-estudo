@@ -504,7 +504,10 @@ const GRADE = {
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
-    { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
+    { m:'Redação e Literatura', p:'Fábio', combinar:[
+      { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
+      { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
+    ] },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
@@ -1398,6 +1401,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     materia_teste = aulaReal ? aulaReal.materia : '';
     materia_teste_data = aulaReal ? aulaReal.data.slice(0,5) : '';
   }
+  // se a matéria do teste contém um marcador explícito de testinho/teste, pega só o
+  // tópico que vem depois dele. Ex: "Citoplasma - Atividades. Testinho: Citoplasma" ->
+  // "Citoplasma"; "TESTE 4 : COEFICIENTE DE SOLUBILIDADE" -> "COEFICIENTE DE SOLUBILIDADE".
+  if (materia_teste) {
+    const mMarcador = materia_teste.match(/(?:testinho|teste\s*\d*)\s*:\s*(.+?)(?:[.;]|$)/i);
+    if (mMarcador && mMarcador[1].trim().length > 1) {
+      materia_teste = mMarcador[1].trim();
+    }
+  }
   // limpa a matéria do teste: remove sufixos de atividade/tarefa/páginas que não são
   // o CONTEÚDO em si (ex: "Parnasianismo; Atividades da apostila" → "Parnasianismo")
   if (materia_teste) {
@@ -1483,6 +1495,21 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // Só a chamada de IA tem retry, porque o gargalo lento (fetch com proxies) não deve ser
   // multiplicado pelas tentativas — isso travava o app inteiro.
   async function processarMateria(item) {
+    // matéria COMBINADA (ex: "Redação e Literatura" na sexta): processa cada sub-matéria
+    // e devolve um resultado com seções separadas, exibidas no mesmo card.
+    if (Array.isArray(item.combinar)) {
+      const secoes = [];
+      for (const sub of item.combinar) {
+        try {
+          const r = await processarMateria(sub); // reaproveita a lógica normal
+          secoes.push({ materia: sub.m, dados: r });
+        } catch (e) {
+          secoes.push({ materia: sub.m, dados: { ok:false, aula_hoje:'—', materia_teste:'', deveres_pendentes:[], deveres_aula:[] } });
+        }
+      }
+      return Object.assign({}, item, { ok:true, processadoOk:true, combinada:true, secoes,
+        aula_hoje:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[] });
+    }
     let ultimoErro = '';
     // 1) busca o blog uma vez só
     const blogText = await fetchBlog(item.url);

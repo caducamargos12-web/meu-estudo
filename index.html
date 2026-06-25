@@ -156,6 +156,10 @@
   .c-body{max-height:0;overflow:hidden;transition:max-height .6s cubic-bezier(.25,.8,.25,1),opacity .5s ease;opacity:0}
   .card.open .c-body{max-height:4000px;opacity:1}
   .c-body-in{padding:0 18px 18px}
+  .sub-sec{padding:4px 0}
+  .sub-titulo{font-weight:700;font-size:1.05rem;color:var(--cor,var(--accent));margin:10px 0 8px;letter-spacing:.01em}
+  .sub-divisor{height:1px;background:color-mix(in srgb,var(--accent) 18%,transparent);margin:16px 0}
+  .dev-simple{padding:3px 0;color:var(--ink,#e8dcc8);font-size:.95rem}
   .c-icon{width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cor,var(--accent)) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--cor,var(--accent)) 30%,transparent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
   .c-meta{flex:1;min-width:0}
   .c-subj{font-size:18px;font-weight:700;letter-spacing:-.3px}
@@ -677,6 +681,44 @@ function renderCard(item, idx, ehPrevia, dataRef){
   const cardId=`d-${idx}`;
   const cor=CORES[idx%CORES.length];
   const emoji=EMOJIS[item.m]||'📖';
+
+  // CARD COMBINADO (ex: "Redação e Literatura" na sexta): mostra cada matéria numa seção
+  // separada, dentro do mesmo card.
+  if(item.combinada && Array.isArray(item.secoes)){
+    const secoesHtml=item.secoes.map(sec=>{
+      const d=sec.dados||{};
+      const pend=(d.deveres_pendentes||[]).filter(g=>g&&(g.deveres||[]).filter(x=>x&&x.trim()).length>0);
+      const devAula=(d.deveres_aula||[]).filter(x=>x&&x.trim());
+      const temTeste=d.materia_teste&&d.materia_teste.trim().length>1;
+      let html=`<div class="sub-sec"><div class="sub-titulo">${sec.materia}</div>`;
+      if(d.aula_hoje&&d.aula_hoje.trim()&&d.aula_hoje!=='—'){
+        html+=`<div class="blk blk-aula"><div class="blk-head"><span class="blk-ic">📘</span><span class="blk-label">Aula de hoje</span></div><div class="blk-body">${d.aula_hoje.replace(/\n/g,'<br>')}</div></div>`;
+      }
+      if(temTeste){
+        html+=`<div class="blk materia-teste"><div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div><div class="blk-body">${d.materia_teste}</div></div>`;
+      }
+      if(pend.length){
+        html+=`<div class="blk blk-dev"><div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres pendentes</span></div><div class="blk-body">`+
+          pend.map(g=>`<div class="dev-group"><div class="dev-date">${g.data}</div>${(g.deveres||[]).filter(x=>x&&x.trim()).map(x=>`<div class="dev-simple">• ${x}</div>`).join('')}</div>`).join('')+`</div></div>`;
+      }
+      if(devAula.length){
+        html+=`<div class="blk blk-dev"><div class="blk-head"><span class="blk-ic">✏️</span><span class="blk-label">Tarefa desta aula</span></div><div class="blk-body">`+
+          devAula.map(x=>`<div class="dev-simple">• ${x}</div>`).join('')+`</div></div>`;
+      }
+      html+=`</div>`;
+      return html;
+    }).join('<div class="sub-divisor"></div>');
+
+    return `<div class="card" id="card-${idx}" style="--cor:${cor}">
+      <button class="c-head" onclick="toggleCard(${idx})">
+        <span class="c-emoji">${emoji}</span>
+        <span class="c-subj-wrap"><span class="c-subj">${item.m}</span><span class="c-prof">${item.p||''}</span></span>
+        <span class="c-chevron">⌄</span>
+      </button>
+      <div class="c-body"><div class="c-body-in">${secoesHtml}</div></div>
+    </div>`;
+  }
+
   // chave única por matéria para salvar o estado das checkboxes no navegador
   const chaveDev=`${item.m}`.replace(/\s/g,'_');
 
