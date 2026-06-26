@@ -1449,15 +1449,20 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // Ex: hoje "Testinho: interpretação de texto" + anterior "Testinho: Parnasianismo e
   // Simbolismo" -> "interpretação de texto, Parnasianismo e Simbolismo".
   if (interpretacaoComAnterior && blogText) {
-    // extrai todos os "Testinho: X" do blog, na ordem em que aparecem (mais recente primeiro)
+    // extrai todos os "Testinho: X" do blog. O blog do Fábio lista da aula mais ANTIGA
+    // para a mais NOVA, então o testinho de HOJE é o ÚLTIMO da lista, e o anterior é o
+    // penúltimo (de trás para frente, o primeiro que não seja "interpretação de texto").
     const testinhos = [...blogText.matchAll(/testinho:\s*([^;.\n]+)/gi)]
       .map(m => m[1].trim())
       .filter(Boolean);
     if (testinhos.length) {
-      const hoje = testinhos[0]; // o primeiro do blog é o mais recente (aula de hoje)
+      const hoje = testinhos[testinhos.length - 1]; // o ÚLTIMO é o mais recente (hoje)
       if (/interpreta[çc][ãa]o\s+de\s+texto/i.test(hoje)) {
-        // procura o próximo testinho que NÃO seja interpretação de texto (a matéria real anterior)
-        const anterior = testinhos.slice(1).find(t => !/interpreta[çc][ãa]o\s+de\s+texto/i.test(t));
+        // de trás para frente, acha o testinho anterior que NÃO seja interpretação de texto
+        let anterior = '';
+        for (let k = testinhos.length - 2; k >= 0; k--) {
+          if (!/interpreta[çc][ãa]o\s+de\s+texto/i.test(testinhos[k])) { anterior = testinhos[k]; break; }
+        }
         materia_teste = anterior ? ('interpretação de texto, ' + anterior) : 'interpretação de texto';
         tem_avaliacao = true;
       }
@@ -1875,23 +1880,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// TEMPORÁRIA: diagnostica os testinhos da literatura. Remover depois.
-app.get('/api/diag-lit', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const blogText = await fetchBlog('https://proffabiocnsanglo.blogspot.com/p/3-ano.html');
-  if (!blogText) return res.json({ erro: 'blog não carregou' });
-  const testinhos = [...blogText.matchAll(/testinho:\s*([^;.\n]+)/gi)].map(m => m[1].trim()).filter(Boolean);
-  res.json({
-    tamanhoBlog: blogText.length,
-    testinhos_encontrados: testinhos,
-    primeiro_testinho: testinhos[0] || '(nenhum)',
-    trecho_com_testinho: (blogText.match(/[\s\S]{0,80}testinho:[\s\S]{0,80}/gi) || []).slice(0, 6),
-    METODO: ultimaEstrategia
-  });
 });
 
 app.get('/admin', (req, res) => {
