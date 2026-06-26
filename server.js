@@ -1877,6 +1877,23 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// TEMPORÁRIA: diagnostica os testinhos da literatura. Remover depois.
+app.get('/api/diag-lit', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const blogText = await fetchBlog('https://proffabiocnsanglo.blogspot.com/p/3-ano.html');
+  if (!blogText) return res.json({ erro: 'blog não carregou' });
+  const testinhos = [...blogText.matchAll(/testinho:\s*([^;.\n]+)/gi)].map(m => m[1].trim()).filter(Boolean);
+  res.json({
+    tamanhoBlog: blogText.length,
+    testinhos_encontrados: testinhos,
+    primeiro_testinho: testinhos[0] || '(nenhum)',
+    trecho_com_testinho: (blogText.match(/[\s\S]{0,80}testinho:[\s\S]{0,80}/gi) || []).slice(0, 6),
+    METODO: ultimaEstrategia
+  });
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
