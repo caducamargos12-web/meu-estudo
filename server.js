@@ -524,7 +524,7 @@ const GRADE = {
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Redação e Literatura', p:'Fábio', combinar:[
       { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
-      { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true },
+      { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true, interpretacaoComAnterior:true },
     ] },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
@@ -1143,7 +1143,7 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado, interpretacaoComAnterior) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -1443,6 +1443,27 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       .trim();
   }
 
+  // REGRA ESPECIAL (Literatura): quando o testinho de hoje é "interpretação de texto",
+  // ele cobra o conteúdo das aulas anteriores. Então a matéria do teste vira
+  // "interpretação de texto, <matéria do testinho da aula anterior>".
+  // Ex: hoje "Testinho: interpretação de texto" + anterior "Testinho: Parnasianismo e
+  // Simbolismo" -> "interpretação de texto, Parnasianismo e Simbolismo".
+  if (interpretacaoComAnterior && blogText) {
+    // extrai todos os "Testinho: X" do blog, na ordem em que aparecem (mais recente primeiro)
+    const testinhos = [...blogText.matchAll(/testinho:\s*([^;.\n]+)/gi)]
+      .map(m => m[1].trim())
+      .filter(Boolean);
+    if (testinhos.length) {
+      const hoje = testinhos[0]; // o primeiro do blog é o mais recente (aula de hoje)
+      if (/interpreta[çc][ãa]o\s+de\s+texto/i.test(hoje)) {
+        // procura o próximo testinho que NÃO seja interpretação de texto (a matéria real anterior)
+        const anterior = testinhos.slice(1).find(t => !/interpreta[çc][ãa]o\s+de\s+texto/i.test(t));
+        materia_teste = anterior ? ('interpretação de texto, ' + anterior) : 'interpretação de texto';
+        tem_avaliacao = true;
+      }
+    }
+  }
+
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
   // RESUMO e SIMULADO agora são gerados SOB DEMANDA (quando o aluno abre a matéria),
   // não no carregamento. Isso deixa a carga do dia quase 2x mais rápida, porque elimina
@@ -1562,7 +1583,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     // 2) processa com IA, com até 3 tentativas (resiliente a falhas momentâneas da IA)
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado);
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
           ai.deveres_pendentes = ai.deveres_pendentes
