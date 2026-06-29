@@ -236,6 +236,10 @@
   .q-fb{font-size:12px;margin-top:7px;padding:9px 11px;border-radius:9px;line-height:1.45;animation:fadeIn .3s}
   .q-fb.correct{background:color-mix(in srgb,var(--green) 9%,transparent);color:var(--green)}
   .q-fb.wrong{background:color-mix(in srgb,var(--red) 9%,transparent);color:var(--red)}
+  .q-list{display:flex;flex-direction:column;gap:16px;margin-top:6px}
+  .q-card{padding:14px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
+  .q-enun{font-size:13.5px;font-weight:600;line-height:1.5;color:var(--text);margin-bottom:11px}
+  .q-opt span{flex:1}
   .score{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--surface);border-radius:10px;margin-top:10px;font-size:12px;color:var(--text-2)}
   .score b{font-size:15px;color:var(--green);font-weight:700}
 
@@ -489,29 +493,26 @@ async function gerarSimulado(materia, materiaTeste, cardId){
       if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}
       return;
     }
-    // monta as questões na tela
-    let html=data.questoes.map((q,qi)=>`
-      <div class="quiz-q">
-        <div class="quiz-enun">${qi+1}. ${q.enunciado}</div>
-        ${Object.keys(q.opcoes||{}).map(op=>`
-          <label class="quiz-op">
-            <input type="radio" name="q-${cardId}-${qi}" value="${op}" onchange="checarResposta('${cardId}',${qi},'${op}','${q.correta}',this)">
-            <span>${op}) ${q.opcoes[op]}</span>
-          </label>`).join('')}
-        <div class="quiz-exp" id="exp-${cardId}-${qi}" style="display:none">${q.explicacao||''}</div>
-      </div>`).join('');
-    wrap.innerHTML='<div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>'+html+'<div class="score" id="score-'+cardId+'">Responda as questões acima</div>';
+    // monta as questões usando a estrutura visual estilizada (q-opt / q-opts / q-fb)
+    const html=data.questoes.map((q,qi)=>{
+      const opcoes=q.opcoes||{};
+      const opcoesHtml=Object.keys(opcoes).map(k=>`
+        <button class="q-opt" id="opt-${cardId}-${qi}-${k}"
+          onclick="checkAnswer('${cardId}',${qi},'${k}','${q.correta}',\`${(q.explicacao||'').replace(/`/g,\"'\").replace(/"/g,'&quot;')}\`)">
+          <b>${k})</b> <span>${opcoes[k]}</span>
+        </button>`).join('');
+      return `<div class="q-card">
+        <div class="q-enun">${qi+1}. ${q.enunciado}</div>
+        <div class="q-opts">${opcoesHtml}</div>
+        <div id="fb-${cardId}-${qi}"></div>
+      </div>`;
+    }).join('');
+    wrap.innerHTML='<div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>'
+      +'<div class="q-list">'+html+'</div>'
+      +'<div class="score" id="score-'+cardId+'">Responda as questões acima</div>';
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}
   }
-}
-
-function checarResposta(cardId,qi,escolha,correta,el){
-  const exp=document.getElementById('exp-'+cardId+'-'+qi);
-  if(exp)exp.style.display='block';
-  const label=el.closest('.quiz-op');
-  if(escolha===correta){label.classList.add('certo');}
-  else{label.classList.add('errado');}
 }
 
 function toggleMusic(){
