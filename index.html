@@ -310,6 +310,15 @@
 
   /* ═══ PLAYER DE MÚSICA (mini, no header) ═══ */
   /* botão e modal de reportar erro */
+  .beta-aviso{position:sticky;top:0;z-index:90;background:color-mix(in srgb,var(--amber,#d9a865) 14%,var(--bg));border-bottom:1px solid color-mix(in srgb,var(--amber,#d9a865) 30%,transparent)}
+  .beta-aviso.escondido{display:none}
+  .beta-aviso-in{max-width:760px;margin:0 auto;padding:11px 18px;display:flex;align-items:flex-start;gap:11px}
+  .beta-ic{font-size:18px;flex-shrink:0;line-height:1.4}
+  .beta-ic-inline{display:inline}
+  .beta-txt{font-size:12.5px;line-height:1.55;color:var(--text-2,#cbb89a)}
+  .beta-txt b{color:var(--amber,#d9a865)}
+  .beta-fechar{flex-shrink:0;background:transparent;border:none;color:var(--text-3,#8a7d68);font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;transition:color .2s}
+  .beta-fechar:hover{color:var(--amber,#d9a865)}
   .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
   .rep-overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:2147483600;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:20px;box-sizing:border-box}
@@ -415,6 +424,15 @@
     <!-- modal de reportar erro: movido para o fim do body (fora do header)
          para o position:fixed funcionar; backdrop-filter no header prendia ele -->
   </header>
+  <div class="beta-aviso" id="betaAviso">
+    <div class="beta-aviso-in">
+      <span class="beta-ic">🧪</span>
+      <div class="beta-txt">
+        <b>App em fase de testes (beta).</b> Às vezes uma matéria pode vir incompleta ou errada, geralmente quando o professor ainda não atualizou o blog, ou por algum ajuste que ainda estamos fazendo. Se notar algo errado, toca no botão de reportar <span class="beta-ic-inline">⚠️</span> aqui em cima e nos avisa. Isso ajuda demais a melhorar o app!
+      </div>
+      <button class="beta-fechar" onclick="fecharBetaAviso()" aria-label="Fechar aviso">✕</button>
+    </div>
+  </div>
   <main id="main">
     <div class="big-load">
       <div class="big-spin"></div>
@@ -515,6 +533,11 @@ async function gerarSimulado(materia, materiaTeste, cardId){
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}
   }
+}
+
+function fecharBetaAviso(){
+  const el=document.getElementById('betaAviso');
+  if(el)el.classList.add('escondido');
 }
 
 function toggleMusic(){
