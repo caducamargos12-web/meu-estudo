@@ -1131,11 +1131,18 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   const materia_teste = testeAtual ? testeAtual.conteudo : '';
   const materia_teste_data = testeAtual ? testeAtual.data : '';
 
+  // AULA DE HOJE: só mostra "Teste: X" se houver um teste EXATAMENTE na data de referência.
+  // Se o blog não tem aula/teste para hoje, a aula de hoje fica vazia (sem registro),
+  // mesmo que a matéria do teste (acima) mostre o último teste como conteúdo de estudo.
+  const testeDeHoje = testes.find(t => t.data === ref.slice(0,5));
+  const aula_hoje = testeDeHoje ? ('Teste: ' + testeDeHoje.conteudo) : '';
+  const aula_data = testeDeHoje ? testeDeHoje.data : '';
+
   let resumo = ''; // resumo gerado sob demanda (ao abrir a matéria)
 
   return {
-    aula_hoje: materia_teste ? ('Teste: ' + materia_teste) : '',
-    aula_data: materia_teste_data,
+    aula_hoje,
+    aula_data,
     deveres_pendentes: [], deveres_aula: [],
     tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
     resumo, questoes: [],
