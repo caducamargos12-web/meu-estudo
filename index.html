@@ -496,16 +496,18 @@ async function gerarSimulado(materia, materiaTeste, cardId){
     // monta as questões usando a estrutura visual estilizada (q-opt / q-opts / q-fb)
     const html=data.questoes.map((q,qi)=>{
       const opcoes=q.opcoes||{};
-      const opcoesHtml=Object.keys(opcoes).map(k=>`
-        <button class="q-opt" id="opt-${cardId}-${qi}-${k}"
-          onclick="checkAnswer('${cardId}',${qi},'${k}','${q.correta}',\`${(q.explicacao||'').replace(/`/g,\"'\").replace(/"/g,'&quot;')}\`)">
-          <b>${k})</b> <span>${opcoes[k]}</span>
-        </button>`).join('');
-      return `<div class="q-card">
-        <div class="q-enun">${qi+1}. ${q.enunciado}</div>
-        <div class="q-opts">${opcoesHtml}</div>
-        <div id="fb-${cardId}-${qi}"></div>
-      </div>`;
+      const explSegura=String(q.explicacao||'').replace(/\\/g,'').replace(/`/g,"'").replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      const correta=String(q.correta||'A');
+      const opcoesHtml=Object.keys(opcoes).map(k=>
+        '<button class="q-opt" id="opt-'+cardId+'-'+qi+'-'+k+'" '+
+        'onclick="checkAnswer(\''+cardId+'\','+qi+',\''+k+'\',\''+correta+'\',\''+explSegura+'\')">'+
+        '<b>'+k+')</b> <span>'+opcoes[k]+'</span></button>'
+      ).join('');
+      return '<div class="q-card">'+
+        '<div class="q-enun">'+(qi+1)+'. '+q.enunciado+'</div>'+
+        '<div class="q-opts">'+opcoesHtml+'</div>'+
+        '<div id="fb-'+cardId+'-'+qi+'"></div>'+
+        '</div>';
     }).join('');
     wrap.innerHTML='<div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>'
       +'<div class="q-list">'+html+'</div>'
