@@ -1979,6 +1979,31 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// TEMPORÁRIA: diagnostica Mat B (Saulo), Biologia (Angelita) e Química B (Maurélio). Remover depois.
+app.get('/api/diag-tri', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const ref = req.query.ref || dataDoDia('qua');
+  const out = {};
+  // Mat B Saulo
+  try {
+    const blogSaulo = await fetchBlog('https://profsauloanglo.blogspot.com/p/mat-b.html');
+    out.SAULO = { blog: blogSaulo, resultado: await processarRotulosSaulo('Matemática B', 'Saulo Rodrigues', blogSaulo, ref) };
+  } catch (e) { out.SAULO = { erro: e.message }; }
+  // Biologia Angelita (usa processWithAI com ignorarAvaliacao)
+  try {
+    const blogAng = await fetchBlog('https://profangelitacnsanglo.blogspot.com/p/3-ano.html');
+    out.ANGELITA = { blog: blogAng, resultado: await processWithAI('Biologia','Angelita Pimenta',blogAng,undefined,ref,'quarta',undefined,undefined,undefined,undefined,true) };
+  } catch (e) { out.ANGELITA = { erro: e.message }; }
+  // Química B Maurélio
+  try {
+    const blogMau = await fetchBlog('https://maureliopereiral.blogspot.com/p/3-ano.html');
+    out.MAURELIO = { blog: blogMau, resultado: await processWithAI('Química B','Maurélio',blogMau,undefined,ref,'quarta',undefined,undefined,7,undefined,true) };
+  } catch (e) { out.MAURELIO = { erro: e.message }; }
+  res.json({ dataReferencia: ref, ...out });
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
