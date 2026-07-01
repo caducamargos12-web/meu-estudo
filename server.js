@@ -166,6 +166,23 @@ function chaveSobrescrita(materia, dia) {
   return (materia + '|' + dia).toLowerCase().trim();
 }
 carregarSobrescritas();
+
+// MATERIAIS DE APOIO (links de arquivos por matéria): o admin adiciona links (PDF, Drive,
+// etc.) com um texto explicativo, ligados a uma matéria. Aparecem dentro do card da matéria.
+// Máximo 3 por matéria. Chave: nome da matéria em minúsculas. Persistido em disco.
+let materiais = {};
+const MATERIAIS_FILE = DATA_DIR + '/materiais.json';
+function carregarMateriais() {
+  try { materiais = JSON.parse(fs.readFileSync(MATERIAIS_FILE, 'utf8')); } catch { materiais = {}; }
+}
+function salvarMateriais() {
+  try { fs.writeFileSync(MATERIAIS_FILE, JSON.stringify(materiais)); }
+  catch (e) { console.log('Erro ao salvar materiais:', e.message); }
+}
+function chaveMaterial(materia) {
+  return (materia || '').toLowerCase().trim();
+}
+carregarMateriais();
 carregarReports();
 
 // registra o cadastro de um aluno na primeira vez que ele loga
@@ -1554,6 +1571,35 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // processa uma matéria. O blog é buscado UMA vez (já tenta direto + proxies internamente).
   // Só a chamada de IA tem retry, porque o gargalo lento (fetch com proxies) não deve ser
   // multiplicado pelas tentativas — isso travava o app inteiro.
+  // aplica uma sobrescrita PARCIAL sobre o resultado do blog: só os campos preenchidos
+  // pelo admin substituem o que veio do blog. Campo em branco = mantém o do blog.
+  // Campo com "-" ou "nenhum" = esvazia de propósito.
+  function aplicarSobrescrita(resultado, sobre) {
+    if (!sobre) return resultado;
+    const r = Object.assign({}, resultado);
+    const preenchido = (v) => v && v.trim().length > 0;
+    const querEsvaziar = (v) => /^(-|nenhum|nenhuma|vazio)$/i.test((v||'').trim());
+    // aula de hoje
+    if (querEsvaziar(sobre.aula_hoje)) r.aula_hoje = '';
+    else if (preenchido(sobre.aula_hoje)) r.aula_hoje = sobre.aula_hoje.trim();
+    // matéria do teste
+    if (querEsvaziar(sobre.materia_teste)) { r.materia_teste = ''; r.tem_avaliacao = false; }
+    else if (preenchido(sobre.materia_teste)) { r.materia_teste = sobre.materia_teste.trim(); r.tem_avaliacao = true; r.materia_teste_data = ''; }
+    // deveres pendentes
+    if (querEsvaziar(sobre.deveres_pendentes)) r.deveres_pendentes = [];
+    else if (preenchido(sobre.deveres_pendentes)) {
+      const lista = sobre.deveres_pendentes.split('\n').map(d => d.trim()).filter(Boolean);
+      r.deveres_pendentes = lista.length ? [{ data: 'Anotado', deveres: lista }] : [];
+    }
+    // deveres desta aula
+    if (querEsvaziar(sobre.deveres_aula)) r.deveres_aula = [];
+    else if (preenchido(sobre.deveres_aula)) {
+      r.deveres_aula = sobre.deveres_aula.split('\n').map(d => d.trim()).filter(Boolean);
+    }
+    r.manual = true; // marca que teve intervenção manual
+    return r;
+  }
+
   async function processarMateria(item) {
     // matéria COMBINADA (ex: "Redação e Literatura" na sexta): processa cada sub-matéria
     // e devolve um resultado com seções separadas, exibidas no mesmo card.
@@ -1571,30 +1617,20 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
         aula_hoje:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[] });
     }
     let ultimoErro = '';
-    // 0) SOBRESCRITA MANUAL (contingência): se o admin digitou conteúdo manual para esta
-    // matéria+dia, usa ele e nem lê o blog nem chama a IA. Vale até o admin remover.
+    // 0) SOBRESCRITA MANUAL (contingência): guardada para aplicar DEPOIS de processar o
+    // blog. Assim a correção é PARCIAL: só os campos preenchidos substituem o blog, o resto
+    // continua vindo do blog normalmente. (A aplicação acontece no fim, antes de retornar.)
     const ckSobre = chaveSobrescrita(item.m, dayKey);
-    if (sobrescritas[ckSobre]) {
-      const s = sobrescritas[ckSobre];
-      const pendLista = (s.deveres_pendentes || '').split('\n').map(d => d.trim()).filter(Boolean);
-      const aulaLista = (s.deveres_aula || '').split('\n').map(d => d.trim()).filter(Boolean);
-      return Object.assign({}, item, {
-        ok: true, processadoOk: true, manual: true,
-        aula_hoje: s.aula_hoje || '—',
-        aula_data: '',
-        materia_teste: s.materia_teste || '',
-        materia_teste_data: '',
-        tem_avaliacao: !!s.materia_teste,
-        deveres_pendentes: pendLista.length ? [{ data: 'Anotado', deveres: pendLista }] : [],
-        deveres_aula: aulaLista,
-        resumo: '', questoes: [],
-        proxima_aula: '', proxima_resumo: '', proxima_deveres: []
-      });
-    }
+    const sobre = sobrescritas[ckSobre] || null;
+
     // 1) busca o blog uma vez só
     const blogText = await fetchBlog(item.url);
     if (!blogText || blogText.length < 30) {
-      // blog indisponível (ex: Blogspot bloqueando). Não trava: retorna com aviso.
+      // blog indisponível (ex: Blogspot bloqueando). Se houver sobrescrita manual, usa ela
+      // (o admin pode ter preenchido tudo). Senão, retorna com aviso, sem travar.
+      if (sobre) {
+        return aplicarSobrescrita(Object.assign({}, item, { ok:true, processadoOk:true, aula_hoje:'', materia_teste_data:'', materia_teste:'', tem_avaliacao:false, deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] }), sobre);
+      }
       return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar o blog desta matéria agora. Recarregue em alguns instantes.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
     }
     // 2) processa com IA, com até 3 tentativas (resiliente a falhas momentâneas da IA)
@@ -1632,14 +1668,17 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
             ai.deveres_aula.unshift(item.deverFixo);
           }
         }
-        return Object.assign({}, item, ai, { ok: true, processadoOk: true });
+        return aplicarSobrescrita(Object.assign({}, item, ai, { ok: true, processadoOk: true }), sobre);
       } catch(e) {
         ultimoErro = e.message;
         // espera um pouco antes de tentar de novo (dá tempo da API se recuperar)
         if (tentativa < 3) await new Promise(r => setTimeout(r, 800 * tentativa));
       }
     }
-    // falhou nas 3 tentativas
+    // falhou nas 3 tentativas. Se houver sobrescrita, usa ela para não deixar a matéria vazia.
+    if (sobre) {
+      return aplicarSobrescrita(Object.assign({}, item, { ok:true, processadoOk:true, aula_hoje:'', materia_teste_data:'', materia_teste:'', tem_avaliacao:false, deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] }), sobre);
+    }
     return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
   }
 
@@ -1651,12 +1690,21 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   const LOTE = 3; // matérias simultâneas. O fetch é direto e cacheado, e o cache de blog
   // evita downloads repetidos, então 3 é seguro e mais rápido. Há retry p/ rate limit.
 
+  // anexa os materiais de apoio (links) da matéria ao resultado. Feito FORA do cache,
+  // para os links refletirem sempre o estado atual (adicionar/remover aparece na hora).
+  function comMateriais(result, item) {
+    if (!result) return result;
+    const ck = chaveMaterial(item.m);
+    const lista = Array.isArray(materiais[ck]) ? materiais[ck] : [];
+    return Object.assign({}, result, { materiais: lista });
+  }
+
   // primeiro, serve as que já estão boas no cache (instantâneo)
   const aProcessar = [];
   for (let i = 0; i < materias.length; i++) {
     if (cacheDia && itemBom(cacheDia[i])) {
-      resultados[i] = cacheDia[i];
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:cacheDia[i], ehPrevia, cached:true }) + '\n\n');
+      resultados[i] = comMateriais(cacheDia[i], materias[i]);
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:resultados[i], ehPrevia, cached:true }) + '\n\n');
     } else {
       aProcessar.push(i); // precisa processar
     }
@@ -1667,9 +1715,10 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     const lote = aProcessar.slice(inicio, inicio + LOTE);
     await Promise.all(lote.map(async (i) => {
       const result = await processarMateria(materias[i]);
-      resultados[i] = result;
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:result, ehPrevia }) + '\n\n');
-      // salva cada matéria bem-sucedida no cache imediatamente (incremental)
+      resultados[i] = comMateriais(result, materias[i]);
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:resultados[i], ehPrevia }) + '\n\n');
+      // salva cada matéria bem-sucedida no cache imediatamente (incremental).
+      // guarda SEM os materiais (eles são anexados na leitura, sempre atuais).
       if (result && result.processadoOk === true) {
         if (!Array.isArray(cache[chave])) cache[chave] = new Array(materias.length);
         cache[chave][i] = result;
@@ -1829,6 +1878,42 @@ app.post('/api/admin/remover-sobrescrita', checkAdmin, (req, res) => {
     return res.json({ ok: true, mensagem: 'Sobrescrita removida. Voltou a ler o blog.' });
   }
   res.json({ error: 'Sobrescrita não encontrada.' });
+});
+
+// ── MATERIAIS DE APOIO (links de arquivos por matéria) ───────────────────────
+// lista todos os materiais cadastrados (agrupados por matéria)
+app.get('/api/admin/materiais', checkAdmin, (req, res) => {
+  res.json({ materiais });
+});
+
+// adiciona um link de material a uma matéria (máximo 3 por matéria)
+app.post('/api/admin/adicionar-material', checkAdmin, (req, res) => {
+  const materia = (req.body.materia || '').slice(0, 60).trim();
+  const url = (req.body.url || '').slice(0, 500).trim();
+  const descricao = (req.body.descricao || '').slice(0, 200).trim();
+  if (!materia) return res.json({ error: 'Escolha a matéria.' });
+  if (!url) return res.json({ error: 'Informe o link do arquivo.' });
+  if (!/^https?:\/\//i.test(url)) return res.json({ error: 'O link deve começar com http:// ou https://' });
+  const ck = chaveMaterial(materia);
+  if (!Array.isArray(materiais[ck])) materiais[ck] = [];
+  if (materiais[ck].length >= 3) return res.json({ error: 'Máximo de 3 arquivos por matéria. Remova um antes de adicionar outro.' });
+  materiais[ck].push({ id: Date.now().toString(36), materia, url, descricao: descricao || 'Material de apoio' });
+  salvarMateriais();
+  res.json({ ok: true, mensagem: 'Material adicionado.' });
+});
+
+// remove um material específico pelo id
+app.post('/api/admin/remover-material', checkAdmin, (req, res) => {
+  const materia = (req.body.materia || '').trim();
+  const id = (req.body.id || '').trim();
+  const ck = chaveMaterial(materia);
+  if (Array.isArray(materiais[ck])) {
+    materiais[ck] = materiais[ck].filter(m => m.id !== id);
+    if (!materiais[ck].length) delete materiais[ck];
+    salvarMateriais();
+    return res.json({ ok: true, mensagem: 'Material removido.' });
+  }
+  res.json({ error: 'Material não encontrado.' });
 });
 
 app.get('/api/today', auth, async function(req, res) {

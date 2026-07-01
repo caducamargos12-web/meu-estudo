@@ -117,7 +117,7 @@
     <div class="card">
       <div class="section-label">⚠️ Plano de contingência: sobrescrever matéria</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
-        Use isto quando o blog de um professor estiver fora do ar, quebrado, ou desatualizado perto de uma prova. O conteúdo que você digitar aqui aparece para os alunos no lugar do blog, e vale até você remover. Deixe campos em branco se não quiser preenchê-los.
+        Use isto quando uma matéria vier errada ou o blog estiver fora do ar. Você pode corrigir só um campo: o que você preencher substitui o blog, e o que deixar <b>em branco continua vindo do blog</b> normalmente. Para esvaziar um campo de propósito, digite um traço (-). Vale até você remover.
       </div>
       <div class="form-aluno" style="flex-direction:column;gap:10px">
         <select id="sobMateria" style="width:100%"></select>
@@ -130,6 +130,22 @@
       <div id="sobMsg" class="form-msg"></div>
       <div class="section-label" style="margin-top:18px">Sobrescritas ativas</div>
       <div id="listaSobrescritas"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-label">📎 Materiais de apoio (links de arquivos)</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Adicione links de arquivos (PDF, Google Drive, etc.) a uma matéria, com um texto explicando o que é. Aparecem dentro do card da matéria para o aluno. Máximo 3 por matéria.
+      </div>
+      <div class="form-aluno" style="flex-direction:column;gap:10px">
+        <select id="matMateria" style="width:100%"></select>
+        <input id="matUrl" placeholder="Link do arquivo (https://...)" autocomplete="off" />
+        <input id="matDesc" placeholder="Explicação (ex: Resumo do 2º bimestre)" autocomplete="off" />
+        <button class="btn-criar" onclick="adicionarMaterial()">Adicionar material</button>
+      </div>
+      <div id="matMsg" class="form-msg"></div>
+      <div class="section-label" style="margin-top:18px">Materiais cadastrados</div>
+      <div id="listaMateriais"></div>
     </div>
   </div>
 </div>
@@ -177,7 +193,7 @@ async function carregarSobrescritas(){
     const res = await fetch('/api/admin/materias?adminSenha=' + encodeURIComponent(adminSenha));
     const data = await res.json();
     if(data.error)return;
-    // preenche o select de matérias (uma vez)
+    // preenche o select de matérias da sobrescrita (uma vez)
     const sel = document.getElementById('sobMateria');
     if(sel && !sel.dataset.preenchido){
       const diaNome = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta'};
@@ -185,7 +201,69 @@ async function carregarSobrescritas(){
         data.materias.map(m=>`<option value="${esc(m.materia)}|${esc(m.dia)}">${esc(m.materia)} (${esc(m.professor)}) — ${diaNome[m.dia]||m.dia}</option>`).join('');
       sel.dataset.preenchido = '1';
     }
+    // preenche o select de materiais (matérias ÚNICAS, sem repetir por dia)
+    const selMat = document.getElementById('matMateria');
+    if(selMat && !selMat.dataset.preenchido){
+      const vistas = {};
+      const unicas = [];
+      data.materias.forEach(m=>{ if(!vistas[m.materia]){ vistas[m.materia]=1; unicas.push(m); } });
+      selMat.innerHTML = '<option value="">Escolha a matéria…</option>' +
+        unicas.map(m=>`<option value="${esc(m.materia)}">${esc(m.materia)} (${esc(m.professor)})</option>`).join('');
+      selMat.dataset.preenchido = '1';
+    }
     renderSobrescritas(data.sobrescritas||{});
+    carregarMateriais();
+  }catch(e){}
+}
+
+// ── materiais de apoio ──
+async function carregarMateriais(){
+  try{
+    const res = await fetch('/api/admin/materiais?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error)return;
+    renderMateriais(data.materiais||{});
+  }catch(e){}
+}
+
+function renderMateriais(mats){
+  const div = document.getElementById('listaMateriais');
+  const chaves = Object.keys(mats).filter(k=>Array.isArray(mats[k])&&mats[k].length);
+  if(!chaves.length){ div.innerHTML = '<div style="font-size:12px;color:var(--muted)">Nenhum material cadastrado ainda.</div>'; return; }
+  div.innerHTML = chaves.map(ck=>{
+    const lista = mats[ck];
+    const nome = lista[0]?lista[0].materia:ck;
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-weight:700;color:var(--accent);margin-bottom:8px">${esc(nome)}</div>
+      ${lista.map(m=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px">
+        <span style="flex:1"><a href="${esc(m.url)}" target="_blank" style="color:var(--text)">${esc(m.descricao)}</a></span>
+        <button class="small" onclick="removerMaterial('${esc(m.materia)}','${esc(m.id)}')">Remover</button>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+async function adicionarMaterial(){
+  const materia = document.getElementById('matMateria').value;
+  const url = document.getElementById('matUrl').value;
+  const descricao = document.getElementById('matDesc').value;
+  const msg = document.getElementById('matMsg');
+  if(!materia){ msg.textContent='Escolha a matéria.'; msg.style.color='#e08a8a'; return; }
+  try{
+    const res = await fetch('/api/admin/adicionar-material', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminSenha, materia, url, descricao }) });
+    const data = await res.json();
+    if(data.error){ msg.textContent=data.error; msg.style.color='#e08a8a'; return; }
+    msg.textContent = data.mensagem || 'Adicionado!'; msg.style.color='#a8c08a';
+    document.getElementById('matUrl').value='';
+    document.getElementById('matDesc').value='';
+    carregarMateriais();
+  }catch(e){ msg.textContent='Erro de conexão.'; msg.style.color='#e08a8a'; }
+}
+
+async function removerMaterial(materia, id){
+  try{
+    await fetch('/api/admin/remover-material', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminSenha, materia, id }) });
+    carregarMateriais();
   }catch(e){}
 }
 

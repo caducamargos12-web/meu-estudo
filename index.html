@@ -906,6 +906,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
       <div class="c-body-in">
         ${item.aviso?`<div class="blk-aviso"><span class="aviso-ic">⚠️</span><span>${item.aviso}</span></div>`:''}
         ${item.linkEstudo?`<a class="blk-link" href="${item.linkEstudo}" target="_blank" rel="noopener"><span class="link-ic">📎</span><span>${item.linkEstudoLabel||'Material de estudo'}</span><span class="link-arrow">→</span></a>`:''}
+        ${(Array.isArray(item.materiais)?item.materiais:[]).map(mat=>`<a class="blk-link" href="${mat.url}" target="_blank" rel="noopener"><span class="link-ic">📎</span><span>${(mat.descricao||'Material de apoio')}</span><span class="link-arrow">→</span></a>`).join('')}
         <div class="blk blk-aula">
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">${labelAula}</span></div>
           <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje.replace(/\n/g,'<br>'):'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
