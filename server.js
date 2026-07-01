@@ -1889,6 +1889,23 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// TEMPORÁRIA: mostra o blog da Física e o resultado processado. Remover depois.
+app.get('/api/diag-fis', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const blogText = await fetchBlog('https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html');
+  if (!blogText) return res.json({ erro: 'blog não carregou' });
+  const ref = req.query.ref || dataDoDia('ter');
+  const resultado = await processarFisica('Física', 'Leonardo José', blogText, ref, 1);
+  res.json({
+    dataReferencia: ref,
+    tamanhoBlog: blogText.length,
+    TEXTO_DO_BLOG: blogText,
+    RESULTADO: resultado
+  });
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
