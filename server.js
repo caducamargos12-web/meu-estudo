@@ -981,68 +981,73 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     '\n- "TESTE DD/MM <conteúdo>" ou "CONTEUDO DO TESTE DD/MM <conteúdo>" = o conteúdo de um teste com a data dele. Ex: "TESTE 22/5 LEIS DE NEWTON".' +
     '\n- "CONTEUDO DA PROVA <conteúdo>" = conteúdo de prova (sem data clara).' +
     '\n\n*** O QUE EXTRAIR ***' +
-    '\n1. "deveres": lista de TAREFAS. Para cada "TAREFA DD/MM X", extraia {data:"DD/MM", dever:"X"}.' +
+    '\n1. "deveres": lista de TAREFAS. Para cada "TAREFA DD/MM X", extraia {data:"DD/MM", dever:"X (texto completo)", tema:"assunto principal, curto, sem números de página nem palavras como PAGINA/QUESTOES"}.' +
+    '\n   Ex: "TAREFA 30/6 PAGINA 41 CONSERVAÇÃO DE ENERGIA PAGINA 42 QUESTOES 1 A 10" -> {data:"30/6", dever:"Página 41 conservação de energia; Página 42 questões 1 a 10", tema:"conservação de energia"}.' +
+    '\n   Ex: "TAREFA 19/6 TRABALHO E POTENCIA" -> {data:"19/6", dever:"Trabalho e potência", tema:"trabalho e potência"}.' +
     '\n2. "testes": lista de TESTES. Para cada "TESTE DD/MM X" ou "CONTEUDO DO TESTE DD/MM X", extraia {data:"DD/MM", conteudo:"X"}.' +
     '\nIGNORE eventos da escola (olimpíadas, copaanglo, gincana) e rodapé do blog (Postagens, perfil, Escolha a turma, Atom).' +
     '\nNÃO invente. Extraia só o que está escrito. Use o ano 2026 para todas as datas.' +
     '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
     '\n\nResponda APENAS JSON sem markdown:' +
-    '\n{"deveres":[{"data":"DD/MM","dever":"texto"}],"testes":[{"data":"DD/MM","conteudo":"texto"}]}';
+    '\n{"deveres":[{"data":"DD/MM","dever":"texto","tema":"assunto curto"}],"testes":[{"data":"DD/MM","conteudo":"texto"}]}';
 
   let dados;
   try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { deveres: [], testes: [] }; }
 
   const ehLixo = (t) => ehEventoEscolar(t) || /postagens?|^páginas$|^in[ií]cio$|pesquisar este blog|ver meu perfil|denunciar|escolha a turma|fevereiro 20/i.test((t||'').trim());
 
-  // deveres com data <= hoje, mais recentes primeiro
+  // deveres (tarefas) com data <= hoje, mais recentes primeiro. Guarda texto completo E tema.
   const deveres = (dados.deveres || [])
-    .map(d => ({ data: (d.data||'').slice(0,5), num: dataParaNum(d.data), dever: (d.dever||'').trim() }))
+    .map(d => ({
+      data: (d.data||'').slice(0,5),
+      num: dataParaNum(d.data),
+      dever: (d.dever||'').trim(),
+      tema: (d.tema||'').trim() || (d.dever||'').trim()
+    }))
     .filter(d => d.num > 0 && d.dever && !ehLixo(d.dever))
     .sort((a,b) => b.num - a.num);
 
-  // testes com data, mais recentes primeiro
+  // testes/conteúdos de teste com data, mais recentes primeiro
   const testes = (dados.testes || [])
     .map(t => ({ data: (t.data||'').slice(0,5), num: dataParaNum(t.data), conteudo: (t.conteudo||'').trim() }))
     .filter(t => t.num > 0 && t.conteudo && !ehLixo(t.conteudo))
     .sort((a,b) => b.num - a.num);
 
-  // AULA E DEVER DE HOJE: a tarefa da data de hoje (ou a mais recente até hoje)
+  // a TAREFA mais recente até hoje é a "desta aula". A matéria dela vira a AULA DE HOJE.
   const deveresAteHoje = deveres.filter(d => d.num <= refNum);
-  const deverHoje = deveresAteHoje[0] || null;
-  const aula_hoje = deverHoje ? deverHoje.dever : '';
-  const deveres_aula = deverHoje ? [deverHoje.dever] : [];
+  const deverRecente = deveresAteHoje[0] || null;
 
-  // DEVERES PENDENTES: as tarefas ANTERIORES ao dever de hoje (limita por maxDeveres)
+  // AULA DE HOJE = o TEMA (assunto) do dever mais recente. Ex: "conservação de energia".
+  const aula_hoje = deverRecente ? deverRecente.tema : '';
+
+  // DEVERES DESTA AULA = o texto completo do dever mais recente (ex: páginas 41 e 42).
+  const deveres_aula = deverRecente ? [deverRecente.dever] : [];
+
+  // DEVERES PENDENTES = as tarefas ANTERIORES ao dever mais recente, as 2 mais recentes.
   const limite = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
   const deveres_pendentes = deveresAteHoje
-    .filter(d => !deverHoje || d.num < deverHoje.num)
+    .filter(d => !deverRecente || d.num < deverRecente.num)
     .slice(0, limite)
     .map(d => ({ data: d.data, deveres: [d.dever] }));
 
-  // MATÉRIA DO TESTE: o professor pode aplicar (a) o conteúdo da última TAREFA/aula de
-  // hoje, ou (b) o último TESTE marcado. Mostra os dois como "TESTE_ANTERIOR ou AULA_HOJE".
-  // Ex: TESTE 22/5 LEIS DE NEWTON (teste) + TAREFA 19/6 TRABALHO E POTENCIA (aula de hoje)
-  //  -> "LEIS DE NEWTON ou TRABALHO E POTENCIA".
+  // MATÉRIA DO TESTE: se houver "CONTEUDO DO TESTE"/"TESTE" até hoje, usa o mais recente.
+  // Se NÃO houver nenhum, usa o TEMA do dever mais recente (ex: "conservação de energia").
   const testesAteHoje = testes.filter(t => t.num <= refNum);
-  const ultimoTeste = testesAteHoje[0] || null;        // ex: Leis de Newton
-  const conteudoHoje = deverHoje ? deverHoje.dever : ''; // ex: Trabalho e Potencia (tarefa de hoje)
+  const ultimoTeste = testesAteHoje[0] || null;
   let materia_teste = '', materia_teste_data = '';
-  const partes = [];
-  if (ultimoTeste && ultimoTeste.conteudo) partes.push(ultimoTeste.conteudo);
-  // só adiciona a aula de hoje se for diferente do último teste (evita repetir)
-  if (conteudoHoje && conteudoHoje.toLowerCase() !== (ultimoTeste ? ultimoTeste.conteudo.toLowerCase() : '')) {
-    partes.push(conteudoHoje);
-  }
-  if (partes.length) {
-    materia_teste = partes.join(' ou ');
-    materia_teste_data = deverHoje ? deverHoje.data : (ultimoTeste ? ultimoTeste.data : '');
+  if (ultimoTeste && ultimoTeste.conteudo) {
+    materia_teste = ultimoTeste.conteudo;
+    materia_teste_data = ultimoTeste.data;
+  } else if (deverRecente && deverRecente.tema) {
+    materia_teste = deverRecente.tema;
+    materia_teste_data = deverRecente.data;
   }
 
   let resumo = ''; // resumo gerado sob demanda (ao abrir a matéria)
 
   return {
     aula_hoje,
-    aula_data: deverHoje ? deverHoje.data : '',
+    aula_data: deverRecente ? deverRecente.data : '',
     deveres_pendentes, deveres_aula,
     tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
     resumo, questoes: [],
@@ -1887,23 +1892,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// TEMPORÁRIA: mostra o blog da Física e o resultado processado. Remover depois.
-app.get('/api/diag-fis', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const blogText = await fetchBlog('https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html');
-  if (!blogText) return res.json({ erro: 'blog não carregou' });
-  const ref = req.query.ref || dataDoDia('ter');
-  const resultado = await processarFisica('Física', 'Leonardo José', blogText, ref, 1);
-  res.json({
-    dataReferencia: ref,
-    tamanhoBlog: blogText.length,
-    TEXTO_DO_BLOG: blogText,
-    RESULTADO: resultado
-  });
 });
 
 app.get('/admin', (req, res) => {
