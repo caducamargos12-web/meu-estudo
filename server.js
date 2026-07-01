@@ -1077,7 +1077,7 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
 // Matemática B (Saulo): blog em texto corrido com rótulos.
 // Formato: "DATA: DD/MM/AAAA MÓDULO: N MATÉRIA: X PAG: Y TAREFA: Z" (repetido).
 // Extração determinística (sem IA): mais confiável e custo zero.
-async function processarRotulosSaulo(materia, professor, blogText, dataRef) {
+async function processarRotulosSaulo(materia, professor, blogText, dataRef, labelDia) {
   const ref = dataRef || hojeStr();
   const refNum = dataParaNum(ref);
   const refDDMM = ref.slice(0,5);
@@ -1123,12 +1123,29 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef) {
     if (pendentes.length >= 2) break;
   }
 
-  // MATÉRIA DO TESTE: o "testinho" marcado mais recente até hoje.
+  // MATÉRIA DO TESTE: o Saulo aplica teste na QUINTA (na quarta nunca tem, então esconde).
+  // Na quinta: se houver "testinho" marcado no blog (no campo matéria OU tarefa), usa a
+  // matéria dessa aula. Se não houver testinho, usa a matéria da aula mais recente.
   let materia_teste = '', materia_teste_data = '';
-  const comTestinho = ateHoje.filter(l => /testinho/i.test(l.tarefa));
-  if (comTestinho.length) {
-    materia_teste = comTestinho[0].materia;
-    materia_teste_data = comTestinho[0].data;
+  const ehQuinta = /quinta/i.test(labelDia || '');
+  if (ehQuinta) {
+    const temTestinho = (l) => /testinho|teste\b/i.test(l.materia) || /testinho/i.test(l.tarefa);
+    const comTestinho = ateHoje.filter(temTestinho);
+    if (comTestinho.length) {
+      // limpa: corta em "DATA:" (evita invadir a próxima aula), tira o marcador TESTINHO,
+      // e remove descrições longas de "aula destinada a...". Fica só o conteúdo/tema.
+      let txt = comTestinho[0].materia
+        .split(/\s*DATA:/i)[0]                              // não invade a próxima aula
+        .replace(/\s*aula\s+destinada.*$/i, '')            // tira "Aula destinada ao esclarecimento..."
+        .replace(/\s*testinho\s*/gi, ' ')                  // tira a palavra TESTINHO
+        .replace(/\s*corre[çc][ãa]o\s+da\s+pag.*$/i, '')   // tira "correção da pág..."
+        .replace(/\s+/g, ' ').trim();
+      materia_teste = txt;
+      materia_teste_data = comTestinho[0].data;
+    } else if (ateHoje.length) {
+      materia_teste = ateHoje[0].materia.split(/\s*DATA:/i)[0].replace(/\s+/g, ' ').trim();
+      materia_teste_data = ateHoje[0].data;
+    }
   }
 
   return {
@@ -1198,7 +1215,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // Matemática B (Saulo): blog com rótulos "DATA: DD/MM/AAAA MÓDULO: N MATÉRIA: X PAG: Y
   // TAREFA: Z" em texto corrido (não é tabela com barras). Extração 100% por código.
   if (formato === 'rotulosSaulo') {
-    return processarRotulosSaulo(materia, professor, blogText, dataRef);
+    return processarRotulosSaulo(materia, professor, blogText, dataRef, labelDia);
   }
   const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
