@@ -532,9 +532,9 @@ const GRADE = {
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14, linkEstudo:'https://drive.google.com/file/d/1qo7bJWbUPA3Yz3W9dvBKNSYCCdHRkwpY/view?usp=drivesdk', linkEstudoLabel:'Arquivo de estudos do 2º bimestre' },
   ],
   qui: [
-    { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true },
+    { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
-    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
+    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
   sex: [
@@ -1082,42 +1082,48 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef) {
   const refNum = dataParaNum(ref);
   const refDDMM = ref.slice(0,5);
 
+  // limpa lixo: underscores de separação, espaços sobrando, e marcadores vazios
+  const limpar = (t) => (t || '')
+    .replace(/_{2,}/g, ' ')      // tira as linhas de underscores separadoras
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-*]+|[\s\-*]+$/g, '')
+    .trim();
+
   // extrai cada bloco DATA/MATÉRIA/TAREFA
   const re = /DATA:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(?:M[ÓO]DULO:\s*\d+\s*)?MAT[ÉE]RIA:\s*(.+?)\s*(?:PAG\.?:\s*.+?\s*)?TAREFA:\s*(.+?)(?=\s*DATA:|$)/gi;
   const linhas = [...(blogText || '').matchAll(re)]
     .map(m => ({
       data: m[1].slice(0,5),
       num: dataParaNum(m[1]),
-      materia: (m[2] || '').replace(/\s+/g,' ').trim(),
-      tarefa: (m[3] || '').replace(/\s+/g,' ').trim()
+      materia: limpar(m[2]),
+      tarefa: limpar(m[3])
     }))
     .filter(l => l.num > 0 && l.materia && !ehEventoEscolar(l.materia));
 
-  // AULA DE HOJE: a linha com data igual à referência (ou a mais recente até hoje)
-  const ateHoje = linhas.filter(l => l.num <= refNum).sort((a,b) => b.num - a.num);
-  const linhaHoje = linhas.find(l => l.data === refDDMM) || ateHoje[0] || null;
+  // AULA DE HOJE: SÓ a linha com data EXATAMENTE igual à referência. Se o blog não tem
+  // registro para hoje, aula de hoje e dever desta aula ficam vazios (sem registro).
+  const linhaHoje = linhas.find(l => l.data === refDDMM) || null;
   const aula_hoje = linhaHoje ? linhaHoje.materia : '';
 
-  // DEVER DESTA AULA: a TAREFA da linha de hoje (se não for "testinho", que é avaliação)
+  // DEVER DESTA AULA: a TAREFA da linha de hoje (se não for "testinho"/"teste").
   const deveres_aula = [];
   if (linhaHoje && linhaHoje.tarefa && !/testinho|teste\b/i.test(linhaHoje.tarefa)) {
     deveres_aula.push(linhaHoje.tarefa);
   }
 
-  // DEVERES PENDENTES: tarefas das aulas recentes anteriores a hoje (até 2), que sejam
-  // tarefas de verdade (não "testinho"), agrupadas por data.
+  // DEVERES PENDENTES: tarefas das aulas ANTERIORES a hoje (até 2). Quando não há aula
+  // hoje, a tarefa da última aula (ex: 01/07) entra aqui como pendente, e não some.
+  const ateHoje = linhas.filter(l => l.num <= refNum).sort((a,b) => b.num - a.num);
   const pendentes = [];
   for (const l of ateHoje) {
-    if (l.data === refDDMM) continue; // a de hoje não é pendente
+    if (l.data === refDDMM) continue; // a de hoje (se existir) não é pendente
     if (l.tarefa && !/testinho|teste\b/i.test(l.tarefa)) {
       pendentes.push({ data: l.data, deveres: [l.tarefa] });
     }
     if (pendentes.length >= 2) break;
   }
 
-  // MATÉRIA DO TESTE: o "testinho" marcado. No blog do Saulo, quando uma aula tem
-  // TAREFA: TESTINHO, o conteúdo do teste é a matéria daquela aula. Pega o testinho
-  // mais recente até hoje.
+  // MATÉRIA DO TESTE: o "testinho" marcado mais recente até hoje.
   let materia_teste = '', materia_teste_data = '';
   const comTestinho = ateHoje.filter(l => /testinho/i.test(l.tarefa));
   if (comTestinho.length) {
@@ -1172,7 +1178,7 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   };
 }
 
-async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado, interpretacaoComAnterior) {
+async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado, interpretacaoComAnterior, testeNoDiaExato) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
     return processarHistoria(materia, professor, blogText, filtro, dataRef);
@@ -1404,6 +1410,22 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     }
   }
 
+  // REGRA "teste no dia exato" (ex: Biologia Angelita, Química B Maurélio): a matéria do
+  // teste só usa um testinho/teste se ele estiver marcado na data EXATA de hoje. Se não
+  // houver teste hoje, cai no comportamento padrão (matéria da última aula).
+  let testeExatoTexto = '', testeExatoData = '';
+  if (testeNoDiaExato) {
+    const refDDMM = ref.slice(0,5);
+    // procura a aula com data igual a hoje que mencione "testinho:" ou "teste N:"
+    const linhaHojeTeste = linhas.find(l => l.data.slice(0,5) === refDDMM && /testinho|teste\s*\d*\s*:/i.test(l.materia));
+    if (linhaHojeTeste) {
+      // extrai o conteúdo após o marcador (ex: "TESTE 4 : COEFICIENTE" -> "COEFICIENTE")
+      const mm = linhaHojeTeste.materia.match(/(?:testinho|teste\s*\d*)\s*:\s*(.+?)(?:[.;]|$)/i);
+      testeExatoTexto = (mm && mm[1].trim()) ? mm[1].trim() : linhaHojeTeste.materia;
+      testeExatoData = linhaHojeTeste.data.slice(0,5);
+    }
+  }
+
   // decide se mostra teste conforme o tipo
   let tem_avaliacao, materia_teste, materia_teste_data;
   if (tipo === 'soDever') {
@@ -1431,6 +1453,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     if (testeMarcado && testeMarcadoTexto) {
       materia_teste = testeMarcadoTexto;
       materia_teste_data = testeMarcadoData;
+    } else if (testeNoDiaExato) {
+      // regra "teste no dia exato": se há teste hoje, usa ele. Senão, a matéria da última aula.
+      if (testeExatoTexto) {
+        materia_teste = testeExatoTexto;
+        materia_teste_data = testeExatoData;
+      } else {
+        materia_teste = linhaTeste ? linhaTeste.materia : '';
+        materia_teste_data = linhaTeste ? linhaTeste.data.slice(0,5) : '';
+      }
     } else {
       // senão: se o professor marcou uma tabela de teste com conteúdo, usa esse conteúdo
       // (a menos que a matéria peça para ignorar a avaliação do blog)
@@ -1636,7 +1667,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     // 2) processa com IA, com até 3 tentativas (resiliente a falhas momentâneas da IA)
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
-        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior);
+        const ai = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior, item.testeNoDiaExato);
         if (Array.isArray(ai.deveres_pendentes)) {
           const limite = (item.maxDeveres && item.maxDeveres > 0) ? item.maxDeveres : 2;
           ai.deveres_pendentes = ai.deveres_pendentes
@@ -1977,31 +2008,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// TEMPORÁRIA: diagnostica Mat B (Saulo), Biologia (Angelita) e Química B (Maurélio). Remover depois.
-app.get('/api/diag-tri', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const ref = req.query.ref || dataDoDia('qua');
-  const out = {};
-  // Mat B Saulo
-  try {
-    const blogSaulo = await fetchBlog('https://profsauloanglo.blogspot.com/p/mat-b.html');
-    out.SAULO = { blog: blogSaulo, resultado: await processarRotulosSaulo('Matemática B', 'Saulo Rodrigues', blogSaulo, ref) };
-  } catch (e) { out.SAULO = { erro: e.message }; }
-  // Biologia Angelita (usa processWithAI com ignorarAvaliacao)
-  try {
-    const blogAng = await fetchBlog('https://profangelitacnsanglo.blogspot.com/p/3-ano.html');
-    out.ANGELITA = { blog: blogAng, resultado: await processWithAI('Biologia','Angelita Pimenta',blogAng,undefined,ref,'quarta',undefined,undefined,undefined,undefined,true) };
-  } catch (e) { out.ANGELITA = { erro: e.message }; }
-  // Química B Maurélio
-  try {
-    const blogMau = await fetchBlog('https://maureliopereiral.blogspot.com/p/3-ano.html');
-    out.MAURELIO = { blog: blogMau, resultado: await processWithAI('Química B','Maurélio',blogMau,undefined,ref,'quarta',undefined,undefined,7,undefined,true) };
-  } catch (e) { out.MAURELIO = { erro: e.message }; }
-  res.json({ dataReferencia: ref, ...out });
 });
 
 app.get('/admin', (req, res) => {
