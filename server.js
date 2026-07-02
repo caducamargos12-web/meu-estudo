@@ -16,6 +16,9 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   // não vaza a URL completa do app para sites externos
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // força o navegador a só acessar via HTTPS por 1 ano (evita downgrade para HTTP).
+  // O Railway já serve HTTPS, então isso apenas reforça no navegador.
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   // Content Security Policy: controla de onde scripts/estilos podem vir.
   // 'unsafe-inline' é necessário porque o app usa estilos e scripts inline;
   // restringe o resto a 'self' (o próprio domínio) + o necessário.
@@ -40,6 +43,24 @@ app.use(checkOrigin);
 
 // volume persistente do Railway em /data; se não existir, cai em /tmp
 const DATA_DIR = fs.existsSync('/data') ? '/data' : '/tmp';
+
+// ── log de segurança ────────────────────────────────────────────────────────
+// registra eventos relevantes (logins, falhas, ações admin, rate limit) num arquivo
+// no volume persistente. Serve para investigar se alguém tentar invadir. Guarda os
+// últimos ~2000 eventos (rotaciona para não crescer sem limite).
+const LOG_SEG_FILE = DATA_DIR + '/seguranca.log';
+function logSeguranca(evento, detalhes) {
+  try {
+    const linha = JSON.stringify({ t: new Date().toISOString(), evento, ...detalhes }) + '\n';
+    fs.appendFileSync(LOG_SEG_FILE, linha);
+    // rotação simples: se passar de ~500KB, mantém só a metade final
+    const stat = fs.statSync(LOG_SEG_FILE);
+    if (stat.size > 512 * 1024) {
+      const conteudo = fs.readFileSync(LOG_SEG_FILE, 'utf8').split('\n');
+      fs.writeFileSync(LOG_SEG_FILE, conteudo.slice(Math.floor(conteudo.length / 2)).join('\n'));
+    }
+  } catch {}
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONFIGURAÇÃO DE ALUNOS (logins)
@@ -225,6 +246,9 @@ function gerarToken(user, device) {
   return Buffer.from(payload).toString('base64') + '.' + assinatura;
 }
 
+// tokens expiram em 30 dias. Depois disso, o aluno faz login de novo. Isso evita que um
+// token capturado valha para sempre (antes não havia expiração).
+const TOKEN_VALIDADE_MS = 30 * 24 * 60 * 60 * 1000;
 function validarToken(token) {
   try {
     const [b64, assinatura] = token.split('.');
@@ -232,6 +256,9 @@ function validarToken(token) {
     const esperado = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
     if (assinatura !== esperado) return null;
     const [user, device, ts, pv] = payload.split('|');
+    // token expirado? (ts é o horário de emissão em ms)
+    const emitido = parseInt(ts, 10);
+    if (!emitido || (Date.now() - emitido) > TOKEN_VALIDADE_MS) return null;
     return { user, device, ts, pv };
   } catch { return null; }
 }
@@ -296,6 +323,8 @@ function checkOrigin(req, res, next) {
 function checkAdmin(req, res, next) {
   const senha = req.headers['x-admin-senha'] || req.query.adminSenha || (req.body && req.body.adminSenha);
   if (!senha || !senhaIgual(senha, process.env.ADMIN_SENHA)) {
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido').split(',')[0].trim();
+    logSeguranca('admin_senha_incorreta', { ip, rota: req.path });
     return res.status(401).json({ error: 'Senha de admin incorreta' });
   }
   next();
@@ -468,10 +497,40 @@ setInterval(() => {
   });
 }, 300000);
 
+// ── rate limiting GERAL (anti-abuso das rotas de dados) ─────────────────────
+// limita cada IP a 60 requisições por minuto nas rotas protegidas. Uso normal (abrir o
+// app, abrir matérias) fica MUITO abaixo disso; só barra quem fica recarregando em massa
+// (que geraria custo de IA e carga desnecessária).
+const requisicoesPorIp = {}; // ip -> { count, reset }
+const LIMITE_GERAL = 60;
+function rateLimitGeral(req, res, next) {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido').split(',')[0].trim();
+  const agora = Date.now();
+  const reg = requisicoesPorIp[ip];
+  if (!reg || agora > reg.reset) {
+    requisicoesPorIp[ip] = { count: 1, reset: agora + 60000 };
+    return next();
+  }
+  if (reg.count >= LIMITE_GERAL) {
+    res.setHeader('Retry-After', '60');
+    logSeguranca('rate_limit_geral', { ip, rota: req.path });
+    return res.status(429).json({ error: 'Muitas requisições. Aguarde um minuto.' });
+  }
+  reg.count++;
+  next();
+}
+setInterval(() => {
+  const agora = Date.now();
+  Object.keys(requisicoesPorIp).forEach(ip => {
+    if (agora > requisicoesPorIp[ip].reset) delete requisicoesPorIp[ip];
+  });
+}, 300000);
+
 // ── rota de login ─────────────────────────────────────────────────────────────
 app.post('/api/login', (req, res) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido';
   if (!checarRateLimit(ip)) {
+    logSeguranca('login_bloqueado_ratelimit', { ip });
     return res.json({ error: 'Muitas tentativas. Aguarde 1 minuto e tente de novo.' });
   }
   const { user, pass, device } = req.body;
@@ -479,6 +538,7 @@ app.post('/api/login', (req, res) => {
   const registro = alunos[user];
   if (!registro || !bcrypt.compareSync(pass, registro.hash)) {
     registrarFalha(ip);
+    logSeguranca('login_falha', { ip, user: user || '(vazio)' });
     return res.json({ error: 'Usuário ou senha incorretos' });
   }
 
@@ -503,6 +563,7 @@ app.post('/api/login', (req, res) => {
   }
 
   const token = gerarToken(user, device);
+  logSeguranca('login_sucesso', { user, ip });
   res.json({ token, user });
 });
 
@@ -1813,7 +1874,7 @@ function chaveAssunto(tipo, materia, assunto) {
   return (tipo + '|' + materia + '|' + assunto).toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 250);
 }
 
-app.post('/api/resumo', auth, async (req, res) => {
+app.post('/api/resumo', rateLimitGeral, auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const assunto = (req.body.assunto || '').slice(0, 300);
   if (!assunto) return res.json({ resumo: '' });
@@ -1834,7 +1895,7 @@ app.post('/api/resumo', auth, async (req, res) => {
   }
 });
 
-app.post('/api/simulado', auth, async (req, res) => {
+app.post('/api/simulado', rateLimitGeral, auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const materiaTeste = (req.body.materiaTeste || '').slice(0, 300);
   if (!materiaTeste) return res.json({ questoes: [] });
@@ -1947,6 +2008,17 @@ app.post('/api/admin/remover-sobrescrita', checkAdmin, (req, res) => {
   res.json({ error: 'Sobrescrita não encontrada.' });
 });
 
+// ── LOG DE SEGURANÇA (ver últimos eventos) ───────────────────────────────────
+app.get('/api/admin/seguranca', checkAdmin, (req, res) => {
+  try {
+    if (!fs.existsSync(LOG_SEG_FILE)) return res.json({ eventos: [] });
+    const linhas = fs.readFileSync(LOG_SEG_FILE, 'utf8').split('\n').filter(Boolean);
+    // devolve os últimos 100 eventos, mais recentes primeiro
+    const eventos = linhas.slice(-100).reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    res.json({ eventos });
+  } catch (e) { res.json({ eventos: [], erro: e.message }); }
+});
+
 // ── MATERIAIS DE APOIO (links de arquivos por matéria) ───────────────────────
 // lista todos os materiais cadastrados (agrupados por matéria)
 app.get('/api/admin/materiais', checkAdmin, (req, res) => {
@@ -1983,7 +2055,7 @@ app.post('/api/admin/remover-material', checkAdmin, (req, res) => {
   res.json({ error: 'Material não encontrado.' });
 });
 
-app.get('/api/today', auth, async function(req, res) {
+app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const ordem = ['seg','ter','qua','qui','sex'];
   const hojeDay = new Date().getDay();
