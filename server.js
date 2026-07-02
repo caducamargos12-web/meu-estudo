@@ -516,9 +516,9 @@ app.post('/api/login', (req, res) => {
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE = {
   seg: [
-    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal' },
-    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true },
-    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever' },
+    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14 },
+    { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true, maxDiasDever:14 },
+    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever', maxDiasDever:14 },
   ],
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
@@ -534,14 +534,14 @@ const GRADE = {
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true, maxDiasDever:14 },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
-    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:7, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
+    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:14, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Redação e Literatura', p:'Fábio', combinar:[
       { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
-      { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true, interpretacaoComAnterior:true },
+      { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true, interpretacaoComAnterior:true, maxDiasDever:14 },
     ] },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
@@ -764,6 +764,25 @@ function numParaData(num) {
   return new Date(ano, mes, dia);
 }
 
+// filtro padrão dos DEVERES PENDENTES em todas as matérias: mantém só os deveres dos
+// últimos `janelaDias` dias (padrão 14 = 2 semanas) e no máximo `maxItens` (padrão 2),
+// sempre os mais recentes. Recebe lista de {data:'DD/MM', num, ...} e a data de referência.
+function filtrarPendentes(lista, refNum, janelaDias, maxItens) {
+  const janela = (janelaDias && janelaDias > 0) ? janelaDias : 14;
+  const limite = (maxItens && maxItens > 0) ? maxItens : 2;
+  const refData = numParaData(refNum);
+  return (lista || [])
+    .filter(l => {
+      if (!l || !l.num) return false;
+      const d = numParaData(l.num);
+      if (!d || !refData) return false;
+      const diasAtras = Math.floor((refData - d) / 86400000);
+      return diasAtras >= 0 && diasAtras <= janela;
+    })
+    .sort((a, b) => b.num - a.num)
+    .slice(0, limite);
+}
+
 // ── processamento especial de HISTÓRIA (acumulativo por bimestre) ────────────
 // A matéria do teste é tudo que foi dado no 2º bimestre e ainda NÃO caiu em teste.
 async function processarHistoria(materia, professor, blogText, filtro, dataRef) {
@@ -796,10 +815,12 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
 
   // limpa deveres
   let deveres_aula = (dados.deveres_aula || []).filter(d => d && d.trim() && !ehLixo(d));
-  let deveres_pendentes = (dados.deveres_pendentes || [])
-    .map(g => ({ data: (g.data||'').slice(0,5), deveres: (g.deveres||[]).filter(d => d && d.trim() && !ehLixo(d)) }))
-    .filter(g => g.deveres.length > 0)
-    .slice(0, 2);
+  let deveres_pendentes = filtrarPendentes(
+    (dados.deveres_pendentes || [])
+      .map(g => ({ data: (g.data||'').slice(0,5), num: dataParaNum(g.data), deveres: (g.deveres||[]).filter(d => d && d.trim() && !ehLixo(d)) }))
+      .filter(g => g.deveres.length > 0),
+    refNum, 14, 2
+  ).map(g => ({ data: g.data, deveres: g.deveres }));
 
   // CÓDIGO decide o que sobrou: matérias do bimestre MENOS as que já caíram
   const materiasBim = (dados.materias_bimestre || []).filter(m => m && m.materia && m.materia.trim());
@@ -930,11 +951,10 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     if (!pendPorData[a.data]) pendPorData[a.data] = [];
     pendPorData[a.data].push(...a.atividades);
   }
-  const deveres_pendentes = Object.keys(pendPorData)
-    .map(data => ({ data, num: dataParaNum(data), deveres: pendPorData[data] }))
-    .sort((a,b) => b.num - a.num)
-    .slice(0, limite)
-    .map(g => ({ data: g.data, deveres: g.deveres }));
+  const deveres_pendentes = filtrarPendentes(
+    Object.keys(pendPorData).map(data => ({ data, num: dataParaNum(data), deveres: pendPorData[data] })),
+    refNum, 14, limite
+  ).map(g => ({ data: g.data, deveres: g.deveres }));
 
   // MATÉRIA DO TESTE: a PRIMEIRA aula do dia da referência (menor número de aula daquela
   // data). Ex: hoje tem aula 11 e 12; a matéria do teste está na aula 11.
@@ -1040,12 +1060,11 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
   // DEVERES DESTA AULA = o texto completo do dever mais recente (ex: páginas 41 e 42).
   const deveres_aula = deverRecente ? [deverRecente.dever] : [];
 
-  // DEVERES PENDENTES = as tarefas ANTERIORES ao dever mais recente, as 2 mais recentes.
-  const limite = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
-  const deveres_pendentes = deveresAteHoje
-    .filter(d => !deverRecente || d.num < deverRecente.num)
-    .slice(0, limite)
-    .map(d => ({ data: d.data, deveres: [d.dever] }));
+  // DEVERES PENDENTES = tarefas ANTERIORES ao dever mais recente. Filtro: 14 dias, máx 2.
+  const deveres_pendentes = filtrarPendentes(
+    deveresAteHoje.filter(d => !deverRecente || d.num < deverRecente.num),
+    refNum, 14, 2
+  ).map(d => ({ data: d.data, deveres: [d.dever] }));
 
   // MATÉRIA DO TESTE: se houver "CONTEUDO DO TESTE"/"TESTE" até hoje, usa o mais recente.
   // Se NÃO houver nenhum, usa o TEMA do dever mais recente (ex: "conservação de energia").
@@ -1111,17 +1130,17 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
     deveres_aula.push(linhaHoje.tarefa);
   }
 
-  // DEVERES PENDENTES: tarefas das aulas ANTERIORES a hoje (até 2). Quando não há aula
-  // hoje, a tarefa da última aula (ex: 01/07) entra aqui como pendente, e não some.
+  // DEVERES PENDENTES: tarefas das aulas ANTERIORES a hoje. Quando não há aula hoje, a
+  // tarefa da última aula (ex: 01/07) entra aqui como pendente. Filtro: últimos 14 dias, máx 2.
   const ateHoje = linhas.filter(l => l.num <= refNum).sort((a,b) => b.num - a.num);
-  const pendentes = [];
+  const candidatos = [];
   for (const l of ateHoje) {
     if (l.data === refDDMM) continue; // a de hoje (se existir) não é pendente
     if (l.tarefa && !/testinho|teste\b/i.test(l.tarefa)) {
-      pendentes.push({ data: l.data, deveres: [l.tarefa] });
+      candidatos.push({ data: l.data, num: l.num, deveres: [l.tarefa] });
     }
-    if (pendentes.length >= 2) break;
   }
+  const pendentes = filtrarPendentes(candidatos, refNum, 14, 2).map(p => ({ data: p.data, deveres: p.deveres }));
 
   // MATÉRIA DO TESTE: o Saulo aplica teste na QUINTA (na quarta nunca tem, então esconde).
   // Na quinta: se houver "testinho" marcado no blog (no campo matéria OU tarefa), usa a
