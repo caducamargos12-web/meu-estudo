@@ -1636,13 +1636,21 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       // CASO C: HOJE não tem testinho. Olha o último teste registrado até hoje.
       const ultimoTeste = linhasComTestinho.filter(l => l.num <= refNum).slice(-1)[0] || null;
       if (ultimoTeste && ehInterpretacao(ultimoTeste.testinho)) {
-        // primeira parte da aula de hoje (antes de ";" ou ".")
+        // primeira parte da aula de hoje (antes de ";" ou "."), limpa de termos sem nexo? NÃO:
+        // a primeira parte da aula de hoje é o que o professor deu hoje (ex: "Resolução do
+        // simulado"), então entra como está.
         const primeiraParteAula = (aula_hoje || '').split(/[;.]/)[0].trim();
-        // matéria da última aula (a aula mais recente ANTERIOR a hoje que tem matéria)
+        // matéria da última aula ANTERIOR a hoje. Precisa ser MATÉRIA REAL: remove qualquer
+        // "Testinho: X" e depois os termos sem nexo (revisão, resolução de simulado, etc.).
+        // Só entra no "vamos estudar isso também" se sobrar um assunto de verdade.
         const ultimaAula = linhas
           .filter(l => l.num < refNum && l.materia && l.materia.trim())
           .sort((a,b) => b.num - a.num)[0] || null;
-        const materiaUltimaAula = ultimaAula ? ultimaAula.materia.split(/[;.]/)[0].trim() : '';
+        let materiaUltimaAula = '';
+        if (ultimaAula) {
+          const semTestinho = ultimaAula.materia.replace(/testinho:\s*[^;.\n]+/gi, '').trim();
+          materiaUltimaAula = assuntoAvaliavel(semTestinho); // vazio se só sobrar coisa sem nexo
+        }
         const partes = [];
         if (primeiraParteAula) partes.push(primeiraParteAula);
         if (materiaUltimaAula) partes.push('vamos estudar isso também: ' + materiaUltimaAula);
