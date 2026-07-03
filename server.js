@@ -1600,30 +1600,58 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       .trim();
   }
 
-  // REGRA ESPECIAL (Literatura): quando o testinho de hoje é "interpretação de texto",
-  // ele cobra o conteúdo das aulas anteriores. Então a matéria do teste vira
-  // "interpretação de texto, <matéria do testinho da aula anterior>".
-  // Ex: hoje "Testinho: interpretação de texto" + anterior "Testinho: Parnasianismo e
-  // Simbolismo" -> "interpretação de texto, Parnasianismo e Simbolismo".
-  if (interpretacaoComAnterior && blogText) {
-    // extrai todos os "Testinho: X" do blog. O blog do Fábio lista da aula mais ANTIGA
-    // para a mais NOVA, então o testinho de HOJE é o ÚLTIMO da lista, e o anterior é o
-    // penúltimo (de trás para frente, o primeiro que não seja "interpretação de texto").
-    const testinhos = [...blogText.matchAll(/testinho:\s*([^;.\n]+)/gi)]
-      .map(m => m[1].trim())
-      .filter(Boolean);
-    if (testinhos.length) {
-      const hoje = testinhos[testinhos.length - 1]; // o ÚLTIMO é o mais recente (hoje)
-      if (/interpreta[çc][ãa]o\s+de\s+texto/i.test(hoje)) {
-        // de trás para frente, acha o testinho anterior que NÃO seja interpretação de texto
-        let anterior = '';
-        for (let k = testinhos.length - 2; k >= 0; k--) {
-          if (!/interpreta[çc][ãa]o\s+de\s+texto/i.test(testinhos[k])) { anterior = testinhos[k]; break; }
-        }
-        materia_teste = anterior ? ('interpretação de texto, ' + anterior) : 'interpretação de texto';
-        tem_avaliacao = true;
+  // REGRA ESPECIAL (Literatura): o testinho de "interpretação de texto" cobra o conteúdo
+  // das aulas anteriores. A regra só se aplica quando o testinho é do DIA ATUAL.
+  // Casos:
+  //  A) HOJE tem testinho e é "interpretação de texto" -> "interpretação de texto, <último teste anterior não-interpretação>".
+  //  B) HOJE tem testinho normal -> vale o padrão (já definido acima).
+  //  C) HOJE não tem testinho, e o ÚLTIMO teste registrado foi "interpretação de texto" ->
+  //     matéria do teste = primeira parte da aula de hoje + a matéria da última aula, com aviso.
+  if (interpretacaoComAnterior) {
+    const ehInterpretacao = (t) => /interpreta[çc][ãa]o\s+de\s+texto/i.test(t || '');
+    // pega os testinhos COM data, direto das linhas (materia contém "Testinho: X")
+    const extrairTestinho = (txt) => {
+      const m = (txt || '').match(/testinho:\s*([^;.\n]+)/i);
+      return m ? m[1].trim() : '';
+    };
+    const linhasComTestinho = linhas
+      .map(l => ({ num: l.num, data: l.data.slice(0,5), testinho: extrairTestinho(l.materia), materia: l.materia }))
+      .filter(l => l.testinho)
+      .sort((a,b) => a.num - b.num); // mais antigo -> mais novo
+
+    // testinho do DIA ATUAL (se houver)
+    const testinhoHoje = linhasComTestinho.find(l => l.data === refDDMM);
+
+    if (testinhoHoje && ehInterpretacao(testinhoHoje.testinho)) {
+      // CASO A: interpretação de texto hoje -> junta com o último teste anterior não-interpretação
+      let anterior = '';
+      const idx = linhasComTestinho.indexOf(testinhoHoje);
+      for (let k = idx - 1; k >= 0; k--) {
+        if (!ehInterpretacao(linhasComTestinho[k].testinho)) { anterior = linhasComTestinho[k].testinho; break; }
+      }
+      materia_teste = anterior ? ('interpretação de texto, ' + anterior) : 'interpretação de texto';
+      materia_teste_data = testinhoHoje.data;
+      tem_avaliacao = true;
+    } else if (!testinhoHoje) {
+      // CASO C: HOJE não tem testinho. Olha o último teste registrado até hoje.
+      const ultimoTeste = linhasComTestinho.filter(l => l.num <= refNum).slice(-1)[0] || null;
+      if (ultimoTeste && ehInterpretacao(ultimoTeste.testinho)) {
+        // primeira parte da aula de hoje (antes de ";" ou ".")
+        const primeiraParteAula = (aula_hoje || '').split(/[;.]/)[0].trim();
+        // matéria da última aula (a aula mais recente ANTERIOR a hoje que tem matéria)
+        const ultimaAula = linhas
+          .filter(l => l.num < refNum && l.materia && l.materia.trim())
+          .sort((a,b) => b.num - a.num)[0] || null;
+        const materiaUltimaAula = ultimaAula ? ultimaAula.materia.split(/[;.]/)[0].trim() : '';
+        const partes = [];
+        if (primeiraParteAula) partes.push(primeiraParteAula);
+        if (materiaUltimaAula) partes.push('vamos estudar isso também: ' + materiaUltimaAula);
+        materia_teste = partes.join('; ');
+        materia_teste_data = linhaRef ? linhaRef.data.slice(0,5) : refDDMM;
+        tem_avaliacao = !!materia_teste;
       }
     }
+    // CASO B (testinho normal hoje): não faz nada, mantém o que o padrão já definiu.
   }
 
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
@@ -1874,6 +1902,35 @@ function chaveAssunto(tipo, materia, assunto) {
   return (tipo + '|' + materia + '|' + assunto).toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 250);
 }
 
+// Decide se dá para gerar um SIMULADO de questões sobre a matéria do teste. Alguns
+// "assuntos" não são avaliáveis (não dá pra fazer questões sobre eles): revisão,
+// resolução/correção de simulado ou prova, interpretação de texto, e o aviso "vamos
+// estudar isso também". A regra: remove esses termos; se sobrar um assunto real, o
+// simulado é gerado SOBRE ESSE ASSUNTO limpo. Se não sobrar nada, retorna '' (sem simulado).
+// O resumo NÃO usa isso: ele sempre aparece.
+function assuntoAvaliavel(materiaTeste) {
+  if (!materiaTeste) return '';
+  // separa em partes (por ; , ou .) e descarta as partes que são só "sem nexo"
+  const semNexo = [
+    /^\s*revis[ãa]o(\s+geral)?\s*$/i,
+    /^\s*resolu[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\s*$/i,
+    /^\s*corre[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\s*$/i,
+    /^\s*interpreta[çc][ãa]o\s+de\s+texto\s*$/i,
+    /^\s*vamos\s+estudar\s+isso\s+tamb[ée]m\s*:?\s*$/i,
+    /^\s*simulado\s*$/i,
+  ];
+  const partes = materiaTeste
+    .split(/\s*[;,.]\s*|\s*\bvamos estudar isso também:\s*/i)
+    .map(p => p.trim())
+    .filter(Boolean)
+    // remove o rótulo "vamos estudar isso também" que pode ter sobrado colado
+    .map(p => p.replace(/^vamos\s+estudar\s+isso\s+tamb[ée]m\s*:?\s*/i, '').trim())
+    .filter(Boolean)
+    // descarta as partes que são puramente "sem nexo"
+    .filter(p => !semNexo.some(re => re.test(p)));
+  return partes.join('; ').trim();
+}
+
 app.post('/api/resumo', rateLimitGeral, auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const assunto = (req.body.assunto || '').slice(0, 300);
@@ -1899,11 +1956,15 @@ app.post('/api/simulado', rateLimitGeral, auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const materiaTeste = (req.body.materiaTeste || '').slice(0, 300);
   if (!materiaTeste) return res.json({ questoes: [] });
-  const ck = chaveAssunto('simulado', materia, materiaTeste);
+  // filtra conteúdo não-avaliável (revisão, resolução de simulado, interpretação de texto).
+  // Gera o simulado só sobre o assunto real que sobrar.
+  const assunto = assuntoAvaliavel(materiaTeste);
+  if (!assunto) return res.json({ questoes: [], semSimulado: true });
+  const ck = chaveAssunto('simulado', materia, assunto);
   if (resumoCache[ck]) return res.json({ questoes: resumoCache[ck], cached: true });
   try {
     const prompt = 'Você é um tutor de ' + materia + ' do ensino médio brasileiro. ' +
-      'Crie um simulado sobre: "' + materiaTeste + '".\n' +
+      'Crie um simulado sobre: "' + assunto + '".\n' +
       '4 questões de múltipla escolha (A-D), com a resposta correta e uma explicação curta.\n' +
       'Responda APENAS JSON sem markdown:\n' +
       '{"questoes":[{"enunciado":"","opcoes":{"A":"","B":"","C":"","D":""},"correta":"A","explicacao":""}]}';
