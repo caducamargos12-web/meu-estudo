@@ -596,12 +596,12 @@ const GRADE = {
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true, maxDiasDever:14 },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:14, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
-    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
+    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Redação e Literatura', p:'Fábio', combinar:[
-      { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14 },
+      { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true },
       { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true, interpretacaoComAnterior:true, maxDiasDever:14 },
     ] },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
@@ -1525,7 +1525,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 
   // decide se mostra teste conforme o tipo
   let tem_avaliacao, materia_teste, materia_teste_data;
-  if (tipo === 'soDever') {
+  if (ignorarAvaliacao && !interpretacaoComAnterior && !testeNoDiaExato && !testeMarcado) {
+    // matérias sem teste (ex: Redação): nunca mostra matéria do teste, seja qual for o tipo.
+    // (Literatura usa ignorarAvaliacao MAS tem interpretacaoComAnterior, então não cai aqui.)
+    tem_avaliacao = false; materia_teste = ''; materia_teste_data = '';
+  } else if (tipo === 'soDever') {
     tem_avaliacao = false; materia_teste = ''; materia_teste_data = '';
   } else if (tipo === 'provaFinal') {
     // só mostra teste se houver avaliação com DATA marcada PRÓXIMA da referência.
@@ -1918,24 +1922,44 @@ function chaveAssunto(tipo, materia, assunto) {
 // O resumo NÃO usa isso: ele sempre aparece.
 function assuntoAvaliavel(materiaTeste) {
   if (!materiaTeste) return '';
-  // separa em partes (por ; , ou .) e descarta as partes que são só "sem nexo"
-  const semNexo = [
-    /^\s*revis[ãa]o(\s+geral)?\s*$/i,
-    /^\s*resolu[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\s*$/i,
-    /^\s*corre[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\s*$/i,
-    /^\s*interpreta[çc][ãa]o\s+de\s+texto\s*$/i,
-    /^\s*vamos\s+estudar\s+isso\s+tamb[ée]m\s*:?\s*$/i,
-    /^\s*simulado\s*$/i,
+  // Uma parte é "sem nexo" (não avaliável) quando COMEÇA com um destes termos e NÃO é
+  // seguida de um conectivo (de/da/do/sobre) que ligue a uma matéria real.
+  // Ex: "Revisão" ou "Resolução do simulado Somos" -> sem nexo (bloqueia).
+  //     "Revisão de Parnasianismo" -> tem conectivo + matéria -> avaliável (gera).
+  // Termos que, se vierem sozinhos ou com lixo solto, bloqueiam o simulado:
+  const termosSemNexo = [
+    /^revis[ãa]o(\s+geral)?\b/i,
+    /^resolu[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\b/i,
+    /^corre[çc][ãa]o\s+d[eo]\s+(simulado|prova|avalia[çc][ãa]o|teste)s?\b/i,
+    /^interpreta[çc][ãa]o\s+de\s+texto\b/i,
+    /^simulad[oa]s?\b/i,
   ];
+  // conectivo que indica "tem matéria real depois" (ex: "revisão DE Parnasianismo")
+  const temConectivoComMateria = (p) => /\b(de|da|do|dos|das|sobre)\s+\S{3,}/i.test(p);
+
+  const ehSemNexo = (parte) => {
+    const p = parte.trim();
+    // "interpretação de texto" tem "de", mas é sempre sem nexo (o "texto" não é matéria).
+    if (/^interpreta[çc][ãa]o\s+de\s+texto\b/i.test(p)) return true;
+    for (const re of termosSemNexo) {
+      if (re.test(p)) {
+        // começa com termo sem nexo. Remove o termo e vê se sobra "conectivo + matéria".
+        // Ex: "Revisão de Parnasianismo" -> resto "de Parnasianismo" -> tem matéria -> avaliável.
+        //     "Resolução do simulado Somos" -> resto "Somos" -> sem conectivo -> sem nexo.
+        const resto = p.replace(re, '').trim();
+        return !temConectivoComMateria(resto);
+      }
+    }
+    return false; // não começa com termo sem nexo -> é matéria normal
+  };
+
   const partes = materiaTeste
     .split(/\s*[;,.]\s*|\s*\bvamos estudar isso também:\s*/i)
     .map(p => p.trim())
     .filter(Boolean)
-    // remove o rótulo "vamos estudar isso também" que pode ter sobrado colado
     .map(p => p.replace(/^vamos\s+estudar\s+isso\s+tamb[ée]m\s*:?\s*/i, '').trim())
     .filter(Boolean)
-    // descarta as partes que são puramente "sem nexo"
-    .filter(p => !semNexo.some(re => re.test(p)));
+    .filter(p => !ehSemNexo(p));
   return partes.join('; ').trim();
 }
 
