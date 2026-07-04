@@ -2211,6 +2211,48 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// TEMPORÁRIA: diagnostica o gatilho (teste 4 do Mat A) e os formatos de avaliação final
+// em cada blog. Remover depois.
+app.get('/api/diag-aval', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  const blogs = {
+    'Matemática A': 'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html',
+    'Química A': 'https://profwashingtonanglo.blogspot.com/p/3-ano.html',
+    'Química B': 'https://maureliopereiral.blogspot.com/p/3-ano.html',
+    'Biologia': 'https://profangelitacnsanglo.blogspot.com/p/3-ano.html',
+    'Física': 'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html',
+    'Filosofia': 'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html',
+    'História': 'https://profgustavocnsanglo.blogspot.com/p/9-ano.html',
+    'Matemática B': 'https://profsauloanglo.blogspot.com/p/mat-b.html',
+    'Redação': 'https://proffabiocnsanglo.blogspot.com/p/3-ano.html',
+  };
+  const out = {};
+  for (const [nome, url] of Object.entries(blogs)) {
+    try {
+      const blog = await fetchBlog(url);
+      if (!blog) { out[nome] = { erro: 'blog não carregou' }; continue; }
+      // acha trechos que mencionam avaliação/prova (contexto de 120 chars)
+      const achados = [];
+      const re = /(avalia[çc][ãa]o|prova\s+bimestral|prova\s+final|conte[úu]do\s+d[ae]\s+(avalia[çc][ãa]o|prova))/gi;
+      let m;
+      while ((m = re.exec(blog)) && achados.length < 4) {
+        const ini = Math.max(0, m.index - 10);
+        achados.push(blog.slice(ini, m.index + 130).replace(/\s+/g, ' ').trim());
+      }
+      // para o Mat A, também procura "teste 4" com data
+      let teste4 = null;
+      if (nome === 'Matemática A') {
+        const t4 = blog.match(/.{0,40}teste\s*0?4.{0,60}/gi);
+        teste4 = t4 ? t4.slice(0, 3) : null;
+      }
+      out[nome] = { mencoesAvaliacao: achados, teste4 };
+    } catch (e) { out[nome] = { erro: e.message }; }
+  }
+  res.json(out);
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
