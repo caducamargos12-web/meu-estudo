@@ -598,7 +598,7 @@ app.post('/api/login', (req, res) => {
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE = {
   seg: [
-    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14 },
+    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14, avaliacaoPorData:true },
     { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true, maxDiasDever:14 },
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever', maxDiasDever:14 },
   ],
@@ -756,9 +756,22 @@ async function fetchBlog(url) {
     // envia só os 7000 caracteres finais (aulas mais recentes) à IA. Cortar pela metade
     // reduz o custo por matéria, sem perder as aulas recentes que importam para o teste.
     const textoFinal = texto.length > 7000 ? texto.slice(texto.length - 7000) : texto;
-    blogCache[url] = { texto: textoFinal, ts: Date.now() }; // guarda no cache de memória
+    // guarda no cache: o texto CORTADO (pra IA) e o COMPLETO (pra extração da avaliação, que
+    // é feita por código e precisa do INÍCIO do blog, onde alguns professores põem a prova).
+    blogCache[url] = { texto: textoFinal, textoCompleto: texto, ts: Date.now() };
     return textoFinal;
   } catch { return null; }
+}
+// retorna o texto COMPLETO do blog (sem o corte de 7000). Usado só pela extração da
+// avaliação final (Filosofia/Inglês põem a prova no início do blog). Cai no cache de fetchBlog.
+async function fetchBlogCompleto(url) {
+  const cached = blogCache[url];
+  if (cached && (Date.now() - cached.ts) < BLOG_CACHE_MS && cached.textoCompleto) {
+    return cached.textoCompleto;
+  }
+  await fetchBlog(url); // popula o cache (incl. textoCompleto)
+  const c = blogCache[url];
+  return (c && c.textoCompleto) ? c.textoCompleto : (c ? c.texto : null);
 }
 
 function hojeStr() {
@@ -1857,12 +1870,15 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
             ai.deveres_aula.unshift(item.deverFixo);
           }
         }
-        // extrai a AVALIAÇÃO FINAL do 2º bimestre do blog (conteúdo/matérias da prova).
-        // Guarda o conteúdo aqui; a DECISÃO de exibir depende da janela e é feita fora do
-        // cache (em comAvaliacao), para abrir/fechar a janela refletir sem limpar cache.
-        // avaliação final: se a matéria tem texto fixo (ex: Redação = "Redação estilo ENEM"),
-        // usa ele. Senão, extrai do blog. A exibição depende da janela (feita em comMateriais).
-        ai.avaliacao_final = item.avaliacaoFixa ? item.avaliacaoFixa : extrairAvaliacaoFinal(blogText, item.filtro);
+        // extrai a AVALIAÇÃO FINAL do blog (conteúdo/matérias da prova). Usa o blog COMPLETO
+        // (não o cortado em 7000), porque Filosofia/Inglês põem a prova no INÍCIO do blog.
+        // A DECISÃO de exibir (janela ou por data) é feita fora do cache, em comMateriais.
+        if (item.avaliacaoFixa) {
+          ai.avaliacao_final = item.avaliacaoFixa;
+        } else {
+          const blogCompleto = await fetchBlogCompleto(item.url);
+          ai.avaliacao_final = extrairAvaliacaoFinal(blogCompleto || blogText, item.filtro, item.m, dataRef);
+        }
         return aplicarSobrescrita(Object.assign({}, item, ai, { ok: true, processadoOk: true }), sobre);
       } catch(e) {
         ultimoErro = e.message;
@@ -1892,8 +1908,16 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     const ck = chaveMaterial(item.m);
     const lista = Array.isArray(materiais[ck]) ? materiais[ck] : [];
     const naJanela = dentroDaJanelaAvaliacao();
-    const limpaAval = (av) => (naJanela && av && av.trim().length > 3) ? av : '';
-    // card combinado (ex: Redação e Literatura): aplica a janela em CADA seção interna.
+    // Filosofia (avaliacaoPorData) tem regra PRÓPRIA por data: a extração já decidiu se
+    // mostra (comparando a dataRef com a data da prova), então NÃO depende da janela do admin.
+    // As demais matérias só mostram a avaliação dentro da janela configurada.
+    const porData = !!item.avaliacaoPorData;
+    const limpaAval = (av) => {
+      if (!av || av.trim().length <= 3) return '';
+      if (porData) return av;            // regra própria: já filtrado por data na extração
+      return naJanela ? av : '';         // regra da janela do admin
+    };
+    // card combinado (ex: Redação e Literatura): aplica a regra em CADA seção interna.
     if (result.combinada && Array.isArray(result.secoes)) {
       const secoes = result.secoes.map(sec => Object.assign({}, sec, {
         dados: Object.assign({}, sec.dados, { avaliacao_final: limpaAval(sec.dados && sec.dados.avaliacao_final) })
@@ -1960,29 +1984,87 @@ function chaveAssunto(tipo, materia, assunto) {
 // estudar isso também". A regra: remove esses termos; se sobrar um assunto real, o
 // EXTRAI a AVALIAÇÃO FINAL do 2º bimestre do blog de uma matéria. Retorna o conteúdo/matérias
 // da prova, ou '' se o professor ainda não publicou. Ignora avaliações do 1º bimestre.
-function extrairAvaliacaoFinal(blogText, filtro) {
+function extrairAvaliacaoFinal(blogText, filtro, materia, dataRef) {
   if (!blogText) return '';
   // no blog do Fábio (Redação+Literatura), a avaliação é de LITERATURA. Se o filtro for
   // Redação, não retorna nada. Se for Literatura (ou sem filtro), usa o texto.
   if (filtro && /reda[çc][ãa]o/i.test(filtro)) return '';
+
+  const limpa = (t) => (t || '')
+    .replace(/&#\d+;/g, ' ')       // entidades html (ex: &#8211;)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/^[\s\-–:•]+/, '')
+    .replace(/[\s\-–:]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const m = (materia || '').toLowerCase();
+
+  // ── INGLÊS: "Matérias para 2° bim: Simple past, Past Continuous e Past Perfect."
+  if (/ingl[êe]s/.test(m)) {
+    const r = blogText.match(/mat[ée]rias?\s+para\s+2[º°o]?\s*bim[^:]*:\s*([^_\n]{5,180}?)(?:\s+revis[ãa]o|\s+https?:|\s+JULHO|\s+JULY|$)/i);
+    return r ? limpa(r[1]) : '';
+  }
+
+  // ── GEOGRAFIA: pega a ÚLTIMA "MATÉRIA: Revisão para avaliação / PÁGINAS: X"
+  // (a última é a do 2º bimestre; a primeira é do 1º).
+  if (/geografia/.test(m)) {
+    const todas = [...blogText.matchAll(/mat[ée]ria:\s*revis[ãa]o\s+para\s+avalia[çc][ãa]o\s*(?:p[áa]ginas?:\s*([^_\n]{3,120}?))?(?:tarefa|material|_|$)/gi)];
+    if (todas.length) {
+      const ultima = todas[todas.length - 1];
+      const paginas = ultima[1] ? limpa(ultima[1]) : '';
+      return paginas ? ('Revisão para avaliação: ' + paginas) : 'Revisão para avaliação';
+    }
+    return '';
+  }
+
+  // ── FILOSOFIA: regra PRÓPRIA por data (ignora a janela do admin). Cada avaliação aparece
+  // quando a data de referência do app (dataRef, que na prévia de fim de semana já aponta
+  // para a segunda seguinte) é IGUAL à data da avaliação. Como as provas caem na segunda e a
+  // prévia de sáb/dom já mira a segunda, a avaliação aparece sáb+dom+segunda e some depois.
+  if (/filosofia/.test(m)) {
+    const refNum = dataParaNum(dataRef || '');
+    // pega só o topo (antes do "1º Bimestre", que é o histórico do 1º bim)
+    const topo = blogText.split(/1[º°o]?\s*bimestre/i)[0] || blogText;
+    const pedacos = topo.split(/(?=data:\s*\d{1,2}\/\d{1,2})/i);
+    const achados = [];
+    for (const p of pedacos) {
+      const md = p.match(/data:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+      const mc = p.match(/atividade\s+avaliativa\s*(?:valor:\s*[\d,]+\s*)?conte[úu]do:\s*([^_\n]{5,180})/i);
+      if (md && mc) achados.push({ num: dataParaNum(md[1]), conteudo: limpa(mc[1]) });
+    }
+    if (!achados.length) return '';
+    // mostra SÓ a avaliação cuja data é igual à dataRef (o app já resolve a prévia).
+    const doDia = achados.find(a => a.num === refNum);
+    return doDia ? doDia.conteudo : '';
+  }
+
+  // ── LITERATURA (blog do Fábio): "Conteúdo da avaliação bimestral: ... conteúdos: X"
+  if (filtro && /literatura/i.test(filtro)) {
+    const r = blogText.match(/conte[úu]do\s+d[ae]\s+avalia[çc][ãa]o\s+bimestral\s*:\s*(?:[^:_\n]*?conte[úu]dos?\s*:\s*)?([^_\n]{5,220})/i);
+    if (r && r[1]) {
+      let c = limpa(r[1]).replace(/^a\s+sua\s+avalia[çc][ãa]o.*?conte[úu]dos?\s*:?\s*/i, '').trim();
+      return c.length >= 5 ? c : '';
+    }
+    return '';
+  }
+
+  // ── DEMAIS MATÉRIAS: padrão genérico do 2º bimestre (Química B, etc.).
+  // IMPORTANTE: exige menção ao 2º bimestre para NÃO pegar avaliação do 1º (ex: Biologia,
+  // que só tem "avaliação bimestral" do 1º no histórico -> não retorna nada).
   const padroes = [
     /avalia[çc][ãa]o[^:_\n]*?\b2[º°o]?\s*bimestre\s*:?\s*([^_\n]{5,220})/i,
-    /conte[úu]do[^:_\n]*?avalia[çc][ãa]o\s*bimestral[^:_\n]*?:\s*(?:[^:_\n]*?conte[úu]dos?\s*:\s*)?([^_\n]{5,220})/i,
-    /conte[úu]do\s+d[ae]\s+avalia[çc][ãa]o\s+bimestral\s*:?\s*([^_\n]{5,220})/i,
+    /conte[úu]do[^:_\n]*?avalia[çc][ãa]o[^:_\n]*?\b2[º°o]?\s*bim[^:_\n]*?:\s*([^_\n]{5,220})/i,
   ];
   for (const re of padroes) {
-    const m = blogText.match(re);
-    if (m && m[1]) {
-      let conteudo = m[1]
+    const mm = blogText.match(re);
+    if (mm && mm[1]) {
+      let conteudo = mm[1]
         .replace(/bons\s+estudos.*$/i, '')
         .replace(/\baula\s+\d+.*$/i, '')
-        .replace(/\b\d{1,2}\/\d{1,2}\b.*$/i, '')       // corta quando emenda numa data (ex: "11/06 TESTE 3")
-        .replace(/\bteste\s*\d+.*$/i, '')              // corta se emendar num "TESTE N"
-        .replace(/^[\s\-–:]+/, '')                     // tira traço/2 pontos no início
-        .replace(/[-–\s]+$/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      conteudo = conteudo.replace(/^a\s+sua\s+avalia[çc][ãa]o.*?conte[úu]dos?\s*:?\s*/i, '').trim();
+        .replace(/\b\d{1,2}\/\d{1,2}\b.*$/i, '')
+        .replace(/\bteste\s*\d+.*$/i, '');
+      conteudo = limpa(conteudo);
       if (conteudo.length >= 5) return conteudo;
     }
   }
@@ -2300,39 +2382,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// TEMPORÁRIA: diagnostica o INÍCIO do blog e trechos de avaliação de 5 matérias. Remover depois.
-app.get('/api/diag-aval2', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  const blogs = {
-    'Inglês': 'https://profjullycnsanglo.blogspot.com/p/3ano-em.html',
-    'Geografia': 'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html',
-    'Matemática A': 'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html',
-    'Filosofia': 'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html',
-    'Biologia Angelita': 'https://profangelitacnsanglo.blogspot.com/p/3-ano.html',
-  };
-  const out = {};
-  for (const [nome, url] of Object.entries(blogs)) {
-    try {
-      const blog = await fetchBlog(url);
-      if (!blog) { out[nome] = { erro: 'não carregou' }; continue; }
-      // pega o começo do conteúdo real (pula o cabeçalho repetido do blogspot)
-      const limpo = blog.replace(/\s+/g, ' ').trim();
-      // trechos com "avaliação", "matéria para", "revisão para avaliação", "2 bim"
-      const achados = [];
-      const re = /(mat[ée]ria[s]?\s+para|avalia[çc][ãa]o|revis[ãa]o\s+para|2[º°o]?\s*bim|prova\s+final|atividade\s+avaliativa)/gi;
-      let m;
-      while ((m = re.exec(limpo)) && achados.length < 5) {
-        const ini = Math.max(0, m.index - 15);
-        achados.push(limpo.slice(ini, m.index + 160).trim());
-      }
-      out[nome] = { inicio: limpo.slice(0, 400), trechos: achados };
-    } catch (e) { out[nome] = { erro: e.message }; }
-  }
-  res.json(out);
 });
 
 app.get('/admin', (req, res) => {
