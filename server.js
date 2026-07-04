@@ -2222,10 +2222,10 @@ app.get('/api/admin/materias', checkAdmin, (req, res) => {
 app.post('/api/admin/sobrescrever', checkAdmin, (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60).trim();
   const dia = (req.body.dia || '').slice(0, 3).trim();
-  const aula_hoje = (req.body.aula_hoje || '').slice(0, 500).trim();
-  const materia_teste = (req.body.materia_teste || '').slice(0, 300).trim();
-  const deveres_pendentes = (req.body.deveres_pendentes || '').slice(0, 1000).trim();
-  const deveres_aula = (req.body.deveres_aula || '').slice(0, 1000).trim();
+  const aula_hoje = (req.body.aula_hoje || '').slice(0, 2500).trim();
+  const materia_teste = (req.body.materia_teste || '').slice(0, 1000).trim();
+  const deveres_pendentes = (req.body.deveres_pendentes || '').slice(0, 2000).trim();
+  const deveres_aula = (req.body.deveres_aula || '').slice(0, 2000).trim();
   if (!materia || !dia) return res.json({ error: 'Informe matéria e dia.' });
   if (!aula_hoje && !materia_teste && !deveres_pendentes && !deveres_aula) return res.json({ error: 'Preencha ao menos um campo.' });
   const chave = chaveSobrescrita(materia, dia);

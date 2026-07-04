@@ -121,8 +121,8 @@
       </div>
       <div class="form-aluno" style="flex-direction:column;gap:10px">
         <select id="sobMateria" style="width:100%"></select>
-        <input id="sobAula" placeholder="Aula de hoje (ex: Geometria métrica plana I)" autocomplete="off" />
-        <input id="sobTeste" placeholder="Matéria para o teste (ex: Ângulos em polígonos)" autocomplete="off" />
+        <textarea id="sobAula" placeholder="Aula de hoje (ex: Geometria métrica plana I)" rows="4" style="width:100%;resize:vertical"></textarea>
+        <textarea id="sobTeste" placeholder="Matéria para o teste (ex: Ângulos em polígonos)" rows="2" style="width:100%;resize:vertical"></textarea>
         <textarea id="sobPendentes" placeholder="Deveres pendentes, de aulas anteriores (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
         <textarea id="sobDevAula" placeholder="Deveres desta aula, para a próxima semana (um por linha)" rows="3" style="width:100%;resize:vertical"></textarea>
         <button class="btn-criar" onclick="salvarSobrescrita()">Salvar sobrescrita</button>
