@@ -204,6 +204,27 @@ function chaveMaterial(materia) {
   return (materia || '').toLowerCase().trim();
 }
 carregarMateriais();
+
+// JANELA DA AVALIAÇÃO FINAL DO BIMESTRE: o admin define a data de início (semana de RAA)
+// e fim (fim da semana de provas). Dentro dessa janela, cada matéria mostra o bloco
+// "Avaliação Final do Bimestre" com o conteúdo publicado no blog. Fora, o bloco não aparece.
+let janelaAvaliacao = { inicio: '', fim: '' }; // datas ISO 'AAAA-MM-DD'
+const JANELA_AVAL_FILE = DATA_DIR + '/janela_avaliacao.json';
+function carregarJanelaAvaliacao() {
+  try { janelaAvaliacao = JSON.parse(fs.readFileSync(JANELA_AVAL_FILE, 'utf8')); }
+  catch { janelaAvaliacao = { inicio: '', fim: '' }; }
+}
+function salvarJanelaAvaliacao() {
+  try { fs.writeFileSync(JANELA_AVAL_FILE, JSON.stringify(janelaAvaliacao)); }
+  catch (e) { console.log('Erro ao salvar janela de avaliação:', e.message); }
+}
+// diz se HOJE está dentro da janela configurada
+function dentroDaJanelaAvaliacao() {
+  if (!janelaAvaliacao.inicio || !janelaAvaliacao.fim) return false;
+  const hoje = new Date().toISOString().slice(0, 10);
+  return hoje >= janelaAvaliacao.inicio && hoje <= janelaAvaliacao.fim;
+}
+carregarJanelaAvaliacao();
 carregarReports();
 
 // registra o cadastro de um aluno na primeira vez que ele loga
@@ -596,12 +617,12 @@ const GRADE = {
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true, maxDiasDever:14 },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
     { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:14, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
-    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true },
+    { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true, avaliacaoFixa:'Redação estilo ENEM' },
   ],
   sex: [
     { m:'Biologia',       p:'Ulisses Antônio', url:'https://profulissescnsanglo.blogspot.com/p/3-ano.html', maxDiasDever:14, testeMarcado:true, ignorarAvaliacao:true },
     { m:'Redação e Literatura', p:'Fábio', combinar:[
-      { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true },
+      { m:'Redação',    p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true, avaliacaoFixa:'Redação estilo ENEM' },
       { m:'Literatura', p:'Fábio', url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Literatura', ignorarAvaliacao:true, interpretacaoComAnterior:true, maxDiasDever:14 },
     ] },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
@@ -1836,6 +1857,12 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
             ai.deveres_aula.unshift(item.deverFixo);
           }
         }
+        // extrai a AVALIAÇÃO FINAL do 2º bimestre do blog (conteúdo/matérias da prova).
+        // Guarda o conteúdo aqui; a DECISÃO de exibir depende da janela e é feita fora do
+        // cache (em comAvaliacao), para abrir/fechar a janela refletir sem limpar cache.
+        // avaliação final: se a matéria tem texto fixo (ex: Redação = "Redação estilo ENEM"),
+        // usa ele. Senão, extrai do blog. A exibição depende da janela (feita em comMateriais).
+        ai.avaliacao_final = item.avaliacaoFixa ? item.avaliacaoFixa : extrairAvaliacaoFinal(blogText, item.filtro);
         return aplicarSobrescrita(Object.assign({}, item, ai, { ok: true, processadoOk: true }), sobre);
       } catch(e) {
         ultimoErro = e.message;
@@ -1864,7 +1891,20 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     if (!result) return result;
     const ck = chaveMaterial(item.m);
     const lista = Array.isArray(materiais[ck]) ? materiais[ck] : [];
-    return Object.assign({}, result, { materiais: lista });
+    const naJanela = dentroDaJanelaAvaliacao();
+    const limpaAval = (av) => (naJanela && av && av.trim().length > 3) ? av : '';
+    // card combinado (ex: Redação e Literatura): aplica a janela em CADA seção interna.
+    if (result.combinada && Array.isArray(result.secoes)) {
+      const secoes = result.secoes.map(sec => Object.assign({}, sec, {
+        dados: Object.assign({}, sec.dados, { avaliacao_final: limpaAval(sec.dados && sec.dados.avaliacao_final) })
+      }));
+      return Object.assign({}, result, { materiais: lista, secoes });
+    }
+    // card normal
+    return Object.assign({}, result, {
+      materiais: lista,
+      avaliacao_final: limpaAval(result.avaliacao_final)
+    });
   }
 
   // primeiro, serve as que já estão boas no cache (instantâneo)
@@ -1918,6 +1958,37 @@ function chaveAssunto(tipo, materia, assunto) {
 // "assuntos" não são avaliáveis (não dá pra fazer questões sobre eles): revisão,
 // resolução/correção de simulado ou prova, interpretação de texto, e o aviso "vamos
 // estudar isso também". A regra: remove esses termos; se sobrar um assunto real, o
+// EXTRAI a AVALIAÇÃO FINAL do 2º bimestre do blog de uma matéria. Retorna o conteúdo/matérias
+// da prova, ou '' se o professor ainda não publicou. Ignora avaliações do 1º bimestre.
+function extrairAvaliacaoFinal(blogText, filtro) {
+  if (!blogText) return '';
+  // no blog do Fábio (Redação+Literatura), a avaliação é de LITERATURA. Se o filtro for
+  // Redação, não retorna nada. Se for Literatura (ou sem filtro), usa o texto.
+  if (filtro && /reda[çc][ãa]o/i.test(filtro)) return '';
+  const padroes = [
+    /avalia[çc][ãa]o[^:_\n]*?\b2[º°o]?\s*bimestre\s*:?\s*([^_\n]{5,220})/i,
+    /conte[úu]do[^:_\n]*?avalia[çc][ãa]o\s*bimestral[^:_\n]*?:\s*(?:[^:_\n]*?conte[úu]dos?\s*:\s*)?([^_\n]{5,220})/i,
+    /conte[úu]do\s+d[ae]\s+avalia[çc][ãa]o\s+bimestral\s*:?\s*([^_\n]{5,220})/i,
+  ];
+  for (const re of padroes) {
+    const m = blogText.match(re);
+    if (m && m[1]) {
+      let conteudo = m[1]
+        .replace(/bons\s+estudos.*$/i, '')
+        .replace(/\baula\s+\d+.*$/i, '')
+        .replace(/\b\d{1,2}\/\d{1,2}\b.*$/i, '')       // corta quando emenda numa data (ex: "11/06 TESTE 3")
+        .replace(/\bteste\s*\d+.*$/i, '')              // corta se emendar num "TESTE N"
+        .replace(/^[\s\-–:]+/, '')                     // tira traço/2 pontos no início
+        .replace(/[-–\s]+$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      conteudo = conteudo.replace(/^a\s+sua\s+avalia[çc][ãa]o.*?conte[úu]dos?\s*:?\s*/i, '').trim();
+      if (conteudo.length >= 5) return conteudo;
+    }
+  }
+  return '';
+}
+
 // simulado é gerado SOBRE ESSE ASSUNTO limpo. Se não sobrar nada, retorna '' (sem simulado).
 // O resumo NÃO usa isso: ele sempre aparece.
 function assuntoAvaliavel(materiaTeste) {
@@ -2112,6 +2183,26 @@ app.get('/api/admin/seguranca', checkAdmin, (req, res) => {
   } catch (e) { res.json({ eventos: [], erro: e.message }); }
 });
 
+// ── AVALIAÇÃO FINAL DO BIMESTRE (janela de exibição) ─────────────────────────
+app.get('/api/admin/janela-avaliacao', checkAdmin, (req, res) => {
+  res.json({ janela: janelaAvaliacao, ativaHoje: dentroDaJanelaAvaliacao() });
+});
+app.post('/api/admin/definir-janela-avaliacao', checkAdmin, (req, res) => {
+  const inicio = (req.body.inicio || '').trim();
+  const fim = (req.body.fim || '').trim();
+  const valida = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!valida(inicio) || !valida(fim)) return res.json({ error: 'Datas inválidas. Use o seletor de data.' });
+  if (fim < inicio) return res.json({ error: 'A data final não pode ser antes da inicial.' });
+  janelaAvaliacao = { inicio, fim };
+  salvarJanelaAvaliacao();
+  res.json({ ok: true, mensagem: 'Janela da avaliação final definida.', janela: janelaAvaliacao });
+});
+app.post('/api/admin/limpar-janela-avaliacao', checkAdmin, (req, res) => {
+  janelaAvaliacao = { inicio: '', fim: '' };
+  salvarJanelaAvaliacao();
+  res.json({ ok: true, mensagem: 'Janela removida. O bloco de avaliação não aparece mais.' });
+});
+
 // ── MATERIAIS DE APOIO (links de arquivos por matéria) ───────────────────────
 // lista todos os materiais cadastrados (agrupados por matéria)
 app.get('/api/admin/materiais', checkAdmin, (req, res) => {
@@ -2211,43 +2302,34 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
-// TEMPORÁRIA: diagnostica o gatilho (teste 4 do Mat A) e os formatos de avaliação final
-// em cada blog. Remover depois.
-app.get('/api/diag-aval', async (req, res) => {
+// TEMPORÁRIA: diagnostica o INÍCIO do blog e trechos de avaliação de 5 matérias. Remover depois.
+app.get('/api/diag-aval2', async (req, res) => {
   if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
     return res.status(401).json({ error: 'senha invalida' });
   }
   const blogs = {
+    'Inglês': 'https://profjullycnsanglo.blogspot.com/p/3ano-em.html',
+    'Geografia': 'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html',
     'Matemática A': 'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html',
-    'Química A': 'https://profwashingtonanglo.blogspot.com/p/3-ano.html',
-    'Química B': 'https://maureliopereiral.blogspot.com/p/3-ano.html',
-    'Biologia': 'https://profangelitacnsanglo.blogspot.com/p/3-ano.html',
-    'Física': 'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html',
     'Filosofia': 'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html',
-    'História': 'https://profgustavocnsanglo.blogspot.com/p/9-ano.html',
-    'Matemática B': 'https://profsauloanglo.blogspot.com/p/mat-b.html',
-    'Redação': 'https://proffabiocnsanglo.blogspot.com/p/3-ano.html',
+    'Biologia Angelita': 'https://profangelitacnsanglo.blogspot.com/p/3-ano.html',
   };
   const out = {};
   for (const [nome, url] of Object.entries(blogs)) {
     try {
       const blog = await fetchBlog(url);
-      if (!blog) { out[nome] = { erro: 'blog não carregou' }; continue; }
-      // acha trechos que mencionam avaliação/prova (contexto de 120 chars)
+      if (!blog) { out[nome] = { erro: 'não carregou' }; continue; }
+      // pega o começo do conteúdo real (pula o cabeçalho repetido do blogspot)
+      const limpo = blog.replace(/\s+/g, ' ').trim();
+      // trechos com "avaliação", "matéria para", "revisão para avaliação", "2 bim"
       const achados = [];
-      const re = /(avalia[çc][ãa]o|prova\s+bimestral|prova\s+final|conte[úu]do\s+d[ae]\s+(avalia[çc][ãa]o|prova))/gi;
+      const re = /(mat[ée]ria[s]?\s+para|avalia[çc][ãa]o|revis[ãa]o\s+para|2[º°o]?\s*bim|prova\s+final|atividade\s+avaliativa)/gi;
       let m;
-      while ((m = re.exec(blog)) && achados.length < 4) {
-        const ini = Math.max(0, m.index - 10);
-        achados.push(blog.slice(ini, m.index + 130).replace(/\s+/g, ' ').trim());
+      while ((m = re.exec(limpo)) && achados.length < 5) {
+        const ini = Math.max(0, m.index - 15);
+        achados.push(limpo.slice(ini, m.index + 160).trim());
       }
-      // para o Mat A, também procura "teste 4" com data
-      let teste4 = null;
-      if (nome === 'Matemática A') {
-        const t4 = blog.match(/.{0,40}teste\s*0?4.{0,60}/gi);
-        teste4 = t4 ? t4.slice(0, 3) : null;
-      }
-      out[nome] = { mencoesAvaliacao: achados, teste4 };
+      out[nome] = { inicio: limpo.slice(0, 400), trechos: achados };
     } catch (e) { out[nome] = { erro: e.message }; }
   }
   res.json(out);

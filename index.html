@@ -172,6 +172,8 @@
   .blk-body{font-size:14px;line-height:1.65;color:var(--text)}
   .blk-aula .blk-label{color:var(--text-2)}
   .blk-teste{border-color:color-mix(in srgb,var(--accent) 35%,transparent);background:color-mix(in srgb,var(--accent) 9%,var(--bg))}
+  .blk-aval-final{border-color:color-mix(in srgb,#d98a8a 45%,transparent);background:color-mix(in srgb,#d98a8a 12%,var(--bg))}
+  .blk-aval-final .blk-label{color:#e0a0a0}
   .blk-teste .blk-label{color:var(--accent)}
   .blk-dev{border-color:color-mix(in srgb,var(--amber) 22%,transparent);background:color-mix(in srgb,var(--amber) 5%,var(--bg))}
   .blk-dev .blk-label{color:var(--amber)}
@@ -770,6 +772,10 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div>
           <div class="blk-body">${d.materia_teste}</div>
         </div>`:''}
+        ${(d.avaliacao_final&&d.avaliacao_final.trim().length>3)?`<div class="blk blk-aval-final">
+          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre</span></div>
+          <div class="blk-body">${d.avaliacao_final.replace(/\n/g,'<br>')}</div>
+        </div>`:''}
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
           <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
@@ -900,6 +906,13 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}</span></div>
           <div class="blk-body">${item.materia_teste||'—'}</div>
         </div>` : '';
+  // bloco da AVALIAÇÃO FINAL DO BIMESTRE (só aparece na janela definida no admin)
+  const temAvalFinal = item.avaliacao_final && item.avaliacao_final.trim().length>3;
+  const blocoAvalFinalHtml = temAvalFinal ? `
+        <div class="blk blk-aval-final">
+          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre</span></div>
+          <div class="blk-body">${item.avaliacao_final.replace(/\n/g,'<br>')}</div>
+        </div>` : '';
   // o resumo é gerado SOB DEMANDA quando o card abre (deixa o carregamento do dia rápido)
   const assuntoResumo = mostrarTeste ? (item.materia_teste||'') : (item.aula_hoje||'');
   const podeResumo = tipo!=='soDever' && assuntoResumo && assuntoResumo.trim().length>1;
@@ -935,6 +948,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-body">${(item.aula_hoje&&item.aula_hoje.trim().length>1)?item.aula_hoje.replace(/\n/g,'<br>'):'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
         ${blocoTesteHtml}
+        ${blocoAvalFinalHtml}
         ${blocoHistoriaHtml}
         ${(ehHistoria && !gruposPend.length) ? '' : `
         <div class="blk blk-dev">

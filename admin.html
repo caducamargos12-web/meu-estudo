@@ -133,6 +133,23 @@
     </div>
 
     <div class="card">
+      <div class="section-label">🏆 Avaliação Final do Bimestre (janela)</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Defina o período em que o bloco "Avaliação Final do Bimestre" aparece para os alunos (ex: da semana de RAA ao fim da semana de provas). Dentro dessa janela, cada matéria mostra a avaliação que o professor já publicou no blog. Fora da janela, o bloco some. Deixe em branco e limpe para desativar.
+      </div>
+      <div id="avalStatus" style="font-size:12px;margin-bottom:12px"></div>
+      <div class="form-aluno" style="flex-direction:column;gap:10px">
+        <label style="font-size:12px;color:var(--muted)">Início (semana de RAA)</label>
+        <input id="avalInicio" type="date" style="width:100%" />
+        <label style="font-size:12px;color:var(--muted)">Fim (último dia da semana de provas)</label>
+        <input id="avalFim" type="date" style="width:100%" />
+        <button class="btn-criar" onclick="definirJanelaAval()">Salvar janela</button>
+        <button class="small" onclick="limparJanelaAval()" style="align-self:flex-start">Desativar (limpar janela)</button>
+      </div>
+      <div id="avalMsg" class="form-msg"></div>
+    </div>
+
+    <div class="card">
       <div class="section-label">📎 Materiais de apoio (links de arquivos)</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
         Adicione links de arquivos (PDF, Google Drive, etc.) a uma matéria, com um texto explicando o que é. Aparecem dentro do card da matéria para o aluno. Máximo 3 por matéria.
@@ -185,6 +202,7 @@ async function carregarReports(){
     renderReports(data.reports, data.pendentes);
   }catch(e){}
   carregarSobrescritas();
+  carregarJanelaAval();
 }
 
 // ── sobrescritas manuais (contingência) ──
@@ -217,6 +235,48 @@ async function carregarSobrescritas(){
 }
 
 // ── materiais de apoio ──
+// ── avaliação final (janela) ──
+async function carregarJanelaAval(){
+  try{
+    const res = await fetch('/api/admin/janela-avaliacao?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error) return;
+    const j = data.janela || {inicio:'',fim:''};
+    document.getElementById('avalInicio').value = j.inicio || '';
+    document.getElementById('avalFim').value = j.fim || '';
+    const st = document.getElementById('avalStatus');
+    if(j.inicio && j.fim){
+      st.innerHTML = data.ativaHoje
+        ? '<span style="color:#a8c08a">● Ativa hoje</span> (de '+j.inicio+' até '+j.fim+')'
+        : '<span style="color:var(--muted)">○ Configurada, mas fora do período</span> (de '+j.inicio+' até '+j.fim+')';
+    } else {
+      st.innerHTML = '<span style="color:var(--muted)">Nenhuma janela ativa. O bloco de avaliação não aparece.</span>';
+    }
+  }catch(e){}
+}
+async function definirJanelaAval(){
+  const inicio = document.getElementById('avalInicio').value;
+  const fim = document.getElementById('avalFim').value;
+  const msg = document.getElementById('avalMsg');
+  if(!inicio || !fim){ msg.textContent='Preencha as duas datas.'; msg.style.color='#e08a8a'; return; }
+  try{
+    const res = await fetch('/api/admin/definir-janela-avaliacao', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminSenha, inicio, fim }) });
+    const data = await res.json();
+    if(data.error){ msg.textContent=data.error; msg.style.color='#e08a8a'; return; }
+    msg.textContent = data.mensagem || 'Salvo!'; msg.style.color='#a8c08a';
+    carregarJanelaAval();
+  }catch(e){ msg.textContent='Erro de conexão.'; msg.style.color='#e08a8a'; }
+}
+async function limparJanelaAval(){
+  const msg = document.getElementById('avalMsg');
+  try{
+    const res = await fetch('/api/admin/limpar-janela-avaliacao', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminSenha }) });
+    const data = await res.json();
+    msg.textContent = data.mensagem || 'Removida.'; msg.style.color='#a8c08a';
+    carregarJanelaAval();
+  }catch(e){}
+}
+
 async function carregarMateriais(){
   try{
     const res = await fetch('/api/admin/materiais?adminSenha=' + encodeURIComponent(adminSenha));
