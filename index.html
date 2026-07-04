@@ -904,7 +904,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
   const blocoTesteHtml = mostrarTeste ? `
         <div class="blk blk-teste">
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">${labelTeste}</span></div>
-          <div class="blk-body">${item.materia_teste||'—'}</div>
+          <div class="blk-body">${item.materia_teste||'-'}</div>
         </div>` : '';
   // bloco da AVALIAÇÃO FINAL DO BIMESTRE (só aparece na janela definida no admin)
   const temAvalFinal = item.avaliacao_final && item.avaliacao_final.trim().length>3;

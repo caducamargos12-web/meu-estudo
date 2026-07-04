@@ -380,7 +380,7 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
       vinculado: devs.length > 0,
       qtd_dispositivos: devs.length,
       max_dispositivos: MAX_DISPOSITIVOS,
-      dispositivos: devs.map(d => ({ id: d.id, aparelho: d.aparelho || 'Desconhecido', data: d.data || '—' })),
+      dispositivos: devs.map(d => ({ id: d.id, aparelho: d.aparelho || 'Desconhecido', data: d.data || '-' })),
       // dados de pagamento
       cadastro: pag ? pag.cadastro : null,
       vencimento: pag ? pag.vencimento : null,
@@ -1798,6 +1798,10 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     else if (preenchido(sobre.deveres_aula)) {
       r.deveres_aula = sobre.deveres_aula.split('\n').map(d => d.trim()).filter(Boolean);
     }
+    // avaliação final MANUAL: guarda o texto para o comMateriais COMPLEMENTAR a do blog
+    // (mostra as duas juntas) e aplicar a janela. "-" esvazia (não mostra manual).
+    if (querEsvaziar(sobre.avaliacao_manual)) r.avaliacao_manual = '';
+    else if (preenchido(sobre.avaliacao_manual)) r.avaliacao_manual = sobre.avaliacao_manual.trim();
     r.manual = true; // marca que teve intervenção manual
     return r;
   }
@@ -1812,7 +1816,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
           const r = await processarMateria(sub); // reaproveita a lógica normal
           secoes.push({ materia: sub.m, dados: r });
         } catch (e) {
-          secoes.push({ materia: sub.m, dados: { ok:false, aula_hoje:'—', materia_teste:'', deveres_pendentes:[], deveres_aula:[] } });
+          secoes.push({ materia: sub.m, dados: { ok:false, aula_hoje:'-', materia_teste:'', deveres_pendentes:[], deveres_aula:[] } });
         }
       }
       return Object.assign({}, item, { ok:true, processadoOk:true, combinada:true, secoes,
@@ -1833,7 +1837,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       if (sobre) {
         return aplicarSobrescrita(Object.assign({}, item, { ok:true, processadoOk:true, aula_hoje:'', materia_teste_data:'', materia_teste:'', tem_avaliacao:false, deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] }), sobre);
       }
-      return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar o blog desta matéria agora. Recarregue em alguns instantes.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+      return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'-', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar o blog desta matéria agora. Recarregue em alguns instantes.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
     }
     // 2) processa com IA, com até 3 tentativas (resiliente a falhas momentâneas da IA)
     for (let tentativa = 1; tentativa <= 3; tentativa++) {
@@ -1890,7 +1894,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     if (sobre) {
       return aplicarSobrescrita(Object.assign({}, item, { ok:true, processadoOk:true, aula_hoje:'', materia_teste_data:'', materia_teste:'', tem_avaliacao:false, deveres_pendentes:[], deveres_aula:[], resumo:'', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] }), sobre);
     }
-    return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'—', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
+    return Object.assign({}, item, { ok:false, processadoOk:false, aula_hoje:'-', materia_teste_data:'', materia_teste:'', deveres_pendentes:[], deveres_aula:[], resumo:'Não foi possível carregar agora. Recarregue a página em alguns segundos.', questoes:[], proxima_aula:'', proxima_resumo:'', proxima_deveres:[] });
   }
 
   // processa as matérias em PARALELO, mas em lotes de no máximo 3 ao mesmo tempo.
@@ -1912,22 +1916,30 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     // mostra (comparando a dataRef com a data da prova), então NÃO depende da janela do admin.
     // As demais matérias só mostram a avaliação dentro da janela configurada.
     const porData = !!item.avaliacaoPorData;
-    const limpaAval = (av) => {
-      if (!av || av.trim().length <= 3) return '';
-      if (porData) return av;            // regra própria: já filtrado por data na extração
-      return naJanela ? av : '';         // regra da janela do admin
+    // decide se pode exibir avaliação (regra da janela ou regra própria por data)
+    const podeExibir = porData ? true : naJanela;
+    // COMPLEMENTAR: junta a avaliação do blog com a manual (contingência), se houver.
+    // As duas respeitam a janela. Se a manual existir, aparece junto (não substitui).
+    const montarAval = (doBlog, manual) => {
+      if (!podeExibir) return '';
+      const partes = [];
+      if (doBlog && doBlog.trim().length > 3) partes.push(doBlog.trim());
+      if (manual && manual.trim().length > 0) partes.push(manual.trim());
+      return partes.join('\n');
     };
     // card combinado (ex: Redação e Literatura): aplica a regra em CADA seção interna.
     if (result.combinada && Array.isArray(result.secoes)) {
       const secoes = result.secoes.map(sec => Object.assign({}, sec, {
-        dados: Object.assign({}, sec.dados, { avaliacao_final: limpaAval(sec.dados && sec.dados.avaliacao_final) })
+        dados: Object.assign({}, sec.dados, {
+          avaliacao_final: montarAval(sec.dados && sec.dados.avaliacao_final, sec.dados && sec.dados.avaliacao_manual)
+        })
       }));
       return Object.assign({}, result, { materiais: lista, secoes });
     }
     // card normal
     return Object.assign({}, result, {
       materiais: lista,
-      avaliacao_final: limpaAval(result.avaliacao_final)
+      avaliacao_final: montarAval(result.avaliacao_final, result.avaliacao_manual)
     });
   }
 
@@ -2226,11 +2238,12 @@ app.post('/api/admin/sobrescrever', checkAdmin, (req, res) => {
   const materia_teste = (req.body.materia_teste || '').slice(0, 1000).trim();
   const deveres_pendentes = (req.body.deveres_pendentes || '').slice(0, 2000).trim();
   const deveres_aula = (req.body.deveres_aula || '').slice(0, 2000).trim();
+  const avaliacao_manual = (req.body.avaliacao_manual || '').slice(0, 1500).trim();
   if (!materia || !dia) return res.json({ error: 'Informe matéria e dia.' });
-  if (!aula_hoje && !materia_teste && !deveres_pendentes && !deveres_aula) return res.json({ error: 'Preencha ao menos um campo.' });
+  if (!aula_hoje && !materia_teste && !deveres_pendentes && !deveres_aula && !avaliacao_manual) return res.json({ error: 'Preencha ao menos um campo.' });
   const chave = chaveSobrescrita(materia, dia);
   sobrescritas[chave] = {
-    materia, dia, aula_hoje, materia_teste, deveres_pendentes, deveres_aula,
+    materia, dia, aula_hoje, materia_teste, deveres_pendentes, deveres_aula, avaliacao_manual,
     criadoEm: new Date().toISOString()
   };
   salvarSobrescritas();
