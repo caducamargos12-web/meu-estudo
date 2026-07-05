@@ -611,7 +611,7 @@ const GRADE = {
     { m:'Linguística',    p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-gramatica.html', formato:'duasAulas' },
     { m:'Matemática A',   p:'Tiago Santos',    url:'https://professoratiagocnsanglo.blogspot.com/p/3-ano-em-matematica-a_27.html', formato:'rotulado' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
-    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14, linkEstudo:'https://drive.google.com/file/d/1qo7bJWbUPA3Yz3W9dvBKNSYCCdHRkwpY/view?usp=drivesdk', linkEstudoLabel:'Arquivo de estudos do 2º bimestre' },
+    { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/3ano-em.html', tipo:'provaFinal', maxDiasDever:14 },
   ],
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true, maxDiasDever:14 },
