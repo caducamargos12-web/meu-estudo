@@ -347,8 +347,6 @@
   .music-btn-mini:hover{border-color:var(--accent)}
   .music-btn-mini.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
   .note-icon{transition:transform .2s}
-  .music-btn-mini.playing .note-icon{animation:noteBounce 1.4s ease-in-out infinite}
-  @keyframes noteBounce{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-1.5px) rotate(-6deg)}75%{transform:translateY(1px) rotate(6deg)}}
 </style>
 </head>
 <body>
@@ -752,9 +750,11 @@ function renderCard(item, idx, ehPrevia, dataRef){
       const pend=(d.deveres_pendentes||[]).filter(g=>g&&(g.deveres||[]).filter(x=>x&&x.trim()).length>0);
       const devAula=(d.deveres_aula||[]).filter(x=>x&&x.trim());
       const temTeste=d.materia_teste&&d.materia_teste.trim().length>1;
-      const podeSimuladoComb=temTeste&&assuntoAvaliavelFront(d.materia_teste).length>1;
+      const semanaProvasSec=!!d.semana_provas;
+      const podeSimuladoComb=!semanaProvasSec&&temTeste&&assuntoAvaliavelFront(d.materia_teste).length>1;
       const assuntoResumo=temTeste?(d.materia_teste||''):(d.aula_hoje||'');
-      const podeResumo=assuntoResumo&&assuntoResumo.trim().length>1;
+      const podeResumo=!semanaProvasSec&&assuntoResumo&&assuntoResumo.trim().length>1;
+      const dataProvaSecTxt=d.data_prova?' ('+d.data_prova+')':'';
       const subCardId=(sec.materia||'').replace(/\s/g,'_')+'_'+idx;
       const pendHtml=pend.length
         ?pend.map(g=>`<div class="dev-group"><div class="dev-date">${g.data}</div>${(g.deveres||[]).filter(x=>x&&x.trim()).map(x=>devCheckComb(x,'pend_'+g.data,chaveDev)).join('')}</div>`).join('')
@@ -768,12 +768,12 @@ function renderCard(item, idx, ehPrevia, dataRef){
           <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
           <div class="blk-body">${(d.aula_hoje&&d.aula_hoje.trim().length>1)?d.aula_hoje.replace(/\n/g,'<br>'):'<span style="color:var(--text-3)">Sem aula registrada para esta data ainda.</span>'}</div>
         </div>
-        ${temTeste?`<div class="blk blk-teste">
+        ${(temTeste && !semanaProvasSec)?`<div class="blk blk-teste">
           <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div>
           <div class="blk-body">${d.materia_teste}</div>
         </div>`:''}
         ${(d.avaliacao_final&&d.avaliacao_final.trim().length>3)?`<div class="blk blk-aval-final">
-          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre</span></div>
+          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre${dataProvaSecTxt}</span></div>
           <div class="blk-body">${d.avaliacao_final.replace(/\n/g,'<br>')}</div>
         </div>`:''}
         <div class="blk blk-dev">
@@ -793,6 +793,9 @@ function renderCard(item, idx, ehPrevia, dataRef){
         ${podeSimuladoComb?`<div class="blk blk-quiz" id="quiz-wrap-${subCardId}">
           <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
           <button class="btn-gerar-quiz" onclick="gerarSimulado('${(sec.materia||'').replace(/'/g,'')}','${(d.materia_teste||'').replace(/'/g,'').replace(/"/g,'&quot;')}','${subCardId}')">Gerar simulado de questões</button>
+        </div>`:''}
+        ${semanaProvasSec?`<div class="blk blk-res" style="border-color:color-mix(in srgb,#d98a8a 40%,transparent);background:color-mix(in srgb,#d98a8a 10%,var(--bg))">
+          <div class="blk-head"><span class="blk-ic">📚</span><span class="blk-label" style="color:#e0a0a0">Semana de provas (bora estudar!!)</span></div>
         </div>`:''}
       </div>`;
     }).join('<div class="sub-divisor"></div>');
@@ -908,24 +911,34 @@ function renderCard(item, idx, ehPrevia, dataRef){
         </div>` : '';
   // bloco da AVALIAÇÃO FINAL DO BIMESTRE (só aparece na janela definida no admin)
   const temAvalFinal = item.avaliacao_final && item.avaliacao_final.trim().length>3;
+  const dataProvaTxt = item.data_prova ? ' ('+item.data_prova+')' : '';
+  const avisoAvalHtml = item.aviso_avaliacao ? `<div class="blk-sub" style="color:#e0a0a0;margin-top:6px">${item.aviso_avaliacao}</div>` : '';
   const blocoAvalFinalHtml = temAvalFinal ? `
         <div class="blk blk-aval-final">
-          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre</span></div>
-          <div class="blk-body">${item.avaliacao_final.replace(/\n/g,'<br>')}</div>
+          <div class="blk-head"><span class="blk-ic">🏆</span><span class="blk-label">Avaliação Final do Bimestre${dataProvaTxt}</span></div>
+          <div class="blk-body">${item.avaliacao_final.replace(/\n/g,'<br>')}${avisoAvalHtml}</div>
         </div>` : '';
+  // item 4: na semana de provas (dentro da janela), não gera resumo nem simulado; mostra aviso.
+  const semanaProvas = !!item.semana_provas;
   // o resumo é gerado SOB DEMANDA quando o card abre (deixa o carregamento do dia rápido)
   const assuntoResumo = mostrarTeste ? (item.materia_teste||'') : (item.aula_hoje||'');
-  const podeResumo = tipo!=='soDever' && assuntoResumo && assuntoResumo.trim().length>1;
+  // item 5: história em "correção de RAA" não gera resumo (sem_resumo vem do backend)
+  const podeResumo = !semanaProvas && !item.sem_resumo && tipo!=='soDever' && assuntoResumo && assuntoResumo.trim().length>1;
   const blocoResumoHtml = podeResumo ? `
         <div class="blk blk-res">
           <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">${mostrarTeste?'Resumo da matéria do teste':'Resumo da aula'}</span></div>
           <div class="blk-body" id="resumo-${cardId}" data-assunto="${assuntoResumo.replace(/"/g,'&quot;')}" data-materia="${(item.m||'').replace(/"/g,'&quot;')}"><span class="resumo-loading">Gerando resumo…</span></div>
         </div>` : '';
-  const blocoSimuladoHtml = podeSimulado ? `
+  const blocoSimuladoHtml = (!semanaProvas && podeSimulado) ? `
         <div class="blk blk-quiz" id="quiz-wrap-${cardId}">
           <div class="blk-head"><span class="blk-ic">📝</span><span class="blk-label">Simulado para o teste</span></div>
           ${temQuestoes ? `${quizHtml}<div class="score" id="score-${cardId}">Responda as questões acima</div>`
             : `<button class="btn-gerar-quiz" onclick="gerarSimulado('${item.m}','${item.materia_teste.replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${cardId}')">Gerar simulado de revisão</button>`}
+        </div>` : '';
+  // aviso da semana de provas (substitui resumo/simulado)
+  const blocoSemanaProvasHtml = semanaProvas ? `
+        <div class="blk blk-res" style="border-color:color-mix(in srgb,#d98a8a 40%,transparent);background:color-mix(in srgb,#d98a8a 10%,var(--bg))">
+          <div class="blk-head"><span class="blk-ic">📚</span><span class="blk-label" style="color:#e0a0a0">Semana de provas (bora estudar!!)</span></div>
         </div>` : '';
 
   return `<div class="card${ehPrevia?' card-previa':''}" style="--cor:${cor};animation-delay:${idx*0.1}s" id="card-${idx}">
@@ -964,6 +977,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
         </div>`}
         ${blocoResumoHtml}
         ${blocoSimuladoHtml}
+        ${blocoSemanaProvasHtml}
         ${proxSec}
       </div>
     </div>

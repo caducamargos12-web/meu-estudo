@@ -254,6 +254,32 @@ function dentroDaJanelaAvaliacao() {
   const hoje = new Date().toISOString().slice(0, 10);
   return hoje >= janelaAvaliacao.inicio && hoje <= janelaAvaliacao.fim;
 }
+
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ CRONOGRAMA FIXO DE PROVAS (2º bim) — TEMPORÁRIO. Remover após 17/07/2026.  │
+// │ Mapeia a matéria para a data da prova, só para exibir "(DD/MM)" no bloco   │
+// │ de avaliação. Só tem efeito dentro da janela do admin. Para desativar,     │
+// │ basta esvaziar DATAS_PROVA e DATAS_PROVA_POR_DIA ({}).                      │
+// └─────────────────────────────────────────────────────────────────────────┘
+const DATAS_PROVA = {
+  'matemática b': '14/07', 'química b': '14/07', 'geografia': '14/07',
+  'linguística': '15/07', 'inglês': '15/07', 'química a': '15/07',
+  'literatura': '16/07', 'história': '16/07', 'matemática a': '16/07',
+  'biologia': '17/07',
+};
+// casos em que a data depende do DIA (ex: Redação aparece quinta E sexta com datas
+// diferentes). Chave: "matéria|dia". Tem prioridade sobre DATAS_PROVA.
+const DATAS_PROVA_POR_DIA = {
+  'redação|qui': '09/07',
+  'redação|sex': '10/07',
+};
+function dataProvaDe(materia, dia) {
+  const m = (materia || '').toLowerCase().trim();
+  const porDia = DATAS_PROVA_POR_DIA[m + '|' + (dia || '')];
+  if (porDia) return porDia;
+  return DATAS_PROVA[m] || '';
+}
+
 carregarJanelaAvaliacao();
 carregarReports();
 
@@ -628,7 +654,7 @@ app.post('/api/login', (req, res) => {
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE = {
   seg: [
-    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14, avaliacaoPorData:true },
+    { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14, avaliacaoPorData:true, avisoAvaliacao:'Prova com consulta à apostila. Estude as páginas indicadas.' },
     { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true, maxDiasDever:14 },
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever', maxDiasDever:14 },
   ],
@@ -991,6 +1017,9 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
 
   // resumo gerado sob demanda (quando o aluno abre a matéria), não aqui
   let resumoTeste = '';
+  // item 5: quando a aula do dia é CORREÇÃO de RAA/avaliação, não faz sentido gerar resumo
+  // (não é conteúdo de matéria). Marca a flag para o front não mostrar o botão de resumo.
+  const ehCorrecaoRAA = /corre[çc][ãa]o\s+d[eao]s?\s+(raa|avalia[çc][õãa]o|avalia[çc][õo]es)/i.test(aula_hoje);
 
   return {
     aula_hoje,
@@ -998,6 +1027,7 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
     deveres_pendentes, deveres_aula,
     // campos específicos de história
     historia: true,
+    sem_resumo: ehCorrecaoRAA,
     materias_teste: materiasComResumo, // lista das que podem cair, com resumo (mantido como apoio)
     // matéria do teste do dia (testinho marcado na data de referência)
     tem_avaliacao: !!testeMateria, materia_teste: testeMateria, materia_teste_data: testeData,
@@ -1944,33 +1974,60 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
     const naJanela = dentroDaJanelaAvaliacao();
     // Filosofia (avaliacaoPorData) tem regra PRÓPRIA por data: a extração já decidiu se
     // mostra (comparando a dataRef com a data da prova), então NÃO depende da janela do admin.
-    // As demais matérias só mostram a avaliação dentro da janela configurada.
     const porData = !!item.avaliacaoPorData;
-    // decide se pode exibir avaliação (regra da janela ou regra própria por data)
     const podeExibir = porData ? true : naJanela;
-    // COMPLEMENTAR: junta a avaliação do blog com a manual (contingência), se houver.
-    // As duas respeitam a janela. Se a manual existir, aparece junto (não substitui).
+    // COMPLEMENTAR: junta a avaliação do blog com a manual (contingência). Anexa a DATA da
+    // prova (cronograma fixo temporário) no início, se houver, dentro da janela.
+    const dataProva = naJanela ? dataProvaDe(item.m, dayKey) : '';
     const montarAval = (doBlog, manual) => {
       if (!podeExibir) return '';
       const partes = [];
       if (doBlog && doBlog.trim().length > 3) partes.push(doBlog.trim());
       if (manual && manual.trim().length > 0) partes.push(manual.trim());
+      if (!partes.length) return '';
       return partes.join('\n');
     };
-    // card combinado (ex: Redação e Literatura): aplica a regra em CADA seção interna.
+    // REGRAS DA SEMANA DE PROVAS (dentro da janela do admin):
+    //  - esconde a matéria do testinho (item some do card)
+    //  - NÃO gera resumo nem simulado; mostra aviso "Semana de provas (bora estudar!!)"
+    const aplicarRegrasProva = (r) => {
+      if (!naJanela) return r;
+      return Object.assign({}, r, {
+        materia_teste: '',            // esconde testinho
+        tem_avaliacao: false,
+        resumo: '',                   // sem resumo
+        questoes: [],                 // sem simulado
+        proxima_resumo: '',
+        semana_provas: true,          // frontend mostra o aviso "bora estudar"
+        data_prova: dataProva || ''   // data da prova (cronograma fixo), se houver
+      });
+    };
+    // card combinado (ex: Redação e Literatura): aplica em CADA seção interna.
     if (result.combinada && Array.isArray(result.secoes)) {
-      const secoes = result.secoes.map(sec => Object.assign({}, sec, {
-        dados: Object.assign({}, sec.dados, {
-          avaliacao_final: montarAval(sec.dados && sec.dados.avaliacao_final, sec.dados && sec.dados.avaliacao_manual)
-        })
-      }));
-      return Object.assign({}, result, { materiais: lista, secoes });
+      const secoes = result.secoes.map(sec => {
+        const dataProvaSec = naJanela ? dataProvaDe(sec.materia, dayKey) : '';
+        let dados = Object.assign({}, sec.dados, {
+          avaliacao_final: montarAval(sec.dados && sec.dados.avaliacao_final, sec.dados && sec.dados.avaliacao_manual),
+          data_prova: dataProvaSec || ''
+        });
+        if (naJanela) dados = Object.assign({}, dados, { materia_teste:'', tem_avaliacao:false, resumo:'', questoes:[], semana_provas:true });
+        return Object.assign({}, sec, { dados });
+      });
+      let base = Object.assign({}, result, { materiais: lista, secoes });
+      if (naJanela) base = Object.assign({}, base, { semana_provas:true });
+      return base;
     }
     // card normal
-    return Object.assign({}, result, {
+    let base = Object.assign({}, result, {
       materiais: lista,
       avaliacao_final: montarAval(result.avaliacao_final, result.avaliacao_manual)
     });
+    // aviso fixo da avaliação (ex: Filosofia = prova com consulta), só quando há avaliação
+    if (item.avisoAvaliacao && base.avaliacao_final && base.avaliacao_final.trim()) {
+      base.aviso_avaliacao = item.avisoAvaliacao;
+    }
+    base = aplicarRegrasProva(base);
+    return base;
   }
 
   // primeiro, serve as que já estão boas no cache (instantâneo)
