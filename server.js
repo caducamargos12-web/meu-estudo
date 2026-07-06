@@ -188,6 +188,36 @@ function chaveSobrescrita(materia, dia) {
 }
 carregarSobrescritas();
 
+// MIGRAÇÃO ÚNICA (troca dos rótulos das químicas: Gois virou Química B, Maurélio virou
+// Química A). A contingência do Gois estava salva como "química a|ter" (terça = dia do Gois);
+// como o Gois agora é Química B, a chave migra para "química b|ter". Distingue pelo DIA:
+// terça = Gois (vira B), quinta = Maurélio (vira A). Roda uma vez; se já migrou, não faz nada.
+(function migrarRotulosQuimica() {
+  const MARCA = '__quimica_migrada_v1';
+  if (sobrescritas[MARCA]) return; // já migrou
+  let mudou = false;
+  for (const chave of Object.keys(sobrescritas)) {
+    const val = sobrescritas[chave];
+    if (!val || typeof val !== 'object' || !val.dia) continue;
+    const ehQuimicaA = /^química a\|/i.test(chave);
+    const ehQuimicaB = /^química b\|/i.test(chave);
+    // Gois (terça) estava como "Química A" -> vira "Química B"
+    if (ehQuimicaA && val.dia === 'ter') {
+      const nova = chaveSobrescrita('Química B', val.dia);
+      val.materia = 'Química B';
+      sobrescritas[nova] = val; delete sobrescritas[chave]; mudou = true;
+    }
+    // Maurélio (quinta) estava como "Química B" -> vira "Química A"
+    else if (ehQuimicaB && val.dia === 'qui') {
+      const nova = chaveSobrescrita('Química A', val.dia);
+      val.materia = 'Química A';
+      sobrescritas[nova] = val; delete sobrescritas[chave]; mudou = true;
+    }
+  }
+  sobrescritas[MARCA] = true;
+  if (mudou || true) { try { salvarSobrescritas(); console.log('Rótulos de química migrados.'); } catch {} }
+})();
+
 // MATERIAIS DE APOIO (links de arquivos por matéria): o admin adiciona links (PDF, Drive,
 // etc.) com um texto explicativo, ligados a uma matéria. Aparecem dentro do card da matéria.
 // Máximo 3 por matéria. Chave: nome da matéria em minúsculas. Persistido em disco.
@@ -604,7 +634,7 @@ const GRADE = {
   ],
   ter: [
     { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
-    { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html', formato:'testesPorData' },
+    { m:'Química B',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html', formato:'testesPorData' },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
   qua: [
@@ -616,7 +646,7 @@ const GRADE = {
   qui: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/3-ano.html', ignorarAvaliacao:true, testeNoDiaExato:true, maxDiasDever:14 },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/mat-b.html', formato:'rotulosSaulo' },
-    { m:'Química B',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:14, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
+    { m:'Química A',      p:'Maurélio',        url:'https://maureliopereiral.blogspot.com/p/3-ano.html', maxDiasDever:14, ignorarAvaliacao:true, testeNoDiaExato:true, deverFixo:'TAREFAS DO 2º BIMESTRE: todas as TC da Frente A', aviso:'O professor marcou no blog a data da prova final do bimestre, mas essa data está incorreta e deve ser ajustada por ele. A prova não é nesta data. Considere abaixo apenas a matéria do teste mais recente.' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/3-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, ignorarAvaliacao:true, avaliacaoFixa:'Redação estilo ENEM' },
   ],
   sex: [
@@ -1541,7 +1571,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     }
   }
 
-  // REGRA "teste no dia exato" (ex: Biologia Angelita, Química B Maurélio): a matéria do
+  // REGRA "teste no dia exato" (ex: Biologia Angelita, Química A Maurélio): a matéria do
   // teste só usa um testinho/teste se ele estiver marcado na data EXATA de hoje. Se não
   // houver teste hoje, cai no comportamento padrão (matéria da última aula).
   let testeExatoTexto = '', testeExatoData = '';
@@ -2061,7 +2091,7 @@ function extrairAvaliacaoFinal(blogText, filtro, materia, dataRef) {
     return '';
   }
 
-  // ── DEMAIS MATÉRIAS: padrão genérico do 2º bimestre (Química B, etc.).
+  // ── DEMAIS MATÉRIAS: padrão genérico do 2º bimestre (Química B Gois, etc.).
   // IMPORTANTE: exige menção ao 2º bimestre para NÃO pegar avaliação do 1º (ex: Biologia,
   // que só tem "avaliação bimestral" do 1º no histórico -> não retorna nada).
   const padroes = [
