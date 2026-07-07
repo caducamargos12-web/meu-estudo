@@ -1823,10 +1823,14 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
   // estado atual do cache deste dia (pode estar parcial)
   const cacheDia = Array.isArray(cache[chave]) ? cache[chave] : null;
 
-  // se TODAS as matérias já estão boas no cache, entrega tudo instantâneo
+  // se TODAS as matérias já estão boas no cache, entrega tudo instantâneo.
+  // IMPORTANTE: aplica comMateriais também aqui, senão as regras que dependem da leitura
+  // (janela de avaliação, semana de provas, materiais) seriam ignoradas ao servir do cache,
+  // fazendo o card "mudar" ao atualizar a página (bug de cache cru).
   if (cacheDia && materias.every((_, i) => itemBom(cacheDia[i]))) {
-    materias.forEach((_, i) => {
-      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:cacheDia[i], ehPrevia, cached:true }) + '\n\n');
+    materias.forEach((item, i) => {
+      const pronto = comMateriais(cacheDia[i], item);
+      res.write('data: ' + JSON.stringify({ type:'result', index:offsetIndex+i, item:pronto, ehPrevia, cached:true }) + '\n\n');
     });
     return offsetIndex + materias.length;
   }
