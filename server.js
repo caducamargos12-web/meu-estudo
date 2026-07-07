@@ -2102,6 +2102,7 @@ function extrairAvaliacaoFinal(blogText, filtro, materia, dataRef) {
   const limpa = (t) => (t || '')
     .replace(/&#\d+;/g, ' ')       // entidades html (ex: &#8211;)
     .replace(/&nbsp;/gi, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ') // remove qualquer URL (link do Drive, etc.) do texto
     .replace(/^[\s\-–:•]+/, '')
     .replace(/[\s\-–:]+$/, '')
     .replace(/\s+/g, ' ')
@@ -2109,9 +2110,15 @@ function extrairAvaliacaoFinal(blogText, filtro, materia, dataRef) {
 
   const m = (materia || '').toLowerCase();
 
+  // corta o texto no primeiro link/marcador de fim, ANTES de qualquer extração específica.
+  // (protege contra blogs que colam o link do Drive logo após o conteúdo da avaliação.)
+  const cortarNoLink = (t) => (t || '').split(/https?:\/\//i)[0];
+
   // ── INGLÊS: "Matérias para 2° bim: Simple past, Past Continuous e Past Perfect."
   if (/ingl[êe]s/.test(m)) {
-    const r = blogText.match(/mat[ée]rias?\s+para\s+2[º°o]?\s*bim[^:]*:\s*([^_\n]{5,180}?)(?:\s+revis[ãa]o|\s+https?:|\s+JULHO|\s+JULY|$)/i);
+    // corta tudo a partir do primeiro link, para o Drive nunca entrar na avaliação.
+    const base = cortarNoLink(blogText);
+    const r = base.match(/mat[ée]rias?\s+para\s+2[º°o]?\s*bim[^:]*:\s*([^_\n]{5,180}?)(?:\s+revis[ãa]o|\s+JULHO|\s+JULY|$)/i);
     return r ? limpa(r[1]) : '';
   }
 
