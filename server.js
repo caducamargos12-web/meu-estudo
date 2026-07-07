@@ -1205,19 +1205,25 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     .filter(t => t.num > 0 && t.conteudo && !ehLixo(t.conteudo))
     .sort((a,b) => b.num - a.num);
 
-  // a TAREFA mais recente até hoje é a "desta aula". A matéria dela vira a AULA DE HOJE.
+  // a TAREFA mais recente até hoje é a "desta aula" (para deveres). A matéria dela NÃO é mais
+  // usada como "aula de hoje" automaticamente: a aula de hoje só existe se houver TAREFA na
+  // DATA EXATA de referência (senão fica "sem registro"), igual às demais matérias.
   const deveresAteHoje = deveres.filter(d => d.num <= refNum);
   const deverRecente = deveresAteHoje[0] || null;
 
-  // AULA DE HOJE = o TEMA (assunto) do dever mais recente. Ex: "conservação de energia".
-  const aula_hoje = deverRecente ? deverRecente.tema : '';
+  // AULA DE HOJE = tema da TAREFA cuja data é EXATAMENTE a de referência. Se não houver
+  // registro nessa data, aula_hoje fica vazio (sem registro).
+  const deverDoDia = deveres.find(d => d.num === refNum) || null;
+  const aula_hoje = deverDoDia ? deverDoDia.tema : '';
 
-  // DEVERES DESTA AULA = o texto completo do dever mais recente (ex: páginas 41 e 42).
-  const deveres_aula = deverRecente ? [deverRecente.dever] : [];
+  // DEVERES DESTA AULA = o dever da DATA EXATA de referência (mesma regra da aula de hoje).
+  // Dia sem aula (sem tarefa nessa data) = sem deveres desta aula.
+  const deveres_aula = deverDoDia ? [deverDoDia.dever] : [];
 
-  // DEVERES PENDENTES = tarefas ANTERIORES ao dever mais recente. Filtro: 14 dias, máx 2.
+  // DEVERES PENDENTES = tarefas ANTERIORES à data de hoje. Filtro: 14 dias, máx 2.
+  // (continua aparecendo mesmo em dia sem aula, para o aluno não perder um dever em aberto.)
   const deveres_pendentes = filtrarPendentes(
-    deveresAteHoje.filter(d => !deverRecente || d.num < deverRecente.num),
+    deveresAteHoje.filter(d => d.num < refNum),
     refNum, 14, 2
   ).map(d => ({ data: d.data, deveres: [d.dever] }));
 
@@ -1238,7 +1244,7 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
 
   return {
     aula_hoje,
-    aula_data: deverRecente ? deverRecente.data : '',
+    aula_data: deverDoDia ? deverDoDia.data : '',
     deveres_pendentes, deveres_aula,
     tem_avaliacao: !!materia_teste, materia_teste, materia_teste_data,
     resumo, questoes: [],

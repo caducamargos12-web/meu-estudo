@@ -963,18 +963,16 @@ function renderCard(item, idx, ehPrevia, dataRef){
         ${blocoTesteHtml}
         ${blocoAvalFinalHtml}
         ${blocoHistoriaHtml}
-        ${(ehHistoria && !gruposPend.length) ? '' : `
         <div class="blk blk-dev">
           <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
           <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
           ${deveresHtml}
-        </div>`}
-        ${(ehHistoria && !devsAula.length) ? '' : `
+        </div>
         <div class="blk blk-dev-novo">
           <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
           <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
           ${deveresAulaHtml}
-        </div>`}
+        </div>
         ${blocoResumoHtml}
         ${blocoSimuladoHtml}
         ${blocoSemanaProvasHtml}
