@@ -2512,31 +2512,25 @@ app.get('/api/diag-lenon', async (req, res) => {
   try {
     const item = GRADE['qua'].find(x => x.m === 'Linguística');
     if (!item) return res.json({ error: 'Linguística não encontrada na grade de quarta' });
-    const url = item.url;
-    const blogText = await fetchBlog(url);
-    const ref = hojeStr();
-    const refNum = dataParaNum(ref);
-    // roda a extração da IA (mesma da matéria)
-    let dados = {};
-    try {
-      const prompt = 'Extraia as aulas numeradas deste registro de Linguística (professor Lenon). ' +
-        'Para cada aula com data, retorne numero, data (DD/MM), descricao, tema e atividades (lista). ' +
-        'Responda APENAS JSON: {"aulas":[{"numero":0,"data":"DD/MM","descricao":"","tema":"","atividades":[]}]}\n\nREGISTRO:\n' + (blogText || '');
-      dados = await callAnthropic(prompt, 0);
-    } catch (e) { dados = { erro: e.message }; }
-    const aulas = (dados.aulas || []).map(a => ({
-      numero: a.numero, data: a.data, num: dataParaNum(a.data),
-      bateComHoje: dataParaNum(a.data) === refNum
-    }));
+    // pega o texto COMPLETO do blog (sem corte)
+    const completo = await fetchBlogCompleto(item.url);
+    const texto = completo || '';
+    // acha todas as ocorrências de "AULA N" e a posição delas no texto
+    const marcadores = [];
+    const re = /AULA\s+(\d{1,3})/gi;
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+      marcadores.push({ aula: m[1], posicao: m.index });
+    }
+    // acha todas as datas DD/MM no texto
+    const datas = [...texto.matchAll(/\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/g)].map(x => x[1]).slice(0, 40);
     res.json({
-      hoje: ref,
-      refNum,
-      blog_carregou: !!blogText,
-      blog_tamanho: blogText ? blogText.length : 0,
-      blog_inicio: blogText ? blogText.slice(0, 300) : '(vazio)',
-      total_aulas_extraidas: aulas.length,
-      aulas,
-      alguma_bate_hoje: aulas.some(a => a.bateComHoje)
+      hoje: hojeStr(),
+      blog_tamanho_completo: texto.length,
+      total_marcadores_AULA: marcadores.length,
+      marcadores_AULA: marcadores,
+      ultimos_2000_chars: texto.slice(-2000),
+      datas_encontradas: datas
     });
   } catch (e) {
     res.json({ error: e.message });
