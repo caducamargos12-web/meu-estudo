@@ -1955,6 +1955,23 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
           const blogCompleto = await fetchBlogCompleto(item.url);
           ai.avaliacao_final = extrairAvaliacaoFinal(blogCompleto || blogText, item.filtro, item.m, dataRef);
         }
+        // VERIFICAÇÃO DE EXTRAÇÃO VAZIA (só formato duasAulas = Linguística): se a IA não
+        // trouxe NADA (sem aula, sem deveres, sem teste, sem avaliação) e o blog claramente
+        // tinha conteúdo, provavelmente foi uma falha momentânea da IA. Tenta de novo antes de
+        // aceitar. Restrito a duasAulas para não gastar chamadas extras em matérias que podem
+        // ter dias legitimamente sem aula (ex: Física em dia sem tarefa).
+        const resultadoVazio =
+          (!ai.aula_hoje || !ai.aula_hoje.trim()) &&
+          (!Array.isArray(ai.deveres_aula) || ai.deveres_aula.length === 0) &&
+          (!Array.isArray(ai.deveres_pendentes) || ai.deveres_pendentes.length === 0) &&
+          (!ai.materia_teste || !ai.materia_teste.trim()) &&
+          (!ai.avaliacao_final || !ai.avaliacao_final.trim());
+        const blogTinhaConteudo = blogText && blogText.length > 200;
+        if (item.formato === 'duasAulas' && resultadoVazio && blogTinhaConteudo && tentativa < 3) {
+          // não aceita ainda: espera e tenta de novo (pode ser falha momentânea da IA)
+          await new Promise(r => setTimeout(r, 800 * tentativa));
+          continue;
+        }
         return aplicarSobrescrita(Object.assign({}, item, ai, { ok: true, processadoOk: true }), sobre);
       } catch(e) {
         ultimoErro = e.message;
@@ -2501,40 +2518,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// ── DIAGNÓSTICO TEMPORÁRIO (remover depois): mostra o que o servidor vê da Linguística.
-// uso: /api/diag-lenon?senha=ADMIN_SENHA
-app.get('/api/diag-lenon', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  try {
-    const item = GRADE['qua'].find(x => x.m === 'Linguística');
-    if (!item) return res.json({ error: 'Linguística não encontrada na grade de quarta' });
-    // pega o texto COMPLETO do blog (sem corte)
-    const completo = await fetchBlogCompleto(item.url);
-    const texto = completo || '';
-    // acha todas as ocorrências de "AULA N" e a posição delas no texto
-    const marcadores = [];
-    const re = /AULA\s+(\d{1,3})/gi;
-    let m;
-    while ((m = re.exec(texto)) !== null) {
-      marcadores.push({ aula: m[1], posicao: m.index });
-    }
-    // acha todas as datas DD/MM no texto
-    const datas = [...texto.matchAll(/\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/g)].map(x => x[1]).slice(0, 40);
-    res.json({
-      hoje: hojeStr(),
-      blog_tamanho_completo: texto.length,
-      total_marcadores_AULA: marcadores.length,
-      marcadores_AULA: marcadores,
-      ultimos_2000_chars: texto.slice(-2000),
-      datas_encontradas: datas
-    });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
 });
 
 app.get('/admin', (req, res) => {
