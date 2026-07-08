@@ -2503,6 +2503,46 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// ── DIAGNÓSTICO TEMPORÁRIO (remover depois): mostra o que o servidor vê da Linguística.
+// uso: /api/diag-lenon?senha=ADMIN_SENHA
+app.get('/api/diag-lenon', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  try {
+    const item = GRADE['qua'].find(x => x.m === 'Linguística');
+    if (!item) return res.json({ error: 'Linguística não encontrada na grade de quarta' });
+    const url = item.url;
+    const blogText = await fetchBlog(url);
+    const ref = hojeStr();
+    const refNum = dataParaNum(ref);
+    // roda a extração da IA (mesma da matéria)
+    let dados = {};
+    try {
+      const prompt = 'Extraia as aulas numeradas deste registro de Linguística (professor Lenon). ' +
+        'Para cada aula com data, retorne numero, data (DD/MM), descricao, tema e atividades (lista). ' +
+        'Responda APENAS JSON: {"aulas":[{"numero":0,"data":"DD/MM","descricao":"","tema":"","atividades":[]}]}\n\nREGISTRO:\n' + (blogText || '');
+      dados = await callAnthropic(prompt, 0);
+    } catch (e) { dados = { erro: e.message }; }
+    const aulas = (dados.aulas || []).map(a => ({
+      numero: a.numero, data: a.data, num: dataParaNum(a.data),
+      bateComHoje: dataParaNum(a.data) === refNum
+    }));
+    res.json({
+      hoje: ref,
+      refNum,
+      blog_carregou: !!blogText,
+      blog_tamanho: blogText ? blogText.length : 0,
+      blog_inicio: blogText ? blogText.slice(0, 300) : '(vazio)',
+      total_aulas_extraidas: aulas.length,
+      aulas,
+      alguma_bate_hoje: aulas.some(a => a.bateComHoje)
+    });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
