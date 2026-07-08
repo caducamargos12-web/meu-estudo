@@ -1040,51 +1040,70 @@ async function processarHistoria(materia, professor, blogText, filtro, dataRef) 
 // O professor numera as aulas (AULA 9, AULA 10) e pode dar 2 no mesmo dia.
 // Mostra as aulas do dia de referência; o dever é as ATIVIDADES da última aula.
 async function processarDuasAulas(materia, professor, blogText, filtro, dataRef, maxDeveres) {
-  const temConteudo = blogText && blogText.length > 50;
   const ref = dataRef || hojeStr();
   const refNum = dataParaNum(ref);
   const refDDMM = ref.slice(0,5);
 
-  const prompt = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' +
-    '\n\n*** FORMATO ***' +
-    '\nAs aulas são numeradas: "AULA 7", "AULA 8", "AULA 9", "AULA 10"... Cada uma tem "DATA: DD/MM/AAAA" e uma descrição.' +
-    '\nPode haver DUAS (ou mais) aulas no MESMO dia (ex: AULA 9 e AULA 10 ambas em 17/06).' +
-    '\nNa descrição de cada aula, procure as ATIVIDADES/DEVERES: textos como "Atividade complementar", "Atividades na apostila nas páginas X", "Páginas da apostila X", "atividades das páginas X". Essas atividades SÃO o dever do aluno.' +
-    '\n\n*** O QUE EXTRAIR ***' +
-    '\nExtraia TODAS as aulas numeradas que tiverem data. Para cada uma:' +
-    '\n- "numero": o número da aula (ex: 9, 10).' +
-    '\n- "data": a data dela (DD/MM).' +
-    '\n- "descricao": o conteúdo da aula como está escrito no blog (completo). Ex: "aula expositiva sobre discurso citado, abordando os discursos direto, indireto e indireto livre".' +
-    '\n- "tema": o TÓPICO central da aula em poucas palavras, SÓ o assunto estudado, sem verbos nem "aula expositiva sobre". Ex: para a descrição acima, o tema é "discurso direto, indireto e indireto livre". Para "estudo das orações subordinadas substantivas", o tema é "orações subordinadas substantivas".' +
-    '\n- "atividades": lista das atividades/deveres daquela aula (ex: "Atividades na apostila nas páginas 37-38-39"). Se não houver, [].' +
-    '\n\nIGNORE rodapé do Blogspot (Postagens, Páginas, perfil, Atom, "Escolha a turma", "Pesquisar este blog", nome do professor solto) e eventos da escola (CopaAnglo, gincana, etc.).' +
-    '\nNÃO invente. Extraia só o que está escrito.' +
-    '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
-    '\n\nResponda APENAS JSON sem markdown:' +
-    '\n{"aulas":[{"numero":9,"data":"DD/MM","descricao":"texto","tema":"tópico curto","atividades":["..."]}]}';
-
-  let dados;
-  try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { aulas: [] }; }
-
   const ehLixo = (t) => ehEventoEscolar(t) || /postagens?|^páginas$|^in[ií]cio$|pesquisar este blog|ver meu perfil|denunciar|arquivo do blog/i.test((t||'').trim());
 
-  const aulas = (dados.aulas || [])
-    .map(a => ({
-      numero: a.numero,
-      data: (a.data||'').slice(0,5),
-      num: dataParaNum(a.data),
-      descricao: (a.descricao||'').trim(),
-      tema: (a.tema||'').trim(),
-      atividades: (a.atividades||[]).filter(d => d && d.trim() && !ehLixo(d))
-    }))
-    .filter(a => a.num > 0);
+  // ── EXTRAÇÃO POR CÓDIGO (regex) ────────────────────────────────────────────
+  // O blog do Lenon é MUITO regular: "AULA N DATA: DD/MM/AAAA <descrição> <atividades>".
+  // Extrair por código é estável (a IA às vezes retornava vazio) e custa zero. Usa o blog
+  // COMPLETO (não o cortado em 7000), para nunca perder as aulas mais recentes.
+  const parseAulasRegex = (texto) => {
+    if (!texto) return [];
+    const re = /AULA\s+(\d{1,3})\s+DATA:\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*([\s\S]*?)(?=AULA\s+\d{1,3}\s+DATA:|_{5,}|$)/gi;
+    const out = [];
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+      const numero = parseInt(m[1],10);
+      const dataFull = m[2];
+      let corpo = (m[3]||'').replace(/_{3,}/g,' ').replace(/\s+/g,' ').trim();
+      // extrai atividades: padrão "Atividade(s) na apostila/complementar/páginas: ..." OU
+      // marcador "RAA" solto no fim (o Lenon usa RAA como a tarefa daquela aula).
+      let atividades = [];
+      const mAtiv = corpo.match(/atividades?\s+(?:na\s+apostila|complementar|das?\s+p[áa]ginas?)[^]*$/i);
+      if (mAtiv) {
+        atividades = [mAtiv[0].trim()];
+        corpo = corpo.slice(0, corpo.indexOf(mAtiv[0])).trim();
+      } else if (/\bRAA\b/.test(corpo)) {
+        atividades = ['RAA'];
+        corpo = corpo.replace(/\s*\bRAA\b\s*/g,' ').trim();
+      }
+      corpo = corpo.replace(/\bRAA\b/g,'').replace(/\s+/g,' ').trim();
+      atividades = atividades.filter(d => d && d.trim() && !ehLixo(d));
+      out.push({ numero, data: dataFull.slice(0,5), num: dataParaNum(dataFull), descricao: corpo, tema: '', atividades });
+    }
+    return out;
+  };
 
-  // aulas do dia de referência (pode ter 2). Compara por NÚMERO da data (dataParaNum),
-  // não por string: "8/07" e "08/07" viram o mesmo número, evitando que a aula do dia
-  // suma quando o blog escreve a data sem o zero à esquerda.
+  // extrai as aulas por código (regex), a partir do texto do blog recebido.
+  let aulas = parseAulasRegex(blogText).filter(a => a.num > 0);
+
+  // ── RESERVA: se o regex não achou aulas (formato mudou), cai na IA ──────────
+  if (aulas.length === 0) {
+    const temConteudo = blogText && blogText.length > 50;
+    const prompt = 'Você extrai dados do registro de aulas de ' + materia + ', professor ' + professor + '.' +
+      '\nAs aulas são numeradas: "AULA 7", "AULA 8"... Cada uma tem "DATA: DD/MM/AAAA" e descrição.' +
+      '\nExtraia TODAS as aulas com data. Para cada uma: numero, data (DD/MM), descricao, tema (tópico curto), atividades (lista).' +
+      '\nIGNORE rodapé do Blogspot e eventos da escola. NÃO invente.' +
+      '\n\n' + (temConteudo ? 'REGISTRO:\n' + blogText : 'Sem conteúdo.') +
+      '\n\nResponda APENAS JSON: {"aulas":[{"numero":9,"data":"DD/MM","descricao":"","tema":"","atividades":[]}]}';
+    let dados;
+    try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { aulas: [] }; }
+    aulas = (dados.aulas || [])
+      .map(a => ({
+        numero: a.numero, data: (a.data||'').slice(0,5), num: dataParaNum(a.data),
+        descricao: (a.descricao||'').trim(), tema: (a.tema||'').trim(),
+        atividades: (a.atividades||[]).filter(d => d && d.trim() && !ehLixo(d))
+      }))
+      .filter(a => a.num > 0);
+  }
+
+  // aulas do dia de referência (pode ter 2). Compara por NÚMERO da data.
   const aulasDoDia = aulas.filter(a => a.num === refNum).sort((x,y) => (x.numero||0) - (y.numero||0));
 
-  // monta "aula de hoje" mostrando as 2 aulas
+  // monta "aula de hoje" mostrando as aulas do dia
   let aula_hoje = '';
   if (aulasDoDia.length > 0) {
     aula_hoje = aulasDoDia.map(a => 'Aula ' + (a.numero||'?') + (a.descricao ? ': ' + a.descricao : '')).join('\n');
@@ -1097,12 +1116,11 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     deveres_aula = ultima.atividades;
   }
 
-  // deveres pendentes = atividades das 2 últimas datas ANTERIORES ao dia que tenham atividade
+  // deveres pendentes = atividades das últimas datas ANTERIORES ao dia que tenham atividade
   const limite = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
   const anteriores = aulas
     .filter(a => a.num < refNum && a.atividades.length > 0)
     .sort((a,b) => b.num - a.num);
-  // agrupa por data (pode ter 2 aulas na mesma data anterior)
   const pendPorData = {};
   for (const a of anteriores) {
     if (!pendPorData[a.data]) pendPorData[a.data] = [];
@@ -1113,41 +1131,30 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     refNum, 14, limite
   ).map(g => ({ data: g.data, deveres: g.deveres }));
 
-  // MATÉRIA DO TESTE: a PRIMEIRA aula do dia da referência (menor número de aula daquela
-  // data). Ex: hoje tem aula 11 e 12; a matéria do teste está na aula 11.
-  // Se não houver aula exatamente na data de hoje, usa a aula mais recente até hoje.
+  // MATÉRIA DO TESTE: a PRIMEIRA aula do dia da referência (menor número). Se não houver aula
+  // hoje, usa a aula mais recente até hoje.
   const aulasDoDiaRef = aulas
-    .filter(a => a.descricao && a.descricao.length > 3 && a.data === refDDMM)
-    .sort((a,b) => (a.numero||0) - (b.numero||0)); // menor nº de aula primeiro (a primeira)
+    .filter(a => a.descricao && a.descricao.length > 3 && a.num === refNum)
+    .sort((a,b) => (a.numero||0) - (b.numero||0));
   let linhaTeste = aulasDoDiaRef[0] || null;
   if (!linhaTeste) {
-    // sem aula hoje: pega a aula mais recente até hoje (maior número)
     const recentes = aulas
       .filter(a => a.num <= refNum && a.descricao && a.descricao.length > 3)
       .sort((a,b) => (b.numero||0) - (a.numero||0) || b.num - a.num);
     linhaTeste = recentes[0] || null;
   }
-  // a matéria do teste é o TEMA curto (ex: "discurso direto, indireto e indireto livre").
-  // Se a IA não extraiu o tema, cai na descrição limpa como reserva.
   let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
   const materia_teste_data = linhaTeste ? linhaTeste.data : '';
 
-  // se usou a descrição (sem tema), limpa: remove "aplicação de testinho" (início) e
-  // "atividades de fixação" (fim), deixando o conteúdo expositivo.
   if (materia_teste && linhaTeste && !linhaTeste.tema) {
     let t = materia_teste;
-    // se há "Em seguida," / "Na sequência," pega o que vem depois (o conteúdo principal)
     const mApos = t.match(/(?:em\s+seguida|na\s+sequ[êe]ncia|posteriormente)\s*,?\s*(aula\s+expositiva[^]*)/i);
     if (mApos) t = mApos[1];
-    // corta a parte final de atividades/fixação/exercícios
     t = t.split(/\.\s*(?:posteriormente|por\s+fim|em\s+seguida|ao\s+final|os\s+alunos\s+realizaram|atividades?\s+de\s+fixa|atividade\s+complementar)/i)[0];
-    // corta "com exemplos e explicações" e similares no fim (são acessórios, não conteúdo)
     t = t.replace(/,?\s*com\s+exemplos?(\s+e\s+explica[çc][õo]es?)?\.?\s*$/i, '');
     materia_teste = t.replace(/[.;\s]+$/,'').trim();
   }
 
-  // gera resumo + questões sobre a matéria do teste
-  // resumo e simulado são gerados SOB DEMANDA (quando o aluno abre a matéria), não aqui.
   let resumo = '', questoes = [];
 
   return {
@@ -2518,42 +2525,6 @@ app.get('/api/limpar-cache', (req, res) => {
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
-});
-
-// ── DIAGNÓSTICO PROFUNDO TEMPORÁRIO (remover depois): roda a extração REAL da Linguística
-// e mostra cada etapa. uso: /api/diag2?senha=ADMIN_SENHA
-app.get('/api/diag2', async (req, res) => {
-  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
-    return res.status(401).json({ error: 'senha invalida' });
-  }
-  try {
-    const item = GRADE['qua'].find(x => x.m === 'Linguística');
-    const dataRef = dataDoDia('qua');
-    const blogText = await fetchBlog(item.url);
-    // roda a extração REAL (a mesma da matéria)
-    const resultado = await processarDuasAulas(item.m, item.p, blogText, item.filtro, dataRef, item.maxDeveres);
-    // também captura a resposta CRUA da IA para o mesmo prompt
-    let iaCrua = null;
-    try {
-      const prompt = 'Você extrai dados do registro de aulas de Linguística, professor Lenon Soares. ' +
-        'As aulas são numeradas: "AULA 7", "AULA 8"... Cada uma tem "DATA: DD/MM/AAAA" e descrição. ' +
-        'Extraia TODAS as aulas com data. Responda APENAS JSON: {"aulas":[{"numero":9,"data":"DD/MM","descricao":"","tema":"","atividades":[]}]}\n\nREGISTRO:\n' + (blogText || '');
-      iaCrua = await callAnthropic(prompt, 0);
-    } catch (e) { iaCrua = { erro: e.message }; }
-    res.json({
-      dataRef_calculada: dataRef,
-      dayKey: 'qua',
-      blog_carregou: !!blogText,
-      blog_tamanho: blogText ? blogText.length : 0,
-      ia_retornou_aulas: iaCrua && iaCrua.aulas ? iaCrua.aulas.length : 0,
-      ia_primeiras_aulas: iaCrua && iaCrua.aulas ? iaCrua.aulas.slice(0, 20) : iaCrua,
-      resultado_aula_hoje: resultado.aula_hoje,
-      resultado_deveres_aula: resultado.deveres_aula,
-      resultado_deveres_pendentes: resultado.deveres_pendentes
-    });
-  } catch (e) {
-    res.json({ error: e.message, stack: (e.stack||'').slice(0,500) });
-  }
 });
 
 app.get('/admin', (req, res) => {
