@@ -2520,6 +2520,42 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// ── DIAGNÓSTICO PROFUNDO TEMPORÁRIO (remover depois): roda a extração REAL da Linguística
+// e mostra cada etapa. uso: /api/diag2?senha=ADMIN_SENHA
+app.get('/api/diag2', async (req, res) => {
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+  try {
+    const item = GRADE['qua'].find(x => x.m === 'Linguística');
+    const dataRef = dataDoDia('qua');
+    const blogText = await fetchBlog(item.url);
+    // roda a extração REAL (a mesma da matéria)
+    const resultado = await processarDuasAulas(item.m, item.p, blogText, item.filtro, dataRef, item.maxDeveres);
+    // também captura a resposta CRUA da IA para o mesmo prompt
+    let iaCrua = null;
+    try {
+      const prompt = 'Você extrai dados do registro de aulas de Linguística, professor Lenon Soares. ' +
+        'As aulas são numeradas: "AULA 7", "AULA 8"... Cada uma tem "DATA: DD/MM/AAAA" e descrição. ' +
+        'Extraia TODAS as aulas com data. Responda APENAS JSON: {"aulas":[{"numero":9,"data":"DD/MM","descricao":"","tema":"","atividades":[]}]}\n\nREGISTRO:\n' + (blogText || '');
+      iaCrua = await callAnthropic(prompt, 0);
+    } catch (e) { iaCrua = { erro: e.message }; }
+    res.json({
+      dataRef_calculada: dataRef,
+      dayKey: 'qua',
+      blog_carregou: !!blogText,
+      blog_tamanho: blogText ? blogText.length : 0,
+      ia_retornou_aulas: iaCrua && iaCrua.aulas ? iaCrua.aulas.length : 0,
+      ia_primeiras_aulas: iaCrua && iaCrua.aulas ? iaCrua.aulas.slice(0, 20) : iaCrua,
+      resultado_aula_hoje: resultado.aula_hoje,
+      resultado_deveres_aula: resultado.deveres_aula,
+      resultado_deveres_pendentes: resultado.deveres_pendentes
+    });
+  } catch (e) {
+    res.json({ error: e.message, stack: (e.stack||'').slice(0,500) });
+  }
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
