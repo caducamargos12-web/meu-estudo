@@ -1079,8 +1079,10 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     }))
     .filter(a => a.num > 0);
 
-  // aulas do dia de referência (pode ter 2)
-  const aulasDoDia = aulas.filter(a => a.data === refDDMM).sort((x,y) => (x.numero||0) - (y.numero||0));
+  // aulas do dia de referência (pode ter 2). Compara por NÚMERO da data (dataParaNum),
+  // não por string: "8/07" e "08/07" viram o mesmo número, evitando que a aula do dia
+  // suma quando o blog escreve a data sem o zero à esquerda.
+  const aulasDoDia = aulas.filter(a => a.num === refNum).sort((x,y) => (x.numero||0) - (y.numero||0));
 
   // monta "aula de hoje" mostrando as 2 aulas
   let aula_hoje = '';
