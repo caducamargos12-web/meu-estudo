@@ -1059,8 +1059,10 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
       const numero = parseInt(m[1],10);
       const dataFull = m[2];
       let corpo = (m[3]||'').replace(/_{3,}/g,' ').replace(/\s+/g,' ').trim();
-      // extrai atividades: padrão "Atividade(s) na apostila/complementar/páginas: ..." OU
-      // marcador "RAA" solto no fim (o Lenon usa RAA como a tarefa daquela aula).
+      // extrai atividades SEM mutilar a descrição (preferência: manter o texto inteiro).
+      // 1) padrão "Atividade(s) na apostila/complementar/páginas: ..." → vira dever e sai da descrição.
+      // 2) se a aula menciona "RAA" (nome e/ou link do arquivo do RAA), registra "RAA" como
+      //    dever, mas MANTÉM a descrição completa (não remove nenhum RAA do texto).
       let atividades = [];
       const mAtiv = corpo.match(/atividades?\s+(?:na\s+apostila|complementar|das?\s+p[áa]ginas?)[^]*$/i);
       if (mAtiv) {
@@ -1068,9 +1070,9 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
         corpo = corpo.slice(0, corpo.indexOf(mAtiv[0])).trim();
       } else if (/\bRAA\b/.test(corpo)) {
         atividades = ['RAA'];
-        corpo = corpo.replace(/\s*\bRAA\b\s*/g,' ').trim();
+        // descrição permanece inteira (não corta o RAA do nome nem o do link)
       }
-      corpo = corpo.replace(/\bRAA\b/g,'').replace(/\s+/g,' ').trim();
+      corpo = corpo.replace(/\s+/g,' ').trim();
       atividades = atividades.filter(d => d && d.trim() && !ehLixo(d));
       out.push({ numero, data: dataFull.slice(0,5), num: dataParaNum(dataFull), descricao: corpo, tema: '', atividades });
     }
