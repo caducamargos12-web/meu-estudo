@@ -1293,7 +1293,7 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
 
   // AULA DE HOJE: SÓ a linha com data EXATAMENTE igual à referência. Se o blog não tem
   // registro para hoje, aula de hoje e dever desta aula ficam vazios (sem registro).
-  const linhaHoje = linhas.find(l => l.data === refDDMM) || null;
+  const linhaHoje = linhas.find(l => l.num === refNum) || null;
   const aula_hoje = linhaHoje ? linhaHoje.materia : '';
 
   // DEVER DESTA AULA: a TAREFA da linha de hoje (se não for "testinho"/"teste").
@@ -1307,7 +1307,7 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
   const ateHoje = linhas.filter(l => l.num <= refNum).sort((a,b) => b.num - a.num);
   const candidatos = [];
   for (const l of ateHoje) {
-    if (l.data === refDDMM) continue; // a de hoje (se existir) não é pendente
+    if (l.num === refNum) continue; // a de hoje (se existir) não é pendente
     if (l.tarefa && !/testinho|teste\b/i.test(l.tarefa)) {
       candidatos.push({ data: l.data, num: l.num, deveres: [l.tarefa] });
     }
@@ -1370,7 +1370,7 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   // AULA DE HOJE: só mostra "Teste: X" se houver um teste EXATAMENTE na data de referência.
   // Se o blog não tem aula/teste para hoje, a aula de hoje fica vazia (sem registro),
   // mesmo que a matéria do teste (acima) mostre o último teste como conteúdo de estudo.
-  const testeDeHoje = testes.find(t => t.data === ref.slice(0,5));
+  const testeDeHoje = testes.find(t => t.num === refNum);
   const aula_hoje = testeDeHoje ? ('Teste: ' + testeDeHoje.conteudo) : '';
   const aula_data = testeDeHoje ? testeDeHoje.data : '';
 
@@ -1533,7 +1533,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     if (testesQuadro.length) {
       const refN = dataParaNum(dataRef || hojeStr());
       // o teste da data de referência, ou o mais recente até ela, ou o próximo
-      const doDia = testesQuadro.find(t => t.data === (dataRef||'').slice(0,5));
+      const doDia = testesQuadro.find(t => t.num === refN);
       const ateRef = testesQuadro.filter(t => t.num <= refN);
       const escolhido = doDia || ateRef[0] || testesQuadro[0];
       if (escolhido) {
@@ -1559,7 +1559,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // 1. AULA DO DIA: a linha cuja data bate com a referência. No formato agrupado, a aula
   // "Aulas 25 e 26/06" vale para OS DOIS dias (25 e 26), então bate se a referência for
   // qualquer uma das duas datas do par. Assim quinta (25) e sexta (26) mostram o mesmo.
-  let linhaRef = linhas.find(l => l.data.slice(0,5) === refDDMM || (l.dataInicio && l.dataInicio.slice(0,5) === refDDMM));
+  let linhaRef = linhas.find(l => l.num === refNum || (l.numInicio && l.numInicio === refNum));
   let aulaSomenteExibicao = false;
   // se mesmo assim não achou (data fora do par), mostra a aula mais recente até hoje
   // APENAS como conteúdo (sem repetir o dever, que já entra nos pendentes).
@@ -1623,9 +1623,8 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // houver teste hoje, cai no comportamento padrão (matéria da última aula).
   let testeExatoTexto = '', testeExatoData = '';
   if (testeNoDiaExato) {
-    const refDDMM = ref.slice(0,5);
     // procura a aula com data igual a hoje que mencione "testinho:" ou "teste N:"
-    const linhaHojeTeste = linhas.find(l => l.data.slice(0,5) === refDDMM && /testinho|teste\s*\d*\s*:/i.test(l.materia));
+    const linhaHojeTeste = linhas.find(l => l.num === refNum && /testinho|teste\s*\d*\s*:/i.test(l.materia));
     if (linhaHojeTeste) {
       // extrai o conteúdo após o marcador (ex: "TESTE 4 : COEFICIENTE" -> "COEFICIENTE")
       const mm = linhaHojeTeste.materia.match(/(?:testinho|teste\s*\d*)\s*:\s*(.+?)(?:[.;]|$)/i);
@@ -1735,7 +1734,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       .sort((a,b) => a.num - b.num); // mais antigo -> mais novo
 
     // testinho do DIA ATUAL (se houver)
-    const testinhoHoje = linhasComTestinho.find(l => l.data === refDDMM);
+    const testinhoHoje = linhasComTestinho.find(l => l.num === refNum);
 
     if (testinhoHoje && ehInterpretacao(testinhoHoje.testinho)) {
       // CASO A: interpretação de texto hoje -> junta com o último teste anterior não-interpretação
