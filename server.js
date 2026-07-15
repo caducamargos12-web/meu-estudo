@@ -678,7 +678,7 @@ const GRADE = {
     { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/3-ano-lidere.html', tipo:'soDever', maxDiasDever:14 },
   ],
   ter: [
-    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano_4.html', filtro:'História', tipo:'acumulativo' },
+    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/9-ano.html', filtro:'História', tipo:'acumulativo' },
     { m:'Química B',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/3-ano.html', formato:'testesPorData' },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
@@ -2628,6 +2628,7 @@ app.get('/diag', async (req, res) => {
 
   const SEP = '==================================================';
   const sub = '--------------------------------------------------';
+  const modoRaw = /^(1|true|sim|yes)$/i.test((req.query.raw || '').toString().trim());
   const linhas = [];
   for (const { dia: dk, item } of alvos) {
     const dataRef = dataDoDia(dk);
@@ -2637,6 +2638,32 @@ app.get('/diag', async (req, res) => {
     linhas.push('formato/tipo: ' + (item.formato || item.tipo || 'padrao'));
     linhas.push('Data de referencia (hoje efetivo): ' + dataRef);
     linhas.push(sub);
+    if (modoRaw) {
+      // modo raw: mostra o HTML CRU que o app recebe, ANTES da limpeza. Serve para
+      // descobrir se o conteudo esta no HTML (limpeza comendo) ou vem por fora (iframe/JS).
+      let html = null;
+      try { html = await obterHtml(item.url); } catch (e) { linhas.push('ERRO obterHtml: ' + (e && e.message ? e.message : e)); }
+      if (!html) {
+        linhas.push('(obterHtml nao retornou nada - todas as estrategias falharam)');
+      } else {
+        linhas.push('Estrategia que funcionou: ' + ultimaEstrategia);
+        linhas.push('Tamanho do HTML cru: ' + html.length + ' chars');
+        const iframes = [...html.matchAll(/<iframe[^>]*\ssrc=["']([^"']+)["']/gi)].map(m => m[1]);
+        linhas.push('iframes/embeds encontrados: ' + iframes.length);
+        iframes.slice(0, 10).forEach(s => linhas.push('  - ' + s));
+        const tem = (re) => re.test(html) ? 'SIM' : 'NAO';
+        linhas.push('conteudo no HTML cru?  "Data:"=' + tem(/Data:/i) + '  "Aula:"=' + tem(/Aula:/i) + '  "Prova"=' + tem(/Prova/i) + '  "Materia"=' + tem(/Mat[ée]ria/i));
+        linhas.push(sub);
+        linhas.push('TRECHO DO HTML CRU (~6000 chars a partir do conteudo):');
+        let alvoIdx = html.search(/Data:\s*\d|Aula:\s*\d|Prova\s+Bimestral/i);
+        if (alvoIdx < 0) { const b = html.search(/<body/i); alvoIdx = b >= 0 ? b : 0; }
+        const ini = Math.max(0, alvoIdx - 500);
+        linhas.push(html.slice(ini, ini + 6000));
+      }
+      linhas.push(SEP);
+      linhas.push('');
+      continue;
+    }
     let cortado = null, completo = null;
     try {
       cortado = await fetchBlog(item.url);
