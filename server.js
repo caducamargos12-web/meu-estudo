@@ -248,10 +248,29 @@ function salvarJanelaAvaliacao() {
   try { fs.writeFileSync(JANELA_AVAL_FILE, JSON.stringify(janelaAvaliacao)); }
   catch (e) { console.log('Erro ao salvar janela de avaliação:', e.message); }
 }
+// ── "hoje" efetivo, no fuso de Brasília, com virada às 22:30 ─────────────────
+// O servidor pode rodar em qualquer fuso (o Railway usa UTC). Para NÃO depender disso,
+// calculamos a hora de Brasília a partir do tempo absoluto (Date.now), deslocando -3h
+// (Brasília = UTC-3, sem horário de verão desde 2019) e lendo os campos com getUTC*.
+// A partir das 22:30 de Brasília, o app já considera o PRÓXIMO dia.
+// Definido AQUI (antes da limpeza de cache do startup) para evitar zona morta do const.
+const VIRADA_DIA_MIN = 22 * 60 + 30; // 22:30 (para mudar a hora da virada, mexa só aqui)
+function agoraEfetivo() {
+  const b = new Date(Date.now() - 3 * 3600 * 1000); // campos UTC de b = relógio de Brasília
+  const minutos = b.getUTCHours() * 60 + b.getUTCMinutes();
+  if (minutos >= VIRADA_DIA_MIN) b.setUTCDate(b.getUTCDate() + 1); // passou das 22:30 -> vira o dia
+  return b;
+}
+// data efetiva em AAAA-MM-DD (para chaves de cache e janela do admin)
+function isoEfetivo() {
+  const b = agoraEfetivo();
+  return b.getUTCFullYear() + '-' + ('0'+(b.getUTCMonth()+1)).slice(-2) + '-' + ('0'+b.getUTCDate()).slice(-2);
+}
+
 // diz se HOJE está dentro da janela configurada
 function dentroDaJanelaAvaliacao() {
   if (!janelaAvaliacao.inicio || !janelaAvaliacao.fim) return false;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = isoEfetivo();
   return hoje >= janelaAvaliacao.inicio && hoje <= janelaAvaliacao.fim;
 }
 
@@ -704,7 +723,7 @@ try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { cache =
 (function limparCacheAntigo(){
   // remove cache de dias anteriores (mantém só o de hoje). Não apaga por versão,
   // para que um deploy não invalide o cache bom do dia.
-  const hoje = new Date().toISOString().slice(0,10);
+  const hoje = isoEfetivo();
   let mudou = false;
   Object.keys(cache).forEach(k => {
     if (!k.startsWith(hoje + '_')) { delete cache[k]; mudou = true; }
@@ -718,8 +737,7 @@ function salvarCache() {
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
 function chaveCacheHoje(dayKey) {
-  const d = new Date();
-  const dia = d.toISOString().slice(0,10); // AAAA-MM-DD
+  const dia = isoEfetivo(); // AAAA-MM-DD (com virada às 22:30)
   // a versão NÃO entra mais na chave: assim um deploy não joga fora o cache bom.
   // o cache se renova sozinho a cada dia (a data está na chave). Para forçar
   // reprocessamento após mudar a lógica de leitura, use /api/limpar-cache.
@@ -831,8 +849,8 @@ async function fetchBlogCompleto(url) {
 }
 
 function hojeStr() {
-  const d = new Date();
-  return ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
+  const b = agoraEfetivo();
+  return ('0'+b.getUTCDate()).slice(-2) + '/' + ('0'+(b.getUTCMonth()+1)).slice(-2) + '/' + b.getUTCFullYear();
 }
 
 async function callAnthropic(prompt, modelIndex, tentativa) {
@@ -932,6 +950,29 @@ function filtrarPendentes(lista, refNum, janelaDias, maxItens) {
     })
     .sort((a, b) => b.num - a.num)
     .slice(0, limite);
+}
+
+// remove deveres repetidos da lista de pendentes: se o MESMO dever aparece mais de uma vez
+// (em datas diferentes ou na mesma data), mantem so a primeira ocorrencia (a mais recente,
+// porque filtrarPendentes ja ordena do mais novo para o mais antigo). Entrada de data que
+// fica sem nenhum dever depois da limpeza e descartada.
+function dedupDeveres(lista) {
+  if (!Array.isArray(lista)) return lista;
+  const vistos = new Set();
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const out = [];
+  for (const entry of lista) {
+    if (!entry || !Array.isArray(entry.deveres)) { out.push(entry); continue; }
+    const deveres = [];
+    for (const d of entry.deveres) {
+      const k = norm(d);
+      if (!k || vistos.has(k)) continue;
+      vistos.add(k);
+      deveres.push(d);
+    }
+    if (deveres.length) out.push(Object.assign({}, entry, { deveres }));
+  }
+  return out;
 }
 
 // ── processamento especial de HISTÓRIA (acumulativo por bimestre) ────────────
@@ -1059,6 +1100,11 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
       const numero = parseInt(m[1],10);
       const dataFull = m[2];
       let corpo = (m[3]||'').replace(/_{3,}/g,' ').replace(/\s+/g,' ').trim();
+      // corta rodapé/menu do Blogger quando ele gruda na ÚLTIMA aula (não há próxima "AULA N"
+      // nem "_____" para o lookahead parar). Só frases inequívocas de chrome do blog, que
+      // nunca aparecem numa descricao de aula (evita cortar conteudo legitimo).
+      const iRodape = corpo.search(/\s*(?:Postagens?\s*\(Atom\)|Postagem mais (?:recente|antiga)|P[áa]gina inicial|Arquivo do blog|Pesquisar este blog|Denunciar abuso|Quem sou eu|Ver meu perfil(?:\s+completo)?|Tecnologia do Blogger|Fornecido pelo Blogger|ESCOLHA A TURMA)/i);
+      if (iRodape >= 0) corpo = corpo.slice(0, iRodape).trim();
       // extrai atividades SEM mutilar a descrição (preferência: manter o texto inteiro).
       // 1) padrão "Atividade(s) na apostila/complementar/páginas: ..." → vira dever e sai da descrição.
       // 2) se a aula menciona "RAA" (nome e/ou link do arquivo do RAA), registra "RAA" como
@@ -1797,8 +1843,8 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 // offsetSemana: 0 = esta semana, usado para achar a data correta a partir de hoje
 function dataDoDia(dayKey) {
   const dayNum = { seg:1, ter:2, qua:3, qui:4, sex:5 }[dayKey];
-  const hoje = new Date();
-  const hojeNum = hoje.getDay();
+  const hoje = agoraEfetivo();
+  const hojeNum = hoje.getUTCDay();
   let diff = dayNum - hojeNum;
   // se o dia já passou nesta semana (ou é fim de semana olhando pra segunda), pega o da próxima ocorrência
   if (diff < 0) diff += 7;
@@ -1807,10 +1853,10 @@ function dataDoDia(dayKey) {
     diff = hojeNum === 6 ? 2 : 1;
   }
   const alvo = new Date(hoje);
-  alvo.setDate(hoje.getDate() + diff);
-  const dd = String(alvo.getDate()).padStart(2,'0');
-  const mm = String(alvo.getMonth()+1).padStart(2,'0');
-  const aaaa = alvo.getFullYear();
+  alvo.setUTCDate(hoje.getUTCDate() + diff);
+  const dd = String(alvo.getUTCDate()).padStart(2,'0');
+  const mm = String(alvo.getUTCMonth()+1).padStart(2,'0');
+  const aaaa = alvo.getUTCFullYear();
   return `${dd}/${mm}/${aaaa}`;
 }
 
@@ -2048,6 +2094,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
           data_prova: dataProvaSec || ''
         });
         if (naJanela) dados = Object.assign({}, dados, { materia_teste:'', tem_avaliacao:false, resumo:'', questoes:[], semana_provas:true });
+        dados = Object.assign({}, dados, { deveres_pendentes: dedupDeveres(dados.deveres_pendentes) });
         return Object.assign({}, sec, { dados });
       });
       let base = Object.assign({}, result, { materiais: lista, secoes });
@@ -2064,6 +2111,7 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       base.aviso_avaliacao = item.avisoAvaliacao;
     }
     base = aplicarRegrasProva(base);
+    base.deveres_pendentes = dedupDeveres(base.deveres_pendentes);
     return base;
   }
 
@@ -2468,7 +2516,7 @@ app.post('/api/admin/remover-material', checkAdmin, (req, res) => {
 app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const ordem = ['seg','ter','qua','qui','sex'];
-  const hojeDay = new Date().getDay();
+  const hojeDay = agoraEfetivo().getUTCDay();
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -2501,7 +2549,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   }
 
   // limpa caches de dias muito antigos (mantém os de hoje)
-  const hojeISO = new Date().toISOString().slice(0,10);
+  const hojeISO = isoEfetivo();
   Object.keys(cache).forEach(k => {
     if (!k.startsWith(hojeISO)) delete cache[k];
   });
