@@ -827,9 +827,16 @@ async function fetchBlog(url) {
     // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
     const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
     texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
-    // envia só os 7000 caracteres finais (aulas mais recentes) à IA. Cortar pela metade
-    // reduz o custo por matéria, sem perder as aulas recentes que importam para o teste.
-    const textoFinal = texto.length > 7000 ? texto.slice(texto.length - 7000) : texto;
+    // Mantém as aulas RECENTES tanto se o blog lista do mais novo pro velho (recentes no
+    // TOPO, ex: Tiago/Saulo) quanto do mais velho pro novo (recentes no FIM). O corte antigo
+    // guardava só o FIM: num blog grande com o novo no topo (Mat A), isso jogava fora a aula
+    // de hoje e mantinha as de fevereiro. Agora, se o texto for grande, guarda as DUAS pontas.
+    let textoFinal;
+    if (texto.length <= 12000) {
+      textoFinal = texto; // cabe inteiro: manda tudo, seja qual for a ordem
+    } else {
+      textoFinal = texto.slice(0, 5000) + '\n__________ (corte do meio) __________\n' + texto.slice(-7000);
+    }
     // guarda no cache: o texto CORTADO (pra IA) e o COMPLETO (pra extração da avaliação, que
     // é feita por código e precisa do INÍCIO do blog, onde alguns professores põem a prova).
     blogCache[url] = { texto: textoFinal, textoCompleto: texto, ts: Date.now() };
@@ -2636,7 +2643,7 @@ app.get('/diag', async (req, res) => {
     linhas.push('MATERIA: ' + item.m + '  (' + (item.p || '?') + ')  [dia: ' + dk + ']');
     linhas.push('URL: ' + item.url);
     linhas.push('formato/tipo: ' + (item.formato || item.tipo || 'padrao'));
-    linhas.push('Data de referencia (hoje efetivo): ' + dataRef);
+    linhas.push('Hoje (efetivo): ' + hojeStr() + '   |   Data de referencia desta materia (' + dk + '): ' + dataRef);
     linhas.push(sub);
     if (modoRaw) {
       // modo raw: mostra o HTML CRU que o app recebe, ANTES da limpeza. Serve para
