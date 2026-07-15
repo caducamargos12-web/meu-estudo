@@ -1437,12 +1437,20 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   const materia_teste = testeAtual ? testeAtual.conteudo : '';
   const materia_teste_data = testeAtual ? testeAtual.data : '';
 
-  // AULA DE HOJE: só mostra "Teste: X" se houver um teste EXATAMENTE na data de referência.
-  // Se o blog não tem aula/teste para hoje, a aula de hoje fica vazia (sem registro),
-  // mesmo que a matéria do teste (acima) mostre o último teste como conteúdo de estudo.
-  const testeDeHoje = testes.find(t => t.num === refNum);
-  const aula_hoje = testeDeHoje ? ('Teste: ' + testeDeHoje.conteudo) : '';
-  const aula_data = testeDeHoje ? testeDeHoje.data : '';
+  // AULA DE HOJE: mostra o que o blog registrou EXATAMENTE na data de referência, seja teste,
+  // PROVA BIMESTRAL, RAA, revisão ou um tópico simples. Antes só reconhecia "TESTE N"; agora
+  // reconhece qualquer entrada "DD/MM - ...". A matéria do teste (acima) continua usando só os
+  // testes, para não misturar prova/RAA no conteúdo de estudo.
+  const todasEntradas = [...(blogText || '').matchAll(/(\d{1,2}\/\d{1,2})\s*[-–]\s*(.+?)(?=\s+\d{1,2}\/\d{1,2}\s*[-–]|$)/g)]
+    .map(m => ({ data: m[1], num: dataParaNum(m[1]), conteudo: m[2].trim().replace(/\s+/g,' ') }))
+    .filter(e => e.num > 0 && e.conteudo);
+  const entradaHoje = todasEntradas.find(e => e.num === refNum);
+  let aula_hoje = '', aula_data = '';
+  if (entradaHoje) {
+    const mTeste = entradaHoje.conteudo.match(/^TESTE\s+[IVXLC0-9]+\s*[-–]\s*(.+)$/i);
+    aula_hoje = mTeste ? ('Teste: ' + mTeste[1].trim()) : entradaHoje.conteudo;
+    aula_data = entradaHoje.data;
+  }
 
   let resumo = ''; // resumo gerado sob demanda (ao abrir a matéria)
 
