@@ -2576,6 +2576,93 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// ── DIAGNÓSTICO: mostra o texto CRU que o app leu de cada blog, para depurar
+// quando uma matéria não puxa a aula/dever (ex: o professor mudou o formato do blog).
+// Protegido pela senha de admin (mesmo padrão do /api/limpar-cache). Uso:
+//   /diag?senha=ADMIN_SENHA                       -> lista os dias e as matérias
+//   /diag?senha=ADMIN_SENHA&dia=ter               -> todas as matérias de terça
+//   /diag?senha=ADMIN_SENHA&dia=ter&materia=quim  -> só a que casar com "quim"
+//   /diag?senha=ADMIN_SENHA&materia=historia      -> busca em todos os dias
+app.get('/diag', async (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido';
+  if (!checarRateLimit(ip)) {
+    return res.status(429).type('text/plain; charset=utf-8').send('Muitas tentativas. Aguarde 1 minuto.');
+  }
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    registrarFalha(ip);
+    return res.status(401).type('text/plain; charset=utf-8').send('senha invalida');
+  }
+  res.type('text/plain; charset=utf-8');
+
+  const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const dia = (req.query.dia || '').toString().trim().toLowerCase();
+  const materiaFiltro = (req.query.materia || '').toString().trim();
+
+  // sem filtro: mostra o menu do que dá para pedir
+  if (!dia && !materiaFiltro) {
+    let menu = 'DIAG - o que inspecionar\n\n';
+    menu += 'Uso: /diag?senha=SUA_SENHA&dia=DIA&materia=PARTE_DO_NOME\n';
+    menu += '(dia e materia sao opcionais; materia casa por pedaco do nome, sem acento)\n\n';
+    for (const dk of Object.keys(GRADE)) {
+      const nomes = (GRADE[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
+      menu += dk + ': ' + nomes.join(', ') + '\n';
+    }
+    return res.send(menu);
+  }
+
+  // coleta os itens que casam com o filtro
+  const alvos = [];
+  const dias = dia ? [dia] : Object.keys(GRADE);
+  for (const dk of dias) {
+    for (const it of (GRADE[dk] || [])) {
+      const subs = Array.isArray(it.combinar) ? it.combinar : [it];
+      for (const s of subs) {
+        if (materiaFiltro && !normalizar(s.m).includes(normalizar(materiaFiltro))) continue;
+        alvos.push({ dia: dk, item: s });
+      }
+    }
+  }
+  if (!alvos.length) {
+    return res.send('Nada encontrado para dia="' + dia + '" materia="' + materiaFiltro + '".\nChame /diag?senha=... sem filtros para ver o menu.');
+  }
+
+  const SEP = '==================================================';
+  const sub = '--------------------------------------------------';
+  const linhas = [];
+  for (const { dia: dk, item } of alvos) {
+    const dataRef = dataDoDia(dk);
+    linhas.push(SEP);
+    linhas.push('MATERIA: ' + item.m + '  (' + (item.p || '?') + ')  [dia: ' + dk + ']');
+    linhas.push('URL: ' + item.url);
+    linhas.push('formato/tipo: ' + (item.formato || item.tipo || 'padrao'));
+    linhas.push('Data de referencia (hoje efetivo): ' + dataRef);
+    linhas.push(sub);
+    let cortado = null, completo = null;
+    try {
+      cortado = await fetchBlog(item.url);
+      completo = await fetchBlogCompleto(item.url);
+    } catch (e) {
+      linhas.push('ERRO ao buscar o blog: ' + (e && e.message ? e.message : e));
+    }
+    if (!cortado && !completo) {
+      linhas.push('(blog nao retornou texto - todas as estrategias de busca falharam)');
+    } else {
+      linhas.push('TEXTO CRU (cortado - o que o parser de aula ve, ultimos 7000 chars):');
+      linhas.push(cortado || '(vazio)');
+      linhas.push(sub);
+      if (completo && completo !== cortado) {
+        linhas.push('TEXTO CRU (completo):');
+        linhas.push(completo);
+      } else {
+        linhas.push('TEXTO CRU (completo): igual ao cortado.');
+      }
+    }
+    linhas.push(SEP);
+    linhas.push('');
+  }
+  res.send(linhas.join('\n'));
+});
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
