@@ -794,6 +794,38 @@ async function obterHtml(url) {
   return null;
 }
 
+// limpa o HTML do blog e devolve texto. removerBlocos=true tira widgets de compartilhamento,
+// rodapé e <nav>. Em páginas com HTML MUITO aninhado (ex: Mat A), essas remoções de bloco
+// às vezes engolem o corpo inteiro junto; por isso existe o modo suave (false), que só tira
+// <script>/<style> e preserva o conteúdo. fetchBlog usa os dois e escolhe (ver salvaguarda).
+function limparHtmlBlog(html, removerBlocos) {
+  let texto = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+  if (removerBlocos) {
+    texto = texto
+      .replace(/<div[^>]*class=['"][^'"]*sharing[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<div[^>]*class=['"][^'"]*post-share-buttons[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<div[^>]*class=['"][^'"]*social[^'"]*['"][\s\S]*?<\/div>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '');
+  }
+  texto = texto
+    // PRESERVA A ESTRUTURA DA TABELA: cada <tr> vira uma linha, cada <td>/<th> separada por " | ".
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/t[dh]>/gi, ' | ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/ \| (?= \| )/g, '')
+    .trim();
+  // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
+  const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
+  return texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
+}
+
 async function fetchBlog(url) {
   // serve do cache de memória se foi buscado há menos de 10 min
   const cached = blogCache[url];
@@ -803,30 +835,15 @@ async function fetchBlog(url) {
   const html = await obterHtml(url);
   if (!html) return null; // todas as estratégias falharam; NÃO cacheia (tenta de novo depois)
   try {
-    let texto = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      // remove widgets de compartilhamento e rodapé do Blogspot
-      .replace(/<div[^>]*class=['"][^'"]*sharing[^'"]*['"][\s\S]*?<\/div>/gi, '')
-      .replace(/<div[^>]*class=['"][^'"]*post-share-buttons[^'"]*['"][\s\S]*?<\/div>/gi, '')
-      .replace(/<div[^>]*class=['"][^'"]*social[^'"]*['"][\s\S]*?<\/div>/gi, '')
-      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
-      .replace(/<nav[\s\S]*?<\/nav>/gi, '')
-      // PRESERVA A ESTRUTURA DA TABELA: cada linha <tr> vira uma linha de texto,
-      // cada célula <td>/<th> é separada por " | ". Isso é essencial para a IA
-      // entender qual matéria/dever pertence a qual data.
-      .replace(/<\/tr>/gi, '\n')
-      .replace(/<\/t[dh]>/gi, ' | ')
-      .replace(/<br\s*\/?>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
-      .replace(/[ \t]{2,}/g, ' ')
-      .replace(/\n{2,}/g, '\n')
-      .replace(/ \| (?= \| )/g, '')
-      .trim();
-    // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
-    const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
-    texto = texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
+    // limpa em modo agressivo (tira widgets/rodapé/nav)
+    let texto = limparHtmlBlog(html, true);
+    // SALVAGUARDA: em páginas com HTML muito aninhado (ex: Mat A), a remoção de blocos pode
+    // engolir o corpo inteiro e sobrar quase nada. Nesse caso, o modo suave preserva o corpo.
+    // Só troca para o suave quando ele recupera MUITO mais texto (evita mexer no que já funciona).
+    const textoSuave = limparHtmlBlog(html, false);
+    if (textoSuave.length > texto.length * 3 && textoSuave.length > 500) {
+      texto = textoSuave;
+    }
     // Mantém as aulas RECENTES tanto se o blog lista do mais novo pro velho (recentes no
     // TOPO, ex: Tiago/Saulo) quanto do mais velho pro novo (recentes no FIM). O corte antigo
     // guardava só o FIM: num blog grande com o novo no topo (Mat A), isso jogava fora a aula
