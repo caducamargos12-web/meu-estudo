@@ -818,7 +818,9 @@ function limparHtmlBlog(html, removerBlocos) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
     .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{2,}/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')   // linha que só tem espaços vira quebra pura...
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{2,}/g, '\n')     // ...e quebras seguidas colapsam numa só
     .replace(/ \| (?= \| )/g, '')
     .trim();
   // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
@@ -1632,6 +1634,32 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       deveres: (l.deveres||[]).filter(d => d && d.trim() && !ehLixo(d))
     }))
     .filter(l => l.num > 0);
+
+  // FALLBACK DETERMINÍSTICO (rotulado): a aula de hoje não pode depender só da IA.
+  // Se a IA não devolveu uma linha com a data de referência mas o texto TEM um bloco
+  // "DATA: <ref> CONTEÚDO: ...", extraímos por regex e injetamos a linha. Mesmo padrão
+  // adotado na Linguística: código decide, IA é reserva. Decodifica entidades (&#176; -> °).
+  if (formato === 'rotulado' && !linhas.some(l => l.num === refNum)) {
+    const decodeEnt = (s) => (s||'').replace(/&#(\d+);/g, (_,n) => String.fromCharCode(parseInt(n,10))).replace(/&nbsp;/g,' ').trim();
+    const blocosData = [...(blogText||'').matchAll(/DATA:\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*([\s\S]*?)(?=DATA:\s*\d{1,2}\/|Teste\s+\d+\s*\||Avalia[çc][ãa]o\s*\||$)/gi)];
+    for (const b of blocosData) {
+      const numB = dataParaNum(b[1]);
+      if (numB !== refNum) continue;
+      let corpoB = decodeEnt(b[2]).replace(/_{3,}/g,' ').replace(/\s+/g,' ').trim();
+      let materiaB = corpoB;
+      const mC = corpoB.match(/(?:CONTE[ÚU]DO|MAT[ÉE]RIA)\s*:\s*(.+)$/i);
+      if (mC) materiaB = mC[1];
+      let deveresB = [];
+      const mT = materiaB.match(/^(.*?)\s*TAREFA(?:\s+PARA\s+[\d\/]+)?\s*:\s*(.+)$/i);
+      if (mT) { materiaB = mT[1].trim(); const t = mT[2].trim(); if (t && t !== '*') deveresB = [t]; }
+      materiaB = materiaB.replace(/\s*PLURALL\s*:.*/i,'').replace(/\s*P[ÁA]GINA\s*:\s*/i,' (pág. ').trim();
+      if (materiaB.includes('(pág. ') && !materiaB.endsWith(')')) materiaB += ')';
+      if (materiaB && !ehEventoEscolar(materiaB) && !ehLixo(materiaB)) {
+        linhas.push({ data: b[1].slice(0,5), dataInicio: b[1].slice(0,5), num: numB, numInicio: numB, materia: materiaB, deveres: deveresB });
+      }
+      break;
+    }
+  }
 
   // ── O CÓDIGO DECIDE TUDO (determinístico, não depende da IA) ──
   // 1. AULA DO DIA: a linha cuja data bate com a referência. No formato agrupado, a aula
