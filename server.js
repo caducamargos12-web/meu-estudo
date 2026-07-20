@@ -823,6 +823,11 @@ function limparHtmlBlog(html, removerBlocos) {
     .replace(/\n{2,}/g, '\n')     // ...e quebras seguidas colapsam numa só
     .replace(/ \| (?= \| )/g, '')
     .trim();
+  // ENXUGA: corta tudo a partir do rodapé/menu/sidebar do Blogspot. Esses marcadores são
+  // inequívocos (nunca aparecem em conteúdo de aula), então o que vem depois é lixo (bio do
+  // professor, "Escolha a turma", "Arquivo do blog", etc.). Reduz bastante o texto pra IA.
+  const iRodape = texto.search(/\b(?:Postagens?\s*\(Atom\)|ESCOLHA A TURMA|Pesquisar este blog|Quem sou eu|Arquivo do blog|Ver meu perfil|Denunciar abuso|Tecnologia do Blogger|Fornecido pelo Blogger)/i);
+  if (iRodape > 100) texto = texto.slice(0, iRodape).trim(); // >100: nunca zera o conteúdo por engano
   // remove linhas que são claramente botões de compartilhar/navegação do Blogspot
   const lixo = /^(enviar por e-?mail|postar no blog|compartilhar (no|com)|marcadores|postagens? (mais|mais antiga|recente)|in[ií]cio|assinar|comentários|nenhum comentário|reações|um blog|tecnologia do blogger|página inicial|ver vers[aã]o|seguir)/i;
   return texto.split('\n').filter(l => !lixo.test(l.trim())).join('\n');
