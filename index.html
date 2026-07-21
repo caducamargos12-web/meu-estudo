@@ -221,6 +221,20 @@
   .dev-check.feito .dev-txt{text-decoration:line-through;color:var(--text-3)}
   .dev-txt{transition:all .2s}
 
+  /* central de deveres */
+  .central-dev{background:var(--surface);border:1px solid var(--border-bright);border-radius:14px;padding:16px;margin-bottom:18px}
+  .cd-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cd-titulo{font-size:15px;font-weight:700;color:var(--text)}
+  .cd-prog{font-family:var(--mono);font-size:12px;color:var(--green);font-weight:600}
+  .cd-grupo{margin-bottom:13px}
+  .cd-grupo:last-child{margin-bottom:0}
+  .cd-mat{font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+  .cd-item{margin-bottom:6px}
+  .cd-data{font-family:var(--mono);font-size:11px;color:var(--amber);margin-right:6px}
+  .cd-vazio{font-size:13px;color:var(--text-3)}
+  .cd-plurall{display:inline-block;margin-top:13px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:600}
+  .cd-plurall:hover{text-decoration:underline}
+
 
   /* quiz */
   .q-item{margin-bottom:15px}
@@ -657,9 +671,87 @@ function toggleDever(id,el){
   const feito=el.checked;
   if(feito)localStorage.setItem(id,'1');
   else localStorage.removeItem(id);
-  // atualiza o visual (risco no texto)
-  const label=el.closest('.dev-check');
-  if(label)label.classList.toggle('feito',feito);
+  // sincroniza TODOS os checkboxes desse mesmo dever (central + card ficam iguais)
+  document.querySelectorAll(`input[data-devid="${id}"]`).forEach(inp=>{
+    if(inp!==el)inp.checked=feito;
+    const lbl=inp.closest('.dev-check');
+    if(lbl)lbl.classList.toggle('feito',feito);
+  });
+  atualizarProgressoDeveres();
+}
+
+// ===== CENTRAL DE DEVERES =====
+// Gera a mesma chave de estado dos cards, para o "feito" ser compartilhado.
+function _devId(materia, grupo, texto){
+  const chaveDev=`${materia}`.replace(/\s/g,'_');
+  return `chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
+}
+// Coleta todos os deveres das matérias de HOJE (ignora prévia de amanhã).
+function coletarDeveres(){
+  const out=[];
+  const itens=(window._itensDoDia||[]).filter(x=>!x.ehPrevia).map(x=>x.item);
+  function addDeSub(materia, d){
+    (d.deveres_aula||[]).filter(t=>t&&t.trim()).forEach(t=>{
+      out.push({materia, data:'', texto:t, id:_devId(materia,'aula',t)});
+    });
+    (d.deveres_pendentes||[]).forEach(g=>{
+      (g.deveres||[]).filter(t=>t&&t.trim()).forEach(t=>{
+        out.push({materia, data:g.data||'', texto:t, id:_devId(materia,'pend_'+(g.data||''),t)});
+      });
+    });
+  }
+  itens.forEach(item=>{
+    if(item.combinada && Array.isArray(item.secoes)){
+      item.secoes.forEach(sec=>addDeSub(sec.materia, sec.dados||{}));
+    }else{
+      addDeSub(item.m, item);
+    }
+  });
+  return out;
+}
+function renderCentralDeveres(){
+  const cards=document.getElementById('cards');
+  if(!cards)return;
+  const antigo=document.getElementById('centralDeveres');
+  if(antigo)antigo.remove();
+  const lista=coletarDeveres();
+  const feitos=lista.filter(d=>localStorage.getItem(d.id)==='1').length;
+  let corpo;
+  if(!lista.length){
+    corpo='<div class="cd-vazio">Tudo em dia! Nenhum dever pendente. 🎉</div>';
+  }else{
+    const porMat={};
+    lista.forEach(d=>{(porMat[d.materia]=porMat[d.materia]||[]).push(d);});
+    corpo=Object.keys(porMat).map(mat=>{
+      const emoji=(typeof EMOJIS!=='undefined'&&EMOJIS[mat])||'📖';
+      const itensHtml=porMat[mat].map(d=>{
+        const marcado=localStorage.getItem(d.id)==='1';
+        const dataTag=d.data?`<span class="cd-data">${d.data}</span>`:'';
+        return `<label class="dev-check cd-item ${marcado?'feito':''}">
+          <input type="checkbox" data-devid="${d.id}" ${marcado?'checked':''} onchange="toggleDever('${d.id}',this)">
+          <span class="dev-box"></span>
+          <span class="dev-txt">${dataTag}${d.texto}</span>
+        </label>`;
+      }).join('');
+      return `<div class="cd-grupo"><div class="cd-mat">${emoji} ${mat}</div>${itensHtml}</div>`;
+    }).join('');
+  }
+  const html=`<div id="centralDeveres" class="central-dev">
+    <div class="cd-head">
+      <span class="cd-titulo">✅ Meus deveres</span>
+      <span class="cd-prog" id="cdProg">${feitos}/${lista.length} feitos</span>
+    </div>
+    <div class="cd-body">${corpo}</div>
+    <a class="cd-plurall" href="https://www.plurall.net" target="_blank" rel="noopener">Abrir Plurall (aba Tarefas) ↗</a>
+  </div>`;
+  cards.insertAdjacentHTML('afterbegin', html);
+}
+function atualizarProgressoDeveres(){
+  const prog=document.getElementById('cdProg');
+  if(!prog)return;
+  const lista=coletarDeveres();
+  const feitos=lista.filter(d=>localStorage.getItem(d.id)==='1').length;
+  prog.textContent=`${feitos}/${lista.length} feitos`;
 }
 
 function toggleCard(idx){
@@ -739,7 +831,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
       const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
       const marcado=localStorage.getItem(id)==='1';
       return `<label class="dev-check ${marcado?'feito':''}">
-        <input type="checkbox" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
+        <input type="checkbox" data-devid="${id}" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
         <span class="dev-box"></span>
         <span class="dev-txt">${texto}</span>
       </label>`;
@@ -822,7 +914,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
     const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
     const marcado=localStorage.getItem(id)==='1';
     return `<label class="dev-check ${marcado?'feito':''}">
-      <input type="checkbox" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
+      <input type="checkbox" data-devid="${id}" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
       <span class="dev-box"></span>
       <span class="dev-txt">${texto}</span>
     </label>`;
@@ -999,6 +1091,7 @@ function loadDay(){
       document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':msg.dayLabel;
       const cards=document.getElementById('cards');
       cards.innerHTML='';
+      window._itensDoDia=[]; // coletor para a central de deveres
       // cria placeholders para todas as matérias (hoje + prévia)
       for(let i=0;i<total;i++){
         const div=document.createElement('div');
@@ -1031,6 +1124,7 @@ function loadDay(){
       const slot=document.getElementById(`slot-${msg.index}`);
       const dataRef=(window._dataRefSecao||{})[msg.index]||'';
       if(slot)slot.innerHTML=renderCard(msg.item,msg.index,msg.ehPrevia,dataRef);
+      (window._itensDoDia=window._itensDoDia||[]).push({item:msg.item,ehPrevia:msg.ehPrevia});
     }
     if(msg.type==='done'){
       evtSource.close();
@@ -1042,6 +1136,7 @@ function loadDay(){
         // abre a primeira matéria automaticamente
         const primeiro=document.getElementById('card-0');
         if(primeiro)primeiro.classList.add('open');
+        renderCentralDeveres();
       }else{
         main.innerHTML=`<div class="empty-box"><div class="empty-emoji">📭</div><div class="empty-title">Sem matérias</div><div class="empty-sub">Não há aulas para mostrar agora.</div></div>`;
       }
