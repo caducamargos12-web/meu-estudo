@@ -2372,6 +2372,88 @@ function assuntoAvaliavel(materiaTeste) {
   return partes.join('; ').trim();
 }
 
+// ── CORREÇÃO DE REDAÇÃO (competências ENEM) ──────────────────────────────────
+// Limite: 1 correção por aluno por dia (controla custo, já que cada redação é única
+// e não dá pra cachear por assunto como resumo/simulado). Cache por texto idêntico:
+// reenviar a MESMA redação não gasta IA de novo nem conta no limite.
+const REDACAO_LIMITE_DIA = 1;
+let redacaoUso = {};   // { user: { data:'YYYY-MM-DD', n:0 } }
+let redacaoCache = {}; // { hashDoTexto: correcao }
+const REDACAO_USO_FILE = DATA_DIR + '/redacao_uso.json';
+const REDACAO_CACHE_FILE = DATA_DIR + '/redacao_cache.json';
+function carregarRedacao() {
+  try { redacaoUso = JSON.parse(fs.readFileSync(REDACAO_USO_FILE, 'utf8')); } catch { redacaoUso = {}; }
+  try { redacaoCache = JSON.parse(fs.readFileSync(REDACAO_CACHE_FILE, 'utf8')); } catch { redacaoCache = {}; }
+}
+function salvarRedacaoUso() {
+  try { fs.writeFileSync(REDACAO_USO_FILE, JSON.stringify(redacaoUso)); } catch (e) { console.log('Erro ao salvar uso de redação:', e.message); }
+}
+function salvarRedacaoCache() {
+  try { fs.writeFileSync(REDACAO_CACHE_FILE, JSON.stringify(redacaoCache)); } catch (e) { console.log('Erro ao salvar cache de redação:', e.message); }
+}
+carregarRedacao();
+// data de hoje em Brasília (vira à meia-noite, independente do fuso do servidor)
+function hojeBrasilia() { return new Date(Date.now() - 3*3600*1000).toISOString().slice(0, 10); }
+// hash simples e estável do texto (para o cache por texto idêntico)
+function hashTexto(s) {
+  let h = 0; const t = (s||'').trim().replace(/\s+/g, ' ').toLowerCase();
+  for (let i = 0; i < t.length; i++) { h = (h*31 + t.charCodeAt(i)) | 0; }
+  return 'r' + (h >>> 0).toString(36) + '_' + t.length;
+}
+
+app.post('/api/redacao', rateLimitGeral, auth, async (req, res) => {
+  const texto = (req.body.texto || '').trim();
+  if (texto.length < 200) return res.json({ error: 'Escreva a redação completa (pelo menos alguns parágrafos) para eu corrigir.' });
+  if (texto.length > 6000) return res.json({ error: 'Texto muito longo. Cole só a redação (até ~6000 caracteres).' });
+
+  // 1) cache por texto idêntico: não gasta IA nem conta no limite do dia
+  const ck = hashTexto(texto);
+  if (redacaoCache[ck]) return res.json({ correcao: redacaoCache[ck], cached: true });
+
+  // 2) limite diário por aluno (só conta correções que realmente chamam a IA)
+  const user = req.user;
+  const hoje = hojeBrasilia();
+  const uso = redacaoUso[user];
+  if (uso && uso.data === hoje && uso.n >= REDACAO_LIMITE_DIA) {
+    return res.json({ error: 'Você já corrigiu sua redação de hoje. Volte amanhã para corrigir outra.', limite: true });
+  }
+
+  // 3) prompt das 5 competências do ENEM (correção simples: nota + 1 comentário)
+  const prompt =
+    'Você é um corretor de redação do ENEM, experiente e justo. Avalie a redação do aluno abaixo ' +
+    'pelas 5 competências oficiais do ENEM, cada uma de 0 a 200 pontos:\n' +
+    'C1: domínio da norma culta escrita (gramática, ortografia, pontuação).\n' +
+    'C2: compreensão do tema e uso do tipo dissertativo-argumentativo, sem fugir do tema.\n' +
+    'C3: seleção, organização e relação de argumentos e informações em defesa de um ponto de vista.\n' +
+    'C4: coesão e mecanismos linguísticos (conectivos, referenciação, articulação entre parágrafos).\n' +
+    'C5: proposta de intervenção detalhada (agente, ação, meio, finalidade), respeitando os direitos humanos.\n' +
+    'Para cada competência dê a nota em múltiplos de 40 (0, 40, 80, 120, 160 ou 200) e UM comentário ' +
+    'objetivo de 2 a 3 frases: o que sustentou a nota e como melhorar.\n' +
+    'Seja honesto e criterioso, não infle notas. Responda APENAS JSON, sem markdown:\n' +
+    '{"competencias":[{"n":1,"nota":0,"comentario":""},{"n":2,"nota":0,"comentario":""},{"n":3,"nota":0,"comentario":""},{"n":4,"nota":0,"comentario":""},{"n":5,"nota":0,"comentario":""}]}\n\n' +
+    'REDAÇÃO DO ALUNO:\n"""\n' + texto + '\n"""';
+
+  try {
+    const r = await callAnthropic(prompt, 0);
+    const comps = Array.isArray(r.competencias) ? r.competencias : [];
+    if (comps.length !== 5) return res.json({ error: 'Não consegui corrigir agora. Tente de novo em instantes.' });
+    // recalcula a nota total no servidor (não confia na soma da IA); força múltiplos de 40
+    let total = 0;
+    const competencias = comps.map(c => {
+      const nota = Math.max(0, Math.min(200, Math.round((Number(c.nota)||0)/40)*40));
+      total += nota;
+      return { n: Number(c.n)||0, nota, comentario: (c.comentario||'').toString().trim() };
+    });
+    const correcao = { nota_total: total, competencias };
+    redacaoCache[ck] = correcao; salvarRedacaoCache();
+    redacaoUso[user] = (uso && uso.data === hoje) ? { data: hoje, n: uso.n + 1 } : { data: hoje, n: 1 };
+    salvarRedacaoUso();
+    res.json({ correcao });
+  } catch (e) {
+    res.json({ error: 'Não consegui corrigir agora. Tente de novo em instantes.' });
+  }
+});
+
 app.post('/api/resumo', rateLimitGeral, auth, async (req, res) => {
   const materia = (req.body.materia || '').slice(0, 60);
   const assunto = (req.body.assunto || '').slice(0, 300);

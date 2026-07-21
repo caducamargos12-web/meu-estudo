@@ -337,6 +337,24 @@
   .beta-fechar:hover{color:var(--amber,#d9a865)}
   .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
+  .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
+  .red-modal{max-width:520px}
+  .red-textarea{min-height:220px;font-size:14px;line-height:1.5}
+  .red-conta{font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:right;margin-top:5px}
+  .red-result:not(:empty){margin-top:16px;border-top:1px solid var(--border);padding-top:16px}
+  .red-carregando{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2);padding:8px 0}
+  .red-total{display:flex;align-items:baseline;justify-content:space-between;background:var(--bg);border:1px solid var(--border-bright);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .red-total-label{font-size:13px;font-weight:600;color:var(--text-2)}
+  .red-total-num{font-family:var(--mono);font-size:30px;font-weight:800;line-height:1}
+  .red-total-max{font-size:15px;color:var(--text-3);font-weight:600}
+  .red-comp{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:9px}
+  .red-comp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:10px}
+  .red-comp-nome{font-size:13px;font-weight:700;color:var(--text)}
+  .red-comp-nota{font-family:var(--mono);font-size:18px;font-weight:800;flex-shrink:0}
+  .red-comp-max{font-size:11px;color:var(--text-3);font-weight:600}
+  .red-comp-txt{font-size:13px;line-height:1.5;color:var(--text-2)}
+  .red-aviso{font-size:11px;color:var(--text-3);text-align:center;margin-top:12px;line-height:1.4}
   .rep-overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:2147483600;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:20px;box-sizing:border-box}
   .rep-overlay.aberto{display:flex !important;align-items:center !important;justify-content:center !important;animation:repFade .25s ease}
   @keyframes repFade{from{opacity:0}to{opacity:1}}
@@ -422,6 +440,12 @@
             <circle cx="6" cy="18" r="3"></circle>
             <circle cx="18" cy="16" r="3"></circle>
             <path d="M9 18V5l12-2v13"></path>
+          </svg>
+        </button>
+        <button class="redacao-btn-mini" onclick="abrirRedacao()" aria-label="Corrigir redação" title="Corrigir redação">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
           </svg>
         </button>
         <button class="report-btn-mini" onclick="abrirReporte()" aria-label="Reportar erro" title="Reportar erro">
@@ -510,6 +534,89 @@ async function enviarReporte(){
 }
 
 function abrirReporteGlobalInit(){}
+
+// ===== CORREÇÃO DE REDAÇÃO =====
+const COMPS_ENEM={1:'Norma culta',2:'Compreensão do tema',3:'Argumentação',4:'Coesão',5:'Proposta de intervenção'};
+function contarRedacao(){
+  const t=document.getElementById('redacaoTexto');
+  const c=document.getElementById('redacaoCount');
+  if(t&&c)c.textContent=t.value.length;
+}
+function abrirRedacao(){
+  const ov=document.getElementById('redacaoOverlay');
+  ov.classList.add('aberto');
+  if(ov.parentElement!==document.body){document.body.appendChild(ov);}
+  document.body.style.overflow='hidden';
+  document.getElementById('redacaoMsg').textContent='';
+  document.getElementById('redacaoMsg').className='rep-msg';
+  document.getElementById('redacaoResultado').innerHTML='';
+  const btn=document.getElementById('redacaoBtn');
+  btn.disabled=false;btn.textContent='Corrigir';
+  contarRedacao();
+  setTimeout(()=>document.getElementById('redacaoTexto').focus(),100);
+}
+function fecharRedacao(){
+  document.getElementById('redacaoOverlay').classList.remove('aberto');
+  document.body.style.overflow='';
+}
+function corNota(nota,max){
+  const p=nota/max;
+  if(p>=0.8)return'var(--green)';
+  if(p>=0.5)return'var(--amber)';
+  return'#d9a0a0';
+}
+function renderCorrecao(c){
+  const total=c.nota_total||0;
+  const linhas=(c.competencias||[]).map(comp=>{
+    const titulo=COMPS_ENEM[comp.n]||('Competência '+comp.n);
+    const cor=corNota(comp.nota,200);
+    return `<div class="red-comp">
+      <div class="red-comp-top">
+        <span class="red-comp-nome">C${comp.n} · ${titulo}</span>
+        <span class="red-comp-nota" style="color:${cor}">${comp.nota}<span class="red-comp-max">/200</span></span>
+      </div>
+      <div class="red-comp-txt">${(comp.comentario||'').replace(/</g,'&lt;')}</div>
+    </div>`;
+  }).join('');
+  return `<div class="red-total">
+      <span class="red-total-label">Nota final</span>
+      <span class="red-total-num" style="color:${corNota(total,1000)}">${total}<span class="red-total-max">/1000</span></span>
+    </div>
+    ${linhas}
+    <div class="red-aviso">Correção automática para orientar seu estudo. Não substitui a nota oficial do professor.</div>`;
+}
+async function enviarRedacao(){
+  const texto=document.getElementById('redacaoTexto').value.trim();
+  const msg=document.getElementById('redacaoMsg');
+  const resultado=document.getElementById('redacaoResultado');
+  if(texto.length<200){msg.className='rep-msg erro';msg.textContent='Escreva a redação completa (pelo menos alguns parágrafos).';return;}
+  const btn=document.getElementById('redacaoBtn');
+  btn.disabled=true;btn.textContent='Corrigindo…';
+  msg.className='rep-msg';msg.textContent='';
+  resultado.innerHTML='<div class="red-carregando"><div class="spin"></div>Analisando pelas 5 competências…</div>';
+  try{
+    const token=localStorage.getItem('sessionToken');
+    const res=await fetch('/api/redacao',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-session-token':token},
+      body:JSON.stringify({texto})
+    });
+    const data=await res.json();
+    if(data.error){
+      resultado.innerHTML='';
+      msg.className='rep-msg erro';msg.textContent=data.error;
+      btn.disabled=false;btn.textContent='Corrigir';
+      return;
+    }
+    resultado.innerHTML=renderCorrecao(data.correcao);
+    btn.textContent='Corrigida ✓';
+    if(data.cached){msg.className='rep-msg ok';msg.textContent='Você já tinha corrigido essa redação (não gastou nova correção).';}
+  }catch(e){
+    resultado.innerHTML='';
+    msg.className='rep-msg erro';msg.textContent='Erro de conexão. Tente de novo.';
+    btn.disabled=false;btn.textContent='Corrigir';
+  }
+}
 
 // mesma regra do backend: decide se a matéria do teste dá pra gerar simulado.
 // Remove termos sem nexo (revisão, resolução de simulado, interpretação de texto, aviso).
@@ -1233,6 +1340,21 @@ document.addEventListener('keydown',function(e){
       <button class="rep-enviar" id="reporteEnviar" onclick="enviarReporte()">Enviar</button>
     </div>
     <div class="rep-msg" id="reporteMsg"></div>
+  </div>
+</div>
+
+<div id="redacaoOverlay" class="rep-overlay" onclick="if(event.target===this)fecharRedacao()">
+  <div class="rep-modal red-modal">
+    <div class="rep-title">✍️ Corrigir redação</div>
+    <div class="rep-sub">Cole sua redação abaixo. Eu corrijo pelas 5 competências do ENEM e mostro sua nota. 1 correção por dia.</div>
+    <textarea id="redacaoTexto" class="rep-textarea red-textarea" placeholder="Cole aqui o texto da sua redação…" maxlength="6000" oninput="contarRedacao()"></textarea>
+    <div class="red-conta"><span id="redacaoCount">0</span> / 6000 caracteres</div>
+    <div class="rep-acoes">
+      <button class="rep-cancelar" onclick="fecharRedacao()">Fechar</button>
+      <button class="rep-enviar" id="redacaoBtn" onclick="enviarRedacao()">Corrigir</button>
+    </div>
+    <div class="rep-msg" id="redacaoMsg"></div>
+    <div id="redacaoResultado" class="red-result"></div>
   </div>
 </div>
 </body>
