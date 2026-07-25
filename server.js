@@ -1536,6 +1536,73 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   };
 }
 
+function extrairRotuladoRegex(blogText, dataRef) {
+  const decodeEnt = (s) => (s||'')
+    .replace(/&#(\d+);/g, (_,n) => String.fromCharCode(parseInt(n,10)))
+    .replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&')
+    .trim();
+  const limpar = (s) => decodeEnt(s)
+    .replace(/_{3,}/g,' ')
+    .replace(/\s+/g,' ')
+    .replace(/^[\s\-*]+|[\s\-*]+$/g,'')
+    .trim();
+  const cortar = (txt, re) => {
+    const m = txt.match(re);
+    return m && m[1] ? limpar(m[1]) : '';
+  };
+  const extrairDeveres = (txt) => {
+    const deveres = [];
+    const reTarefa = /TAREFA(?:\s+PARA\s+(\d{1,2}\/\d{1,2}))?\s*:\s*([\s\S]*?)(?=\s+(?:PLURALL|DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO|P[ÁA]G(?:INA|\.)?)\s*:|$)/gi;
+    let m;
+    while ((m = reTarefa.exec(txt)) !== null) {
+      let t = limpar(m[2]);
+      if (m[1] && t) t += ' (para ' + m[1] + ')';
+      if (t && !/^[-*—]+$/.test(t) && !ehEventoEscolar(t)) deveres.push(t);
+    }
+    const plurall = cortar(txt, /PLURALL\s*:\s*([\s\S]*?)(?=\s+(?:DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO|P[ÁA]G(?:INA|\.)?|TAREFA)\s*:|$)/i);
+    if (plurall && !/^[-*—]+$/.test(plurall) && !ehEventoEscolar(plurall)) deveres.push('Plurall: ' + plurall);
+    return deveres;
+  };
+  const montarMateria = (bloco) => {
+    let materia = cortar(bloco, /(?:CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO)\s*:\s*([\s\S]*?)(?=\s+(?:P[ÁA]G(?:INA|\.)?|TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?|PLURALL|DATA)\s*:|$)/i);
+    if (!materia) {
+      materia = limpar(bloco
+        .replace(/TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?\s*:[\s\S]*$/i,'')
+        .replace(/PLURALL\s*:[\s\S]*$/i,'')
+        .replace(/DATA\s*:\s*\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/i,''));
+    }
+    const pag = cortar(bloco, /P[ÁA]G(?:INA|\.)?\s*:\s*([\s\S]*?)(?=\s+(?:TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?|PLURALL|DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO)\s*:|$)/i);
+    if (pag && materia && !materia.toLowerCase().includes('pág')) materia += ' (pág. ' + pag + ')';
+    return limpar(materia.replace(/\s*PLURALL\s*:.*/i,''));
+  };
+
+  const linhas = [];
+  const blocosData = [...(blogText||'').matchAll(/DATA:\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*([\s\S]*?)(?=DATA:\s*\d{1,2}\/|Teste\s+\d+\s*\||Avalia[çc][ãa]o\s*\||$)/gi)];
+  for (const b of blocosData) {
+    const materia = montarMateria(b[2]);
+    const deveres = extrairDeveres(b[2]);
+    if (dataParaNum(b[1]) && (materia || deveres.length)) {
+      linhas.push({ data: b[1].slice(0,5), materia, deveres });
+    }
+  }
+
+  const quadros = [...(blogText || '').matchAll(/Teste\s+\d+\s*\|[^|]*\|\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*\|[^]*?Conte[úu]do:\s*([^]*?)(?=\s*P[áa]ginas:|\s*Teste\s+\d+\s*\||\s*DATA:|$)/gi)];
+  const testesQuadro = quadros
+    .map(m => ({ data: (m[1]||'').slice(0,5), num: dataParaNum(m[1]), conteudo: limpar(m[2]) }))
+    .filter(t => t.num > 0 && t.conteudo)
+    .sort((a,b) => b.num - a.num);
+  let avaliacao = { tem:false };
+  if (testesQuadro.length) {
+    const refN = dataParaNum(dataRef || hojeStr());
+    const doDia = testesQuadro.find(t => t.num === refN);
+    const ateRef = testesQuadro.filter(t => t.num <= refN);
+    const escolhido = doDia || ateRef[0] || testesQuadro[0];
+    if (escolhido) avaliacao = { tem:true, data: escolhido.data, sobre: escolhido.conteudo };
+  }
+  return { linhas, avaliacao, origem:'regex-rotulado' };
+}
+
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado, interpretacaoComAnterior, testeNoDiaExato) {
   // história tem lógica acumulativa própria
   if (tipo === 'acumulativo') {
@@ -1662,11 +1729,16 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
                         : promptTabela;
 
   let tabela;
-  try {
-    const raw = await callAnthropic(promptEscolhido, 0);
-    tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
-  } catch (e) {
-    tabela = { linhas: [], avaliacao:{tem:false} };
+  if (formato === 'rotulado') {
+    tabela = extrairRotuladoRegex(blogText, dataRef);
+  }
+  if (!tabela || !Array.isArray(tabela.linhas) || tabela.linhas.length === 0) {
+    try {
+      const raw = await callAnthropic(promptEscolhido, 0);
+      tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
+    } catch (e) {
+      tabela = { linhas: [], avaliacao:{tem:false} };
+    }
   }
 
   // EXTRAÇÃO DIRETA DO QUADRO DE TESTE (rotulado, ex: Matemática A do Tiago).
