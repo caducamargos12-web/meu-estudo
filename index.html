@@ -234,6 +234,10 @@
   .cd-vazio{font-size:13px;color:var(--text-3)}
   .cd-plurall{display:inline-block;margin-top:13px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:600}
   .cd-plurall:hover{text-decoration:underline}
+  .recesso-box{background:linear-gradient(180deg,var(--surface),var(--bg-elev));border:1px solid var(--border-bright);border-radius:18px;padding:28px 22px;text-align:center;animation:fadeUp .6s cubic-bezier(.2,.8,.2,1)}
+  .recesso-emoji{font-size:42px;margin-bottom:12px}
+  .recesso-title{font-size:22px;font-weight:800;margin-bottom:8px;color:var(--accent)}
+  .recesso-sub{font-size:14px;color:var(--text-2);line-height:1.6}
 
 
   /* quiz */
@@ -861,6 +865,28 @@ function atualizarProgressoDeveres(){
   prog.textContent=`${feitos}/${lista.length} feitos`;
 }
 
+function sincronizarBimestre(bimestreAtivo){
+  const bim=Number(bimestreAtivo||0);
+  if(!bim)return;
+  const chave='bimestre_local';
+  const atual=Number(localStorage.getItem(chave)||0);
+  if(atual!==bim){
+    Object.keys(localStorage).filter(k=>k.startsWith('chk_')).forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem(chave,String(bim));
+  }
+}
+
+function mostrarRecesso(msg){
+  esconderBoasVindas();
+  document.getElementById('subtitle').textContent='Recesso escolar';
+  const main=document.getElementById('main');
+  main.innerHTML=`<div class="recesso-box">
+    <div class="recesso-emoji">🌙</div>
+    <div class="recesso-title">Modo recesso ativado</div>
+    <div class="recesso-sub">${msg||'Em recesso. As aulas voltam em breve.'}<br>O app não está puxando blogs nem deveres durante esse período.</div>
+  </div>`;
+}
+
 function toggleCard(idx){
   const alvo=document.getElementById('card-'+idx);
   if(!alvo)return;
@@ -1188,10 +1214,16 @@ function loadDay(){
 
   const token=localStorage.getItem('sessionToken');
   const evtSource=new EventSource(`/api/today?token=${encodeURIComponent(token)}`);
-  let total=0;let done=0;let fimDeSemana=false;
+  let total=0;let done=0;let fimDeSemana=false;let estaEmRecesso=false;
 
   evtSource.onmessage=function(e){
     const msg=JSON.parse(e.data);
+    if(msg.bimestreAtivo)sincronizarBimestre(msg.bimestreAtivo);
+    if(msg.type==='recesso'){
+      estaEmRecesso=true;
+      mostrarRecesso(msg.mensagem);
+      return;
+    }
     if(msg.type==='start'){
       total=msg.total;
       fimDeSemana=msg.fimDeSemana;
@@ -1235,6 +1267,7 @@ function loadDay(){
     }
     if(msg.type==='done'){
       evtSource.close();
+      if(estaEmRecesso)return;
       esconderBoasVindas();
       if(total>0){
         document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':`${total} matérias`;

@@ -248,6 +248,49 @@ function salvarJanelaAvaliacao() {
   try { fs.writeFileSync(JANELA_AVAL_FILE, JSON.stringify(janelaAvaliacao)); }
   catch (e) { console.log('Erro ao salvar janela de avaliação:', e.message); }
 }
+
+// BIMESTRE ATIVO: usado para resetar deveres marcados no navegador dos alunos e
+// para esconder deveres pendentes de bimestres anteriores. O início padrão do 3º
+// bimestre fica após o último dia das provas finais do 2º bimestre.
+let estadoBimestre = { numero: 3, inicio: '2026-07-18', atualizadoEm: '' };
+const BIMESTRE_FILE = DATA_DIR + '/bimestre_atual.json';
+function carregarEstadoBimestre() {
+  try {
+    const lido = JSON.parse(fs.readFileSync(BIMESTRE_FILE, 'utf8'));
+    if (lido && Number(lido.numero) > 0) {
+      estadoBimestre = {
+        numero: Number(lido.numero),
+        inicio: /^\d{4}-\d{2}-\d{2}$/.test(lido.inicio || '') ? lido.inicio : estadoBimestre.inicio,
+        atualizadoEm: lido.atualizadoEm || ''
+      };
+    }
+  } catch {}
+}
+function salvarEstadoBimestre() {
+  try { fs.writeFileSync(BIMESTRE_FILE, JSON.stringify(estadoBimestre)); }
+  catch (e) { console.log('Erro ao salvar bimestre:', e.message); }
+}
+function inicioBimestreNum() {
+  return dataIsoParaNum(estadoBimestre.inicio);
+}
+
+// RECESSO: quando ativo e dentro da janela, /api/today não busca blogs nem cache.
+let recessoConfig = { ativo: false, inicio: '', fim: '' };
+const RECESSO_FILE = DATA_DIR + '/recesso_atual.json';
+function carregarRecesso() {
+  try {
+    const lido = JSON.parse(fs.readFileSync(RECESSO_FILE, 'utf8'));
+    recessoConfig = {
+      ativo: lido && lido.ativo === true,
+      inicio: /^\d{4}-\d{2}-\d{2}$/.test(lido && lido.inicio || '') ? lido.inicio : '',
+      fim: /^\d{4}-\d{2}-\d{2}$/.test(lido && lido.fim || '') ? lido.fim : ''
+    };
+  } catch { recessoConfig = { ativo: false, inicio: '', fim: '' }; }
+}
+function salvarRecesso() {
+  try { fs.writeFileSync(RECESSO_FILE, JSON.stringify(recessoConfig)); }
+  catch (e) { console.log('Erro ao salvar recesso:', e.message); }
+}
 // ── "hoje" efetivo, no fuso de Brasília, com virada às 22:30 ─────────────────
 // O servidor pode rodar em qualquer fuso (o Railway usa UTC). Para NÃO depender disso,
 // calculamos a hora de Brasília a partir do tempo absoluto (Date.now), deslocando -3h
@@ -272,6 +315,17 @@ function dentroDaJanelaAvaliacao() {
   if (!janelaAvaliacao.inicio || !janelaAvaliacao.fim) return false;
   const hoje = isoEfetivo();
   return hoje >= janelaAvaliacao.inicio && hoje <= janelaAvaliacao.fim;
+}
+
+function emRecesso() {
+  if (!recessoConfig.ativo || !recessoConfig.inicio || !recessoConfig.fim) return false;
+  const hoje = isoEfetivo();
+  return hoje >= recessoConfig.inicio && hoje <= recessoConfig.fim;
+}
+
+function dataIsoParaBR(iso) {
+  const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}` : '';
 }
 
 // ┌─────────────────────────────────────────────────────────────────────────┐
@@ -300,6 +354,8 @@ function dataProvaDe(materia, dia) {
 }
 
 carregarJanelaAvaliacao();
+carregarEstadoBimestre();
+carregarRecesso();
 carregarReports();
 
 // registra o cadastro de um aluno na primeira vez que ele loga
@@ -955,6 +1011,12 @@ function dataParaNum(ddmm) {
   return ano*10000 + mes*100 + dia;
 }
 
+function dataIsoParaNum(iso) {
+  const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return 0;
+  return parseInt(m[1],10) * 10000 + parseInt(m[2],10) * 100 + parseInt(m[3],10);
+}
+
 // converte AAAAMMDD de volta para objeto Date (para calcular diferença em dias)
 function numParaData(num) {
   if (!num) return null;
@@ -971,9 +1033,11 @@ function filtrarPendentes(lista, refNum, janelaDias, maxItens) {
   const janela = (janelaDias && janelaDias > 0) ? janelaDias : 14;
   const limite = (maxItens && maxItens > 0) ? maxItens : 2;
   const refData = numParaData(refNum);
+  const inicioBim = inicioBimestreNum();
   return (lista || [])
     .filter(l => {
       if (!l || !l.num) return false;
+      if (inicioBim && l.num < inicioBim) return false;
       const d = numParaData(l.num);
       if (!d || !refData) return false;
       const diasAtras = Math.floor((refData - d) / 86400000);
@@ -2604,6 +2668,51 @@ app.get('/api/admin/seguranca', checkAdmin, (req, res) => {
   } catch (e) { res.json({ eventos: [], erro: e.message }); }
 });
 
+// ── BIMESTRE E RECESSO ───────────────────────────────────────────────────────
+app.get('/api/admin/bimestre-recesso', checkAdmin, (req, res) => {
+  res.json({
+    bimestre: estadoBimestre,
+    recesso: recessoConfig,
+    recessoAtivoHoje: emRecesso()
+  });
+});
+
+app.post('/api/admin/zerar-bimestre', checkAdmin, (req, res) => {
+  const hoje = isoEfetivo();
+  estadoBimestre = {
+    numero: (Number(estadoBimestre.numero) || 0) + 1,
+    inicio: hoje,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = Object.keys(cache).length;
+  for (const k of Object.keys(cache)) delete cache[k];
+  salvarCache();
+  res.json({ ok: true, mensagem: 'Bimestre zerado. O próximo bimestre começa vazio para todos os alunos.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/definir-recesso', checkAdmin, (req, res) => {
+  const ativo = req.body.ativo === true || req.body.ativo === 'true';
+  const inicio = (req.body.inicio || '').trim();
+  const fim = (req.body.fim || '').trim();
+  const valida = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (ativo) {
+    if (!valida(inicio) || !valida(fim)) return res.json({ error: 'Datas inválidas. Use o seletor de data.' });
+    if (fim < inicio) return res.json({ error: 'A data final não pode ser antes da inicial.' });
+    recessoConfig = { ativo: true, inicio, fim };
+  } else {
+    recessoConfig = { ativo: false, inicio: valida(inicio) ? inicio : '', fim: valida(fim) ? fim : '' };
+  }
+  salvarRecesso();
+  res.json({ ok: true, mensagem: recessoConfig.ativo ? 'Recesso configurado.' : 'Recesso desativado.', recesso: recessoConfig, recessoAtivoHoje: emRecesso() });
+});
+
+app.post('/api/admin/desativar-recesso', checkAdmin, (req, res) => {
+  recessoConfig = { ativo: false, inicio: recessoConfig.inicio || '', fim: recessoConfig.fim || '' };
+  salvarRecesso();
+  res.json({ ok: true, mensagem: 'Recesso desativado.', recesso: recessoConfig });
+});
+
 // ── AVALIAÇÃO FINAL DO BIMESTRE (janela de exibição) ─────────────────────────
 app.get('/api/admin/janela-avaliacao', checkAdmin, (req, res) => {
   res.json({ janela: janelaAvaliacao, ativaHoje: dentroDaJanelaAvaliacao() });
@@ -2669,6 +2778,17 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  if (emRecesso()) {
+    res.write('data: ' + JSON.stringify({
+      type:'recesso',
+      bimestreAtivo: estadoBimestre.numero,
+      recesso: recessoConfig,
+      mensagem: 'Em recesso. Aulas voltam em ' + dataIsoParaBR(recessoConfig.fim) + '.'
+    }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ type:'done', bimestreAtivo: estadoBimestre.numero }) + '\n\n');
+    return res.end();
+  }
+
   // define o dia principal e o dia da prévia
   let diaPrincipal, diaPrevia;
   if (hojeDay >= 1 && hojeDay <= 5) {
@@ -2685,7 +2805,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   // calcula o total de matérias para o front montar os placeholders
   const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {

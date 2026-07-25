@@ -134,6 +134,30 @@
     </div>
 
     <div class="card">
+      <div class="section-label">🗓️ Bimestre e recesso</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Use esta área quando acabar um bimestre ou quando a escola entrar em recesso. Zerar o bimestre faz todos os alunos começarem o próximo bimestre com os deveres desmarcados e sem pendências antigas.
+      </div>
+      <div id="bimStatus" style="font-size:12px;margin-bottom:12px"></div>
+      <button class="small danger" onclick="zerarBimestre()">Zerar deveres pendentes do bimestre atual</button>
+      <div class="sub-sec">
+        <div class="sub-titulo">Recesso escolar</div>
+        <div id="recStatus" style="font-size:12px;margin-bottom:12px"></div>
+        <div class="form-aluno" style="flex-direction:column;gap:10px">
+          <label style="font-size:12px;color:var(--muted)">Data início do recesso</label>
+          <input id="recInicio" type="date" style="width:100%" />
+          <label style="font-size:12px;color:var(--muted)">Data fim do recesso</label>
+          <input id="recFim" type="date" style="width:100%" />
+          <button class="btn-criar" onclick="salvarRecesso(true)">Ativar recesso agora</button>
+          <button class="small" onclick="salvarRecesso(false)" style="align-self:flex-start">Salvar datas sem ativar</button>
+          <button class="small danger" onclick="desativarRecesso()" style="align-self:flex-start">Desativar recesso</button>
+        </div>
+        <div id="recMsg" class="form-msg"></div>
+      </div>
+      <div id="bimMsg" class="form-msg"></div>
+    </div>
+
+    <div class="card">
       <div class="section-label">🏆 Avaliação Final do Bimestre (janela)</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
         Defina o período em que o bloco "Avaliação Final do Bimestre" aparece para os alunos (ex: da semana de RAA ao fim da semana de provas). Dentro dessa janela, cada matéria mostra a avaliação que o professor já publicou no blog. Fora da janela, o bloco some. Deixe em branco e limpe para desativar.
@@ -204,6 +228,58 @@ async function carregarReports(){
   }catch(e){}
   carregarSobrescritas();
   carregarJanelaAval();
+  carregarBimestreRecesso();
+}
+
+// ── bimestre e recesso ──
+async function carregarBimestreRecesso(){
+  try{
+    const res = await fetch('/api/admin/bimestre-recesso?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error)return;
+    const b = data.bimestre || {numero:'?',inicio:''};
+    document.getElementById('bimStatus').innerHTML = 'Bimestre ativo: <strong style="color:var(--accent)">'+esc(String(b.numero||'?'))+'</strong>' + (b.inicio?' · início em '+esc(b.inicio):'');
+    const r = data.recesso || {ativo:false,inicio:'',fim:''};
+    document.getElementById('recInicio').value = r.inicio || '';
+    document.getElementById('recFim').value = r.fim || '';
+    document.getElementById('recStatus').innerHTML = r.ativo
+      ? (data.recessoAtivoHoje?'<span style="color:#a8c08a">● Recesso ativo hoje</span>':'<span style="color:var(--muted)">○ Recesso configurado, mas fora do período</span>') + ' (de '+esc(r.inicio)+' até '+esc(r.fim)+')'
+      : '<span style="color:var(--muted)">Recesso desativado.</span>';
+  }catch(e){}
+}
+async function zerarBimestre(){
+  const msg=document.getElementById('bimMsg');
+  if(!confirm('Tem certeza? Isso vai apagar todos os deveres pendentes do bimestre atual para todos os alunos.'))return;
+  try{
+    const res=await fetch('/api/admin/zerar-bimestre',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminSenha})});
+    const data=await res.json();
+    if(data.error){msg.textContent=data.error;msg.className='form-msg erro';return;}
+    msg.textContent=data.mensagem||'Bimestre zerado.';msg.className='form-msg ok';
+    carregarBimestreRecesso();
+  }catch(e){msg.textContent='Erro de conexão.';msg.className='form-msg erro';}
+}
+async function salvarRecesso(ativo){
+  const inicio=document.getElementById('recInicio').value;
+  const fim=document.getElementById('recFim').value;
+  const msg=document.getElementById('recMsg');
+  if(ativo && (!inicio||!fim)){msg.textContent='Preencha as duas datas para ativar o recesso.';msg.className='form-msg erro';return;}
+  try{
+    const res=await fetch('/api/admin/definir-recesso',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminSenha,ativo,inicio,fim})});
+    const data=await res.json();
+    if(data.error){msg.textContent=data.error;msg.className='form-msg erro';return;}
+    msg.textContent=data.mensagem||'Recesso salvo.';msg.className='form-msg ok';
+    carregarBimestreRecesso();
+  }catch(e){msg.textContent='Erro de conexão.';msg.className='form-msg erro';}
+}
+async function desativarRecesso(){
+  const msg=document.getElementById('recMsg');
+  try{
+    const res=await fetch('/api/admin/desativar-recesso',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminSenha})});
+    const data=await res.json();
+    if(data.error){msg.textContent=data.error;msg.className='form-msg erro';return;}
+    msg.textContent=data.mensagem||'Recesso desativado.';msg.className='form-msg ok';
+    carregarBimestreRecesso();
+  }catch(e){msg.textContent='Erro de conexão.';msg.className='form-msg erro';}
 }
 
 // ── sobrescritas manuais (contingência) ──
