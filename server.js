@@ -2841,6 +2841,70 @@ app.post('/api/admin/limpar-janela-avaliacao', checkAdmin, (req, res) => {
   res.json({ ok: true, mensagem: 'Janela removida. O bloco de avaliação não aparece mais.' });
 });
 
+// ── TESTE ADMIN DE MATÉRIAS (ignora recesso, não altera tela dos alunos) ───────
+app.get('/api/admin/testar-materias', checkAdmin, async (req, res) => {
+  const normalizarDia = (d) => (d || '').toString().trim().toLowerCase().slice(0, 3);
+  const dia = normalizarDia(req.query.dia || '');
+  const diasValidos = ['seg','ter','qua','qui','sex'];
+  if (!diasValidos.includes(dia)) {
+    return res.json({ error: 'Informe um dia válido: seg, ter, qua, qui ou sex.' });
+  }
+  const dataRef = dataDoDia(dia);
+  const labelDia = DIAS_PT[dia];
+  const itens = GRADE[dia] || [];
+  const materiasTeste = [];
+
+  async function testarItem(item) {
+    if (Array.isArray(item.combinar)) {
+      const secoes = [];
+      for (const sub of item.combinar) {
+        secoes.push(await testarItem(sub));
+      }
+      return { materia: item.m, professor: item.p || '', combinada: true, secoes };
+    }
+    try {
+      const blogText = await fetchBlog(item.url);
+      if (!blogText || blogText.length < 30) {
+        return { materia: item.m, professor: item.p, ok: false, erro: 'Blog não retornou texto suficiente.', tamanhoTexto: blogText ? blogText.length : 0 };
+      }
+      const r = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior, item.testeNoDiaExato);
+      return {
+        materia: item.m,
+        professor: item.p,
+        formato: item.formato || item.tipo || 'padrao',
+        ok: true,
+        processadoOk: true,
+        tamanhoTexto: blogText.length,
+        aula_hoje: r.aula_hoje || '',
+        aula_data: r.aula_data || '',
+        deveres_aula: Array.isArray(r.deveres_aula) ? r.deveres_aula : [],
+        deveres_pendentes: Array.isArray(r.deveres_pendentes) ? r.deveres_pendentes : [],
+        materia_teste: r.materia_teste || '',
+        materia_teste_data: r.materia_teste_data || '',
+        tem_avaliacao: r.tem_avaliacao === true,
+        semana_provas: r.semana_provas === true,
+        erro: ''
+      };
+    } catch (e) {
+      return { materia: item.m, professor: item.p, ok: false, erro: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  for (const item of itens) {
+    materiasTeste.push(await testarItem(item));
+  }
+  res.json({
+    ok: true,
+    modo: 'teste-admin',
+    recessoAtivoHoje: emRecesso(),
+    dia,
+    diaLabel: labelDia,
+    dataRef,
+    total: materiasTeste.length,
+    materias: materiasTeste
+  });
+});
+
 // ── MATERIAIS DE APOIO (links de arquivos por matéria) ───────────────────────
 // lista todos os materiais cadastrados (agrupados por matéria)
 app.get('/api/admin/materiais', checkAdmin, (req, res) => {
