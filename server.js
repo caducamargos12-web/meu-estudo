@@ -1474,7 +1474,7 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
   const ehQuinta = /quinta/i.test(labelDia || '');
   if (ehQuinta) {
     const temTestinho = (l) => /testinho|teste\b/i.test(l.materia) || /testinho/i.test(l.tarefa);
-    const comTestinho = ateHoje.filter(temTestinho);
+    const comTestinho = ateHoje.filter(l => temTestinho(l) && dentroDoBimestreAtual(l.num));
     if (comTestinho.length) {
       // limpa: corta em "DATA:" (evita invadir a próxima aula), tira o marcador TESTINHO,
       // e remove descrições longas de "aula destinada a...". Fica só o conteúdo/tema.
@@ -1486,9 +1486,12 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
         .replace(/\s+/g, ' ').trim();
       materia_teste = txt;
       materia_teste_data = comTestinho[0].data;
-    } else if (ateHoje.length) {
-      materia_teste = ateHoje[0].materia.split(/\s*DATA:/i)[0].replace(/\s+/g, ' ').trim();
-      materia_teste_data = ateHoje[0].data;
+    } else {
+      const aulaDoBimestre = ateHoje.find(l => dentroDoBimestreAtual(l.num));
+      if (aulaDoBimestre) {
+        materia_teste = aulaDoBimestre.materia.split(/\s*DATA:/i)[0].replace(/\s+/g, ' ').trim();
+        materia_teste_data = aulaDoBimestre.data;
+      }
     }
   }
 
@@ -1825,7 +1828,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // se mesmo assim não achou (data fora do par), mostra a aula mais recente até hoje
   // APENAS como conteúdo (sem repetir o dever, que já entra nos pendentes).
   if (!linhaRef && formato === 'agrupado') {
-    const recentes = linhas.filter(l => l.num <= refNum && l.materia).sort((a,b) => b.num - a.num);
+    const recentes = linhas.filter(l => l.num <= refNum && dentroDoBimestreAtual(l.num) && l.materia).sort((a,b) => b.num - a.num);
     linhaRef = recentes[0] || null;
     aulaSomenteExibicao = true;
   }
