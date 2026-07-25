@@ -1030,6 +1030,11 @@ function numParaData(num) {
 // filtro padrão dos DEVERES PENDENTES em todas as matérias: mantém só os deveres dos
 // últimos `janelaDias` dias (padrão 14 = 2 semanas) e no máximo `maxItens` (padrão 2),
 // sempre os mais recentes. Recebe lista de {data:'DD/MM', num, ...} e a data de referência.
+function dentroDoBimestreAtual(num) {
+  const inicioBim = inicioBimestreNum();
+  return !inicioBim || !num || num >= inicioBim;
+}
+
 function filtrarPendentes(lista, refNum, janelaDias, maxItens) {
   const janela = (janelaDias && janelaDias > 0) ? janelaDias : 14;
   const limite = (maxItens && maxItens > 0) ? maxItens : 2;
@@ -1391,10 +1396,10 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
   const testesAteHoje = testes.filter(t => t.num <= refNum);
   const ultimoTeste = testesAteHoje[0] || null;
   let materia_teste = '', materia_teste_data = '';
-  if (ultimoTeste && ultimoTeste.conteudo) {
+  if (ultimoTeste && ultimoTeste.conteudo && dentroDoBimestreAtual(ultimoTeste.num)) {
     materia_teste = ultimoTeste.conteudo;
     materia_teste_data = ultimoTeste.data;
-  } else if (deverRecente && deverRecente.tema) {
+  } else if (deverRecente && deverRecente.tema && dentroDoBimestreAtual(deverRecente.num)) {
     materia_teste = deverRecente.tema;
     materia_teste_data = deverRecente.data;
   }
@@ -1512,8 +1517,9 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   // o teste atual: o da data de hoje, ou o mais recente até hoje
   const ateHoje = testes.filter(t => t.num <= refNum);
   const testeAtual = ateHoje[0] || testes[0] || null; // se nenhum até hoje, o mais recente
-  const materia_teste = testeAtual ? testeAtual.conteudo : '';
-  const materia_teste_data = testeAtual ? testeAtual.data : '';
+  const testeAtualDoBimestre = testeAtual && dentroDoBimestreAtual(testeAtual.num) ? testeAtual : null;
+  const materia_teste = testeAtualDoBimestre ? testeAtualDoBimestre.conteudo : '';
+  const materia_teste_data = testeAtualDoBimestre ? testeAtualDoBimestre.data : '';
 
   // AULA DE HOJE: mostra o que o blog registrou EXATAMENTE na data de referência, seja teste,
   // PROVA BIMESTRAL, RAA, revisão ou um tópico simples. Antes só reconhecia "TESTE N"; agora
@@ -1973,6 +1979,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       .trim();
   }
 
+  if (materia_teste_data && !dentroDoBimestreAtual(dataParaNum(materia_teste_data))) {
+    materia_teste = '';
+    materia_teste_data = '';
+    tem_avaliacao = false;
+  }
+
   // REGRA ESPECIAL (Literatura): o testinho de "interpretação de texto" cobra o conteúdo
   // das aulas anteriores. A regra só se aplica quando o testinho é do DIA ATUAL.
   // Casos:
@@ -2033,6 +2045,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       }
     }
     // CASO B (testinho normal hoje): não faz nada, mantém o que o padrão já definiu.
+  }
+
+  if (materia_teste_data && !dentroDoBimestreAtual(dataParaNum(materia_teste_data))) {
+    materia_teste = '';
+    materia_teste_data = '';
+    tem_avaliacao = false;
   }
 
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
