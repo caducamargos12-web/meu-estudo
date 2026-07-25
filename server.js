@@ -1288,7 +1288,13 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     linhaTeste = recentes[0] || null;
   }
   let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
-  const materia_teste_data = linhaTeste ? linhaTeste.data : '';
+  let materia_teste_data = linhaTeste ? linhaTeste.data : '';
+  // Linguística só tem testinho útil quando há aula na data consultada. Durante recesso
+  // ou semana sem aula registrada, não mostra prova/aula antiga como matéria de teste.
+  if (aulasDoDia.length === 0) {
+    materia_teste = '';
+    materia_teste_data = '';
+  }
 
   if (materia_teste && linhaTeste && !linhaTeste.tema) {
     let t = materia_teste;
@@ -1766,14 +1772,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 
   // limpa lixo de navegação dos deveres
   const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment|pinterest|facebook|twitter/i.test((t||'').trim());
+  const limparTextoExtraido = (t) => (t || '').replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim();
   const linhas = (tabela.linhas||[])
     .map(l => ({
       data: (l.data||'').trim(),
       dataInicio: (l.data_inicio||l.data||'').trim(), // primeira data do par (agrupado)
       num: dataParaNum(l.data),
       numInicio: dataParaNum(l.data_inicio||l.data),
-      materia: (l.materia||'').trim(),
-      deveres: (l.deveres||[]).filter(d => d && d.trim() && !ehLixo(d))
+      materia: limparTextoExtraido(l.materia),
+      deveres: (l.deveres||[]).map(d => limparTextoExtraido(d)).filter(d => d && d.trim() && !ehLixo(d))
     }))
     .filter(l => l.num > 0);
 
@@ -1836,7 +1843,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     });
   }
   const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
-  const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
+  const janelaDeveres = (maxDiasDever && maxDiasDever > 0) ? maxDiasDever : 14;
+  const deveres_pendentes = filtrarPendentes(
+    anteriores.map(l => ({ data: l.data.slice(0,5), num: l.num, deveres: l.deveres })),
+    refNum, janelaDeveres, limiteDeveres
+  ).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
   // 4. MATÉRIA DO TESTE: a aula mais recente ATÉ hoje (inclui a de hoje), ignorando
   // eventos e ementas. Inclui hoje porque o teste costuma ser sobre a aula atual
@@ -1954,7 +1965,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // limpa a matéria do teste: remove sufixos de atividade/tarefa/páginas que não são
   // o CONTEÚDO em si (ex: "Parnasianismo; Atividades da apostila" → "Parnasianismo")
   if (materia_teste) {
-    materia_teste = materia_teste
+    materia_teste = limparTextoExtraido(materia_teste)
       .split(/[;.]\s*/)
       .filter(parte => parte.trim() && !/^\s*(atividades?|tarefas?|deveres?|exerc[íi]cios?|p[áa]g(\.|inas?)?|atividade complementar)\b/i.test(parte.trim()))
       .join('; ')
