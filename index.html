@@ -865,14 +865,16 @@ function atualizarProgressoDeveres(){
   prog.textContent=`${feitos}/${lista.length} feitos`;
 }
 
-function sincronizarBimestre(bimestreAtivo){
+function sincronizarBimestre(bimestreAtivo,bimestreVersao){
   const bim=Number(bimestreAtivo||0);
-  if(!bim)return;
+  const versao=Number(bimestreVersao||bim||0);
+  if(!bim||!versao)return;
   const chave='bimestre_local';
-  const atual=Number(localStorage.getItem(chave)||0);
-  if(atual!==bim){
+  const atual=localStorage.getItem(chave)||'';
+  const novo=`${bim}:${versao}`;
+  if(atual!==novo){
     Object.keys(localStorage).filter(k=>k.startsWith('chk_')).forEach(k=>localStorage.removeItem(k));
-    localStorage.setItem(chave,String(bim));
+    localStorage.setItem(chave,novo);
   }
 }
 
@@ -1218,7 +1220,7 @@ function loadDay(){
 
   evtSource.onmessage=function(e){
     const msg=JSON.parse(e.data);
-    if(msg.bimestreAtivo)sincronizarBimestre(msg.bimestreAtivo);
+    if(msg.bimestreAtivo)sincronizarBimestre(msg.bimestreAtivo,msg.bimestreVersao);
     if(msg.type==='recesso'){
       estaEmRecesso=true;
       mostrarRecesso(msg.mensagem);

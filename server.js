@@ -252,7 +252,7 @@ function salvarJanelaAvaliacao() {
 // BIMESTRE ATIVO: usado para resetar deveres marcados no navegador dos alunos e
 // para esconder deveres pendentes de bimestres anteriores. O início padrão do 3º
 // bimestre fica após o último dia das provas finais do 2º bimestre.
-let estadoBimestre = { numero: 3, inicio: '2026-07-18', atualizadoEm: '' };
+let estadoBimestre = { numero: 3, inicio: '2026-07-18', versao: 3, atualizadoEm: '' };
 const BIMESTRE_FILE = DATA_DIR + '/bimestre_atual.json';
 function carregarEstadoBimestre() {
   try {
@@ -261,6 +261,7 @@ function carregarEstadoBimestre() {
       estadoBimestre = {
         numero: Number(lido.numero),
         inicio: /^\d{4}-\d{2}-\d{2}$/.test(lido.inicio || '') ? lido.inicio : estadoBimestre.inicio,
+        versao: Number(lido.versao) > 0 ? Number(lido.versao) : Number(lido.numero),
         atualizadoEm: lido.atualizadoEm || ''
       };
     }
@@ -2677,18 +2678,53 @@ app.get('/api/admin/bimestre-recesso', checkAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/zerar-bimestre', checkAdmin, (req, res) => {
-  const hoje = isoEfetivo();
-  estadoBimestre = {
-    numero: (Number(estadoBimestre.numero) || 0) + 1,
-    inicio: hoje,
-    atualizadoEm: new Date().toISOString()
-  };
-  salvarEstadoBimestre();
+function limparCacheAulas() {
   const qtd = Object.keys(cache).length;
   for (const k of Object.keys(cache)) delete cache[k];
   salvarCache();
-  res.json({ ok: true, mensagem: 'Bimestre zerado. O próximo bimestre começa vazio para todos os alunos.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+  return qtd;
+}
+
+app.post('/api/admin/salvar-bimestre', checkAdmin, (req, res) => {
+  const numero = parseInt(req.body.numero, 10);
+  const inicio = (req.body.inicio || '').trim();
+  if (!numero || numero < 1 || numero > 4) return res.json({ error: 'Informe um bimestre entre 1 e 4.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) return res.json({ error: 'Informe a data de início do bimestre.' });
+  estadoBimestre = {
+    numero,
+    inicio,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : numero,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Bimestre salvo. Os deveres passam a contar a partir da nova data.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/zerar-deveres-bimestre', checkAdmin, (req, res) => {
+  const hoje = isoEfetivo();
+  estadoBimestre = {
+    numero: Number(estadoBimestre.numero) || 3,
+    inicio: hoje,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : (Number(estadoBimestre.numero) || 3),
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Deveres pendentes zerados sem mudar o número do bimestre.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/avancar-bimestre', checkAdmin, (req, res) => {
+  const hoje = isoEfetivo();
+  estadoBimestre = {
+    numero: Math.min((Number(estadoBimestre.numero) || 0) + 1, 4),
+    inicio: hoje,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : ((Number(estadoBimestre.numero) || 0) + 1),
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Bimestre avançado. O novo bimestre começa vazio para todos os alunos.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
 });
 
 app.post('/api/admin/definir-recesso', checkAdmin, (req, res) => {
@@ -2781,11 +2817,11 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   if (emRecesso()) {
     res.write('data: ' + JSON.stringify({
       type:'recesso',
-      bimestreAtivo: estadoBimestre.numero,
+      bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao,
       recesso: recessoConfig,
       mensagem: 'Em recesso. Aulas voltam em ' + dataIsoParaBR(recessoConfig.fim) + '.'
     }) + '\n\n');
-    res.write('data: ' + JSON.stringify({ type:'done', bimestreAtivo: estadoBimestre.numero }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ type:'done', bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
     return res.end();
   }
 
@@ -2805,7 +2841,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   // calcula o total de matérias para o front montar os placeholders
   const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {
