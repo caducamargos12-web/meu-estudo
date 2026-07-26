@@ -1341,7 +1341,7 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     '\n\n*** FORMATO DESTE REGISTRO ***' +
     '\nO blog usa marcadores seguidos de data DD/MM e descrição:' +
     '\n- "TAREFA DD/MM <descrição>" = um DEVER do aluno com a data dele. Ex: "TAREFA 19/6 TRABALHO E POTENCIA".' +
-    '\n- "TESTE DD/MM <conteúdo>" ou "CONTEUDO DO TESTE DD/MM <conteúdo>" = o conteúdo de um teste com a data dele. Ex: "TESTE 22/5 LEIS DE NEWTON".' +
+    '\n- "TESTE DD/MM <conteúdo>", "TESTINHO DD/MM <conteúdo>" ou "CONTEUDO DO TESTE DD/MM <conteúdo>" = o conteúdo de um teste com a data dele. Ex: "TESTE 22/5 LEIS DE NEWTON".' +
     '\n- "CONTEUDO DA PROVA <conteúdo>" = conteúdo de prova (sem data clara).' +
     '\n\n*** O QUE EXTRAIR ***' +
     '\n1. "deveres": lista de TAREFAS. Para cada "TAREFA DD/MM X", extraia {data:"DD/MM", dever:"X (texto completo)", tema:"assunto principal, curto, sem números de página nem palavras como PAGINA/QUESTOES"}.' +
@@ -1354,8 +1354,31 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
     '\n\nResponda APENAS JSON sem markdown:' +
     '\n{"deveres":[{"data":"DD/MM","dever":"texto","tema":"assunto curto"}],"testes":[{"data":"DD/MM","conteudo":"texto"}]}';
 
-  let dados;
-  try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { deveres: [], testes: [] }; }
+  const limparFisica = (t) => (t || '')
+    .replace(/_{2,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–:;]+|[\s\-–:;]+$/g, '')
+    .trim();
+  const extrairFisicaRegex = (txt) => {
+    const deveres = [], testes = [];
+    const texto = limparFisica(txt);
+    const re = /\b(CONTE[UÚ]DO\s+DO\s+TESTE|TESTINHO|TESTE|TAREFA)\s+(\d{1,2}\/\d{1,2})\s+(.+?)(?=\s+(?:CONTE[UÚ]DO\s+DO\s+TESTE|TESTINHO|TESTE|TAREFA|RAA)\s+\d{1,2}\/\d{1,2}\b|\s+CONTE[UÚ]DO\s+DA\s+PROVA\b|$)/gi;
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+      const tipo = m[1].toUpperCase();
+      const data = m[2];
+      const conteudo = limparFisica(m[3]);
+      if (!conteudo) continue;
+      if (tipo === 'TAREFA') deveres.push({ data, dever: conteudo, tema: conteudo });
+      else testes.push({ data, conteudo });
+    }
+    return { deveres, testes };
+  };
+
+  let dados = extrairFisicaRegex(blogText);
+  if (!dados.deveres.length && !dados.testes.length) {
+    try { dados = await callAnthropic(prompt, 0); } catch (e) { dados = { deveres: [], testes: [] }; }
+  }
 
   const ehLixo = (t) => ehEventoEscolar(t) || /postagens?|^páginas$|^in[ií]cio$|pesquisar este blog|ver meu perfil|denunciar|escolha a turma|fevereiro 20/i.test((t||'').trim());
 
@@ -3191,6 +3214,10 @@ app.get('/diag', async (req, res) => {
       d + '-' + mes + '-' + ano,
       String(Number(d)) + '/' + String(Number(mes)) + '/' + ano,
       String(Number(d)) + '-' + String(Number(mes)) + '-' + ano,
+      d + '/' + mes,
+      d + '-' + mes,
+      String(Number(d)) + '/' + String(Number(mes)),
+      String(Number(d)) + '-' + String(Number(mes)),
     ];
     const lower = txt.toLowerCase();
     let idx = -1;
