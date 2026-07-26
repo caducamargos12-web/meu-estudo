@@ -1426,10 +1426,10 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
   const testesAteHoje = testes.filter(t => t.num <= refNum);
   const ultimoTeste = testesAteHoje[0] || null;
   let materia_teste = '', materia_teste_data = '';
-  if (ultimoTeste && ultimoTeste.conteudo && dentroDoBimestreAtual(ultimoTeste.num)) {
+  if (ultimoTeste && ultimoTeste.conteudo && (ultimoTeste.num === refNum || dentroDoBimestreAtual(ultimoTeste.num))) {
     materia_teste = ultimoTeste.conteudo;
     materia_teste_data = ultimoTeste.data;
-  } else if (deverRecente && deverRecente.tema && dentroDoBimestreAtual(deverRecente.num)) {
+  } else if (deverRecente && deverRecente.tema && (deverRecente.num === refNum || dentroDoBimestreAtual(deverRecente.num))) {
     materia_teste = deverRecente.tema;
     materia_teste_data = deverRecente.data;
   }
