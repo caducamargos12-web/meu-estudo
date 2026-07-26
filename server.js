@@ -1872,13 +1872,6 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // (ex: "Conteúdo do testinho 1: Taxonomia", "Avaliação bimestral", "Conteúdo da avaliação")
   const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral|conte[úu]do\s+do\s+\d?\s*[º°]?\s*bimestre|revis[ãa]o\s+(para|da)\s+(avalia|prova)|corre[çc][ãa]o\s+(da\s+)?avalia/i.test(txt || '');
 
-  // Se a linha do dia é só uma ementa de testinho marcada explicitamente (ex: Ulisses),
-  // ela não deve aparecer como aula dada. O conteúdo entra em materia_teste abaixo.
-  if (testeMarcado && aula_hoje && ehEmenta(aula_hoje)) {
-    aula_hoje = '';
-    deveres_aula = [];
-  }
-
   // Para a matéria do teste, normalmente incluímos a aula de HOJE (o teste costuma ser
   // sobre a aula atual, ex: literatura). Mas algumas matérias o teste é sobre a aula
   // ANTERIOR (ex: física) — nesse caso testeAulaAnterior=true exclui hoje.
@@ -1916,15 +1909,30 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
         const anoRaw = ultimaData[3];
         const ano = anoRaw.length === 2 ? '20' + anoRaw : anoRaw;
         const num = parseInt(ano + mes + dia, 10);
-        if (num <= refNum && dentroDoBimestreAtual(num)) {
-          candidatos.push({ conteudo, num });
+        const data = dia + '/' + mes;
+        const ehExtraCordados = /testinho\s+extra/i.test(mt[0] || '') && /cordados/i.test(conteudo);
+        // Ulisses publicou o "testinho extra: Cordados" antes da data formal de início
+        // do 3º bimestre, mas ele é o conteúdo válido do retorno. Mantemos essa exceção
+        // estreita para não reabrir testinhos antigos do 2º bimestre.
+        const validoNoBimestre = dentroDoBimestreAtual(num) || (Number(estadoBimestre.numero) === 3 && ehExtraCordados);
+        if (num <= refNum && validoNoBimestre) {
+          candidatos.push({ conteudo, num, data });
         }
       }
     }
     if (candidatos.length > 0) {
-      // pega o mais recente dentro do bimestre atual
+      // pega o mais recente válido para a data de referência
       candidatos.sort((a, b) => b.num - a.num);
       testeMarcadoTexto = candidatos[0].conteudo;
+      testeMarcadoData = candidatos[0].data;
+    }
+    // Se a extração da aula devolveu só o conteúdo do testinho marcado (ex: "Cordados."),
+    // não mostra isso como aula dada. O conteúdo aparece em materia_teste.
+    const normAula = (aula_hoje || '').replace(/[.;\s]+$/,'').trim().toLowerCase();
+    const normTeste = (testeMarcadoTexto || '').replace(/[.;\s]+$/,'').trim().toLowerCase();
+    if (normAula && normTeste && normAula === normTeste) {
+      aula_hoje = '';
+      deveres_aula = [];
     }
   }
 
