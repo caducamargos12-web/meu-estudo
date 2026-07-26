@@ -1294,9 +1294,10 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   }
   let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
   let materia_teste_data = linhaTeste ? linhaTeste.data : '';
-  // Linguística só tem testinho útil quando há aula na data consultada. Durante recesso
-  // ou semana sem aula registrada, não mostra prova/aula antiga como matéria de teste.
-  if (aulasDoDia.length === 0) {
+  const temMarcadorTeste = linhaTeste && /\b(testinho|teste)\b/i.test(linhaTeste.descricao || linhaTeste.tema || '');
+  // Linguística só deve mostrar matéria de teste quando houver marcador explícito de
+  // teste/testinho na aula. RAA é atividade de revisão, não avaliação separada.
+  if (aulasDoDia.length === 0 || !temMarcadorTeste) {
     materia_teste = '';
     materia_teste_data = '';
   }
@@ -1838,10 +1839,10 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     linhaRef = recentes[0] || null;
     aulaSomenteExibicao = true;
   }
-  const aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
+  let aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
 
   // 2. DEVERES DESTA AULA: deveres da linha de referência (não duplica quando é só exibição)
-  const deveres_aula = (linhaRef && !aulaSomenteExibicao) ? linhaRef.deveres : [];
+  let deveres_aula = (linhaRef && !aulaSomenteExibicao) ? linhaRef.deveres : [];
 
   // 3. DEVERES PENDENTES: as últimas datas ANTERIORES à referência que têm dever
   let anteriores = linhas
@@ -1870,6 +1871,13 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // linhas que são EMENTA/lista de conteúdo de avaliação, não aula real dada
   // (ex: "Conteúdo do testinho 1: Taxonomia", "Avaliação bimestral", "Conteúdo da avaliação")
   const ehEmenta = (txt) => /conte[úu]do\s+(do|da|de)\s+(testinho|teste|avalia|prova)|mat[ée]ria\s+da\s+(prova|avalia)|avalia[çc][ãa]o\s+bimestral|prova\s+bimestral|conte[úu]do\s+do\s+\d?\s*[º°]?\s*bimestre|revis[ãa]o\s+(para|da)\s+(avalia|prova)|corre[çc][ãa]o\s+(da\s+)?avalia/i.test(txt || '');
+
+  // Se a linha do dia é só uma ementa de testinho marcada explicitamente (ex: Ulisses),
+  // ela não deve aparecer como aula dada. O conteúdo entra em materia_teste abaixo.
+  if (testeMarcado && aula_hoje && ehEmenta(aula_hoje)) {
+    aula_hoje = '';
+    deveres_aula = [];
+  }
 
   // Para a matéria do teste, normalmente incluímos a aula de HOJE (o teste costuma ser
   // sobre a aula atual, ex: literatura). Mas algumas matérias o teste é sobre a aula
@@ -1908,7 +1916,7 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
         const anoRaw = ultimaData[3];
         const ano = anoRaw.length === 2 ? '20' + anoRaw : anoRaw;
         const num = parseInt(ano + mes + dia, 10);
-        if (dentroDoBimestreAtual(num)) {
+        if (num <= refNum && dentroDoBimestreAtual(num)) {
           candidatos.push({ conteudo, num });
         }
       }
