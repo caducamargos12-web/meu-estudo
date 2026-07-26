@@ -2923,7 +2923,10 @@ app.get('/api/admin/testar-materias', checkAdmin, async (req, res) => {
   if (!diasValidos.includes(dia)) {
     return res.json({ error: 'Informe um dia válido: seg, ter, qua, qui ou sex.' });
   }
-  const dataRef = dataDoDia(dia);
+  // dataRef customizada para testes históricos (ex: ?dataRef=14/07/2026)
+  // Se não vier, calcula o próximo dia útil normalmente.
+  const dataRefQuery = (req.query.dataRef || '').trim();
+  const dataRef = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dataRefQuery) ? dataRefQuery : dataDoDia(dia);
   const labelDia = DIAS_PT[dia];
   const itens = GRADE[dia] || [];
   const materiasTeste = [];
