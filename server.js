@@ -1875,14 +1875,42 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const linhaTeste = aulasAnteriores[0] || null;
 
   // matérias onde o professor MARCA explicitamente o que cai no teste daquele dia
-  // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas").
-  // O blog lista da data MAIS RECENTE para a mais antiga, então o PRIMEIRO
-  // "Conteúdo do testinho" que aparece é o da aula atual. É esse que vale.
+  // (ex: biologia Ulisses: "Conteúdo do testinho extra: Cordados", "Conteúdo do testinho 3: Gimnospermas").
+  // O blog lista da data MAIS RECENTE para a mais antiga. Para evitar pegar testinho de
+  // bimestre anterior, buscamos TODOS os matches, identificamos a data do bloco de cada um
+  // (a data DD-MM-AAAA ou DD/MM/AAAA mais próxima ANTES de cada ocorrência) e filtramos
+  // apenas os que estão dentro do bimestre atual. O mais recente válido é o que vale.
   let testeMarcadoTexto = '', testeMarcadoData = '';
   if (testeMarcado) {
-    const m = (blogText || '').match(/conte[úu]do\s+do\s+testinho\s*\d*\s*:\s*([^.;\n]+)/i);
-    if (m && m[1].trim()) {
-      testeMarcadoTexto = m[1].trim();
+    const reTestinho = /conte[úu]do\s+do\s+testinho(?:\s+(?:extra|\d+))?\s*:\s*([^.;\n]+)/gi;
+    // regex para identificar data de postagem no blog (formato DD-MM-AAAA ou DD/MM/AAAA)
+    const reData = /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g;
+    const texto = blogText || '';
+    let mt;
+    const candidatos = [];
+    while ((mt = reTestinho.exec(texto)) !== null) {
+      const conteudo = mt[1].trim();
+      if (!conteudo) continue;
+      // encontra a data mais próxima ANTES desta ocorrência no texto
+      const trecho = texto.slice(0, mt.index);
+      let ultimaData = null, md;
+      reData.lastIndex = 0;
+      while ((md = reData.exec(trecho)) !== null) ultimaData = md;
+      if (ultimaData) {
+        const dia = ultimaData[1].padStart(2,'0');
+        const mes = ultimaData[2].padStart(2,'0');
+        const anoRaw = ultimaData[3];
+        const ano = anoRaw.length === 2 ? '20' + anoRaw : anoRaw;
+        const num = parseInt(ano + mes + dia, 10);
+        if (dentroDoBimestreAtual(num)) {
+          candidatos.push({ conteudo, num });
+        }
+      }
+    }
+    if (candidatos.length > 0) {
+      // pega o mais recente dentro do bimestre atual
+      candidatos.sort((a, b) => b.num - a.num);
+      testeMarcadoTexto = candidatos[0].conteudo;
     }
   }
 
@@ -2328,11 +2356,13 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
           data_prova: dataProvaSec || ''
         });
         if (naJanela) dados = Object.assign({}, dados, { materia_teste:'', tem_avaliacao:false, resumo:'', questoes:[], semana_provas:true });
+        else if (ehRecessoAtivo()) dados = Object.assign({}, dados, { materia_teste:'', materia_teste_data:'', tem_avaliacao:false, avaliacao_final:'', semana_provas:false, data_prova:'' });
         dados = Object.assign({}, dados, { deveres_pendentes: dedupDeveres(dados.deveres_pendentes) });
         return Object.assign({}, sec, { dados });
       });
       let base = Object.assign({}, result, { materiais: lista, secoes });
       if (naJanela) base = Object.assign({}, base, { semana_provas:true });
+      else if (ehRecessoAtivo()) base = Object.assign({}, base, { semana_provas:false });
       return base;
     }
     // card normal
@@ -2345,6 +2375,18 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       base.aviso_avaliacao = item.avisoAvaliacao;
     }
     base = aplicarRegrasProva(base);
+    // RECESSO: esconde matéria do teste, avaliação e prova durante o período de recesso.
+    // O aluno vê tela limpa (sem aula, sem dever, sem teste) até o retorno.
+    if (ehRecessoAtivo()) {
+      base = Object.assign({}, base, {
+        materia_teste: '',
+        materia_teste_data: '',
+        tem_avaliacao: false,
+        avaliacao_final: '',
+        semana_provas: false,
+        data_prova: ''
+      });
+    }
     base.deveres_pendentes = dedupDeveres(base.deveres_pendentes);
     return base;
   }
