@@ -248,6 +248,50 @@ function salvarJanelaAvaliacao() {
   try { fs.writeFileSync(JANELA_AVAL_FILE, JSON.stringify(janelaAvaliacao)); }
   catch (e) { console.log('Erro ao salvar janela de avaliação:', e.message); }
 }
+
+// BIMESTRE ATIVO: usado para resetar deveres marcados no navegador dos alunos e
+// para esconder deveres pendentes de bimestres anteriores. O início padrão do 3º
+// bimestre fica após o último dia das provas finais do 2º bimestre.
+let estadoBimestre = { numero: 3, inicio: '2026-07-18', versao: 3, atualizadoEm: '' };
+const BIMESTRE_FILE = DATA_DIR + '/bimestre_atual.json';
+function carregarEstadoBimestre() {
+  try {
+    const lido = JSON.parse(fs.readFileSync(BIMESTRE_FILE, 'utf8'));
+    if (lido && Number(lido.numero) > 0) {
+      estadoBimestre = {
+        numero: Number(lido.numero),
+        inicio: /^\d{4}-\d{2}-\d{2}$/.test(lido.inicio || '') ? lido.inicio : estadoBimestre.inicio,
+        versao: Number(lido.versao) > 0 ? Number(lido.versao) : Number(lido.numero),
+        atualizadoEm: lido.atualizadoEm || ''
+      };
+    }
+  } catch {}
+}
+function salvarEstadoBimestre() {
+  try { fs.writeFileSync(BIMESTRE_FILE, JSON.stringify(estadoBimestre)); }
+  catch (e) { console.log('Erro ao salvar bimestre:', e.message); }
+}
+function inicioBimestreNum() {
+  return dataIsoParaNum(estadoBimestre.inicio);
+}
+
+// RECESSO: quando ativo e dentro da janela, /api/today não busca blogs nem cache.
+let recessoConfig = { ativo: false, inicio: '', fim: '' };
+const RECESSO_FILE = DATA_DIR + '/recesso_atual.json';
+function carregarRecesso() {
+  try {
+    const lido = JSON.parse(fs.readFileSync(RECESSO_FILE, 'utf8'));
+    recessoConfig = {
+      ativo: lido && lido.ativo === true,
+      inicio: /^\d{4}-\d{2}-\d{2}$/.test(lido && lido.inicio || '') ? lido.inicio : '',
+      fim: /^\d{4}-\d{2}-\d{2}$/.test(lido && lido.fim || '') ? lido.fim : ''
+    };
+  } catch { recessoConfig = { ativo: false, inicio: '', fim: '' }; }
+}
+function salvarRecesso() {
+  try { fs.writeFileSync(RECESSO_FILE, JSON.stringify(recessoConfig)); }
+  catch (e) { console.log('Erro ao salvar recesso:', e.message); }
+}
 // ── "hoje" efetivo, no fuso de Brasília, com virada às 22:30 ─────────────────
 // O servidor pode rodar em qualquer fuso (o Railway usa UTC). Para NÃO depender disso,
 // calculamos a hora de Brasília a partir do tempo absoluto (Date.now), deslocando -3h
@@ -272,6 +316,17 @@ function dentroDaJanelaAvaliacao() {
   if (!janelaAvaliacao.inicio || !janelaAvaliacao.fim) return false;
   const hoje = isoEfetivo();
   return hoje >= janelaAvaliacao.inicio && hoje <= janelaAvaliacao.fim;
+}
+
+function emRecesso() {
+  if (!recessoConfig.ativo || !recessoConfig.inicio || !recessoConfig.fim) return false;
+  const hoje = isoEfetivo();
+  return hoje >= recessoConfig.inicio && hoje <= recessoConfig.fim;
+}
+
+function dataIsoParaBR(iso) {
+  const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}` : '';
 }
 
 // ┌─────────────────────────────────────────────────────────────────────────┐
@@ -300,6 +355,8 @@ function dataProvaDe(materia, dia) {
 }
 
 carregarJanelaAvaliacao();
+carregarEstadoBimestre();
+carregarRecesso();
 carregarReports();
 
 // registra o cadastro de um aluno na primeira vez que ele loga
@@ -941,7 +998,7 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
 // (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
 function ehEventoEscolar(texto) {
   const t = (texto || '').toLowerCase();
-  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|prova\s+anglo|simulado\s+anglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
+  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|prova\s+anglo|simulado\s+anglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida|aplica[çc][ãa]o\s+da\s+prova|prova\s+bimestral|avalia[çc][ãa]o\s+bimestral/i.test(t);
 }
 
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
@@ -953,6 +1010,12 @@ function dataParaNum(ddmm) {
   let ano = m[3] ? parseInt(m[3],10) : 2026;
   if (ano < 100) ano += 2000;
   return ano*10000 + mes*100 + dia;
+}
+
+function dataIsoParaNum(iso) {
+  const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return 0;
+  return parseInt(m[1],10) * 10000 + parseInt(m[2],10) * 100 + parseInt(m[3],10);
 }
 
 // converte AAAAMMDD de volta para objeto Date (para calcular diferença em dias)
@@ -967,13 +1030,20 @@ function numParaData(num) {
 // filtro padrão dos DEVERES PENDENTES em todas as matérias: mantém só os deveres dos
 // últimos `janelaDias` dias (padrão 14 = 2 semanas) e no máximo `maxItens` (padrão 2),
 // sempre os mais recentes. Recebe lista de {data:'DD/MM', num, ...} e a data de referência.
+function dentroDoBimestreAtual(num) {
+  const inicioBim = inicioBimestreNum();
+  return !inicioBim || !num || num >= inicioBim;
+}
+
 function filtrarPendentes(lista, refNum, janelaDias, maxItens) {
   const janela = (janelaDias && janelaDias > 0) ? janelaDias : 14;
   const limite = (maxItens && maxItens > 0) ? maxItens : 2;
   const refData = numParaData(refNum);
+  const inicioBim = inicioBimestreNum();
   return (lista || [])
     .filter(l => {
       if (!l || !l.num) return false;
+      if (inicioBim && l.num < inicioBim) return false;
       const d = numParaData(l.num);
       if (!d || !refData) return false;
       const diasAtras = Math.floor((refData - d) / 86400000);
@@ -1223,7 +1293,20 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
     linhaTeste = recentes[0] || null;
   }
   let materia_teste = linhaTeste ? (linhaTeste.tema || linhaTeste.descricao) : '';
-  const materia_teste_data = linhaTeste ? linhaTeste.data : '';
+  let materia_teste_data = linhaTeste ? linhaTeste.data : '';
+  const temMarcadorTeste = linhaTeste && /\b(testinho|teste)\b/i.test(linhaTeste.descricao || linhaTeste.tema || '');
+  // Linguística só deve mostrar matéria de teste quando houver marcador explícito de
+  // teste/testinho na aula. RAA é atividade de revisão, não avaliação separada.
+  if (aulasDoDia.length === 0 || !temMarcadorTeste) {
+    materia_teste = '';
+    materia_teste_data = '';
+  }
+  // Se a matéria do teste é um evento escolar (prova bimestral, avaliação, etc.),
+  // não mostra — não é conteúdo pra estudar, confunde o aluno.
+  if (materia_teste && ehEventoEscolar(materia_teste)) {
+    materia_teste = '';
+    materia_teste_data = '';
+  }
 
   if (materia_teste && linhaTeste && !linhaTeste.tema) {
     let t = materia_teste;
@@ -1320,10 +1403,10 @@ async function processarFisica(materia, professor, blogText, dataRef, maxDeveres
   const testesAteHoje = testes.filter(t => t.num <= refNum);
   const ultimoTeste = testesAteHoje[0] || null;
   let materia_teste = '', materia_teste_data = '';
-  if (ultimoTeste && ultimoTeste.conteudo) {
+  if (ultimoTeste && ultimoTeste.conteudo && dentroDoBimestreAtual(ultimoTeste.num)) {
     materia_teste = ultimoTeste.conteudo;
     materia_teste_data = ultimoTeste.data;
-  } else if (deverRecente && deverRecente.tema) {
+  } else if (deverRecente && deverRecente.tema && dentroDoBimestreAtual(deverRecente.num)) {
     materia_teste = deverRecente.tema;
     materia_teste_data = deverRecente.data;
   }
@@ -1398,7 +1481,7 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
   const ehQuinta = /quinta/i.test(labelDia || '');
   if (ehQuinta) {
     const temTestinho = (l) => /testinho|teste\b/i.test(l.materia) || /testinho/i.test(l.tarefa);
-    const comTestinho = ateHoje.filter(temTestinho);
+    const comTestinho = ateHoje.filter(l => temTestinho(l) && dentroDoBimestreAtual(l.num));
     if (comTestinho.length) {
       // limpa: corta em "DATA:" (evita invadir a próxima aula), tira o marcador TESTINHO,
       // e remove descrições longas de "aula destinada a...". Fica só o conteúdo/tema.
@@ -1410,9 +1493,12 @@ async function processarRotulosSaulo(materia, professor, blogText, dataRef, labe
         .replace(/\s+/g, ' ').trim();
       materia_teste = txt;
       materia_teste_data = comTestinho[0].data;
-    } else if (ateHoje.length) {
-      materia_teste = ateHoje[0].materia.split(/\s*DATA:/i)[0].replace(/\s+/g, ' ').trim();
-      materia_teste_data = ateHoje[0].data;
+    } else {
+      const aulaDoBimestre = ateHoje.find(l => dentroDoBimestreAtual(l.num));
+      if (aulaDoBimestre) {
+        materia_teste = aulaDoBimestre.materia.split(/\s*DATA:/i)[0].replace(/\s+/g, ' ').trim();
+        materia_teste_data = aulaDoBimestre.data;
+      }
     }
   }
 
@@ -1441,8 +1527,9 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   // o teste atual: o da data de hoje, ou o mais recente até hoje
   const ateHoje = testes.filter(t => t.num <= refNum);
   const testeAtual = ateHoje[0] || testes[0] || null; // se nenhum até hoje, o mais recente
-  const materia_teste = testeAtual ? testeAtual.conteudo : '';
-  const materia_teste_data = testeAtual ? testeAtual.data : '';
+  const testeAtualDoBimestre = testeAtual && dentroDoBimestreAtual(testeAtual.num) ? testeAtual : null;
+  const materia_teste = testeAtualDoBimestre ? testeAtualDoBimestre.conteudo : '';
+  const materia_teste_data = testeAtualDoBimestre ? testeAtualDoBimestre.data : '';
 
   // AULA DE HOJE: mostra o que o blog registrou EXATAMENTE na data de referência, seja teste,
   // PROVA BIMESTRAL, RAA, revisão ou um tópico simples. Antes só reconhecia "TESTE N"; agora
@@ -1469,6 +1556,73 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
     resumo, questoes: [],
     proxima_aula:'', proxima_resumo:'', proxima_deveres:[]
   };
+}
+
+function extrairRotuladoRegex(blogText, dataRef) {
+  const decodeEnt = (s) => (s||'')
+    .replace(/&#(\d+);/g, (_,n) => String.fromCharCode(parseInt(n,10)))
+    .replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&')
+    .trim();
+  const limpar = (s) => decodeEnt(s)
+    .replace(/_{3,}/g,' ')
+    .replace(/\s+/g,' ')
+    .replace(/^[\s\-*]+|[\s\-*]+$/g,'')
+    .trim();
+  const cortar = (txt, re) => {
+    const m = txt.match(re);
+    return m && m[1] ? limpar(m[1]) : '';
+  };
+  const extrairDeveres = (txt) => {
+    const deveres = [];
+    const reTarefa = /TAREFA(?:\s+PARA\s+(\d{1,2}\/\d{1,2}))?\s*:\s*([\s\S]*?)(?=\s+(?:PLURALL|DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO|P[ÁA]G(?:INA|\.)?)\s*:|$)/gi;
+    let m;
+    while ((m = reTarefa.exec(txt)) !== null) {
+      let t = limpar(m[2]);
+      if (m[1] && t) t += ' (para ' + m[1] + ')';
+      if (t && !/^[-*—]+$/.test(t) && !ehEventoEscolar(t)) deveres.push(t);
+    }
+    const plurall = cortar(txt, /PLURALL\s*:\s*([\s\S]*?)(?=\s+(?:DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO|P[ÁA]G(?:INA|\.)?|TAREFA)\s*:|$)/i);
+    if (plurall && !/^[-*—]+$/.test(plurall) && !ehEventoEscolar(plurall)) deveres.push('Plurall: ' + plurall);
+    return deveres;
+  };
+  const montarMateria = (bloco) => {
+    let materia = cortar(bloco, /(?:CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO)\s*:\s*([\s\S]*?)(?=\s+(?:P[ÁA]G(?:INA|\.)?|TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?|PLURALL|DATA)\s*:|$)/i);
+    if (!materia) {
+      materia = limpar(bloco
+        .replace(/TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?\s*:[\s\S]*$/i,'')
+        .replace(/PLURALL\s*:[\s\S]*$/i,'')
+        .replace(/DATA\s*:\s*\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/i,''));
+    }
+    const pag = cortar(bloco, /P[ÁA]G(?:INA|\.)?\s*:\s*([\s\S]*?)(?=\s+(?:TAREFA(?:\s+PARA\s+\d{1,2}\/\d{1,2})?|PLURALL|DATA|CONTE[ÚU]DO|MAT[ÉE]RIA|M[ÓO]DULO)\s*:|$)/i);
+    if (pag && materia && !materia.toLowerCase().includes('pág')) materia += ' (pág. ' + pag + ')';
+    return limpar(materia.replace(/\s*PLURALL\s*:.*/i,''));
+  };
+
+  const linhas = [];
+  const blocosData = [...(blogText||'').matchAll(/DATA:\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*([\s\S]*?)(?=DATA:\s*\d{1,2}\/|Teste\s+\d+\s*\||Avalia[çc][ãa]o\s*\||$)/gi)];
+  for (const b of blocosData) {
+    const materia = montarMateria(b[2]);
+    const deveres = extrairDeveres(b[2]);
+    if (dataParaNum(b[1]) && (materia || deveres.length)) {
+      linhas.push({ data: b[1].slice(0,5), materia, deveres });
+    }
+  }
+
+  const quadros = [...(blogText || '').matchAll(/Teste\s+\d+\s*\|[^|]*\|\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*\|[^]*?Conte[úu]do:\s*([^]*?)(?=\s*P[áa]ginas:|\s*Teste\s+\d+\s*\||\s*DATA:|$)/gi)];
+  const testesQuadro = quadros
+    .map(m => ({ data: (m[1]||'').slice(0,5), num: dataParaNum(m[1]), conteudo: limpar(m[2]) }))
+    .filter(t => t.num > 0 && t.conteudo)
+    .sort((a,b) => b.num - a.num);
+  let avaliacao = { tem:false };
+  if (testesQuadro.length) {
+    const refN = dataParaNum(dataRef || hojeStr());
+    const doDia = testesQuadro.find(t => t.num === refN);
+    const ateRef = testesQuadro.filter(t => t.num <= refN);
+    const escolhido = doDia || ateRef[0] || testesQuadro[0];
+    if (escolhido) avaliacao = { tem:true, data: escolhido.data, sobre: escolhido.conteudo };
+  }
+  return { linhas, avaliacao, origem:'regex-rotulado' };
 }
 
 async function processWithAI(materia, professor, blogText, filtro, dataRef, labelDia, tipo, maxDeveres, maxDiasDever, formato, ignorarAvaliacao, testeAulaAnterior, testeMarcado, interpretacaoComAnterior, testeNoDiaExato) {
@@ -1597,11 +1751,16 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
                         : promptTabela;
 
   let tabela;
-  try {
-    const raw = await callAnthropic(promptEscolhido, 0);
-    tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
-  } catch (e) {
-    tabela = { linhas: [], avaliacao:{tem:false} };
+  if (formato === 'rotulado') {
+    tabela = extrairRotuladoRegex(blogText, dataRef);
+  }
+  if (!tabela || !Array.isArray(tabela.linhas) || tabela.linhas.length === 0) {
+    try {
+      const raw = await callAnthropic(promptEscolhido, 0);
+      tabela = (raw && Array.isArray(raw.linhas)) ? raw : { linhas: [], avaliacao:{tem:false} };
+    } catch (e) {
+      tabela = { linhas: [], avaliacao:{tem:false} };
+    }
   }
 
   // EXTRAÇÃO DIRETA DO QUADRO DE TESTE (rotulado, ex: Matemática A do Tiago).
@@ -1629,14 +1788,15 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
 
   // limpa lixo de navegação dos deveres
   const ehLixo = (t) => ehEventoEscolar(t) || /enviar por e-?mail|postar no blog|compartilhar|marcadores|postagens?|^in[ií]cio$|assinar|reações|coment|pinterest|facebook|twitter/i.test((t||'').trim());
+  const limparTextoExtraido = (t) => (t || '').replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim();
   const linhas = (tabela.linhas||[])
     .map(l => ({
       data: (l.data||'').trim(),
       dataInicio: (l.data_inicio||l.data||'').trim(), // primeira data do par (agrupado)
       num: dataParaNum(l.data),
       numInicio: dataParaNum(l.data_inicio||l.data),
-      materia: (l.materia||'').trim(),
-      deveres: (l.deveres||[]).filter(d => d && d.trim() && !ehLixo(d))
+      materia: limparTextoExtraido(l.materia),
+      deveres: (l.deveres||[]).map(d => limparTextoExtraido(d)).filter(d => d && d.trim() && !ehLixo(d))
     }))
     .filter(l => l.num > 0);
 
@@ -1675,14 +1835,14 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // se mesmo assim não achou (data fora do par), mostra a aula mais recente até hoje
   // APENAS como conteúdo (sem repetir o dever, que já entra nos pendentes).
   if (!linhaRef && formato === 'agrupado') {
-    const recentes = linhas.filter(l => l.num <= refNum && l.materia).sort((a,b) => b.num - a.num);
+    const recentes = linhas.filter(l => l.num <= refNum && dentroDoBimestreAtual(l.num) && l.materia).sort((a,b) => b.num - a.num);
     linhaRef = recentes[0] || null;
     aulaSomenteExibicao = true;
   }
-  const aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
+  let aula_hoje = (linhaRef && linhaRef.materia) ? linhaRef.materia : '';
 
   // 2. DEVERES DESTA AULA: deveres da linha de referência (não duplica quando é só exibição)
-  const deveres_aula = (linhaRef && !aulaSomenteExibicao) ? linhaRef.deveres : [];
+  let deveres_aula = (linhaRef && !aulaSomenteExibicao) ? linhaRef.deveres : [];
 
   // 3. DEVERES PENDENTES: as últimas datas ANTERIORES à referência que têm dever
   let anteriores = linhas
@@ -1699,7 +1859,11 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     });
   }
   const limiteDeveres = (maxDeveres && maxDeveres > 0) ? maxDeveres : 2;
-  const deveres_pendentes = anteriores.slice(0, limiteDeveres).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
+  const janelaDeveres = (maxDiasDever && maxDiasDever > 0) ? maxDiasDever : 14;
+  const deveres_pendentes = filtrarPendentes(
+    anteriores.map(l => ({ data: l.data.slice(0,5), num: l.num, deveres: l.deveres })),
+    refNum, janelaDeveres, limiteDeveres
+  ).map(l => ({ data: l.data.slice(0,5), deveres: l.deveres }));
 
   // 4. MATÉRIA DO TESTE: a aula mais recente ATÉ hoje (inclui a de hoje), ignorando
   // eventos e ementas. Inclui hoje porque o teste costuma ser sobre a aula atual
@@ -1718,14 +1882,69 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   const linhaTeste = aulasAnteriores[0] || null;
 
   // matérias onde o professor MARCA explicitamente o que cai no teste daquele dia
-  // (ex: biologia Ulisses: "Conteúdo do testinho 3: Gimnospermas").
-  // O blog lista da data MAIS RECENTE para a mais antiga, então o PRIMEIRO
-  // "Conteúdo do testinho" que aparece é o da aula atual. É esse que vale.
+  // (ex: biologia Ulisses: "Conteúdo do testinho extra: Cordados", "Conteúdo do testinho 3: Gimnospermas").
+  // O blog lista da data MAIS RECENTE para a mais antiga. Para evitar pegar testinho de
+  // bimestre anterior, buscamos TODOS os matches, identificamos a data do bloco de cada um
+  // (a data DD-MM-AAAA ou DD/MM/AAAA mais próxima ANTES de cada ocorrência) e filtramos
+  // apenas os que estão dentro do bimestre atual. O mais recente válido é o que vale.
   let testeMarcadoTexto = '', testeMarcadoData = '';
   if (testeMarcado) {
-    const m = (blogText || '').match(/conte[úu]do\s+do\s+testinho\s*\d*\s*:\s*([^.;\n]+)/i);
-    if (m && m[1].trim()) {
-      testeMarcadoTexto = m[1].trim();
+    const limparTesteMarcado = (txt) => {
+      let t = (txt || '').replace(/\s+/g, ' ').replace(/[.;\s]+$/,'').trim();
+      const partes = t.split(/\s+/);
+      if (partes.length % 2 === 0) {
+        const meio = partes.length / 2;
+        const a = partes.slice(0, meio).join(' ').toLowerCase();
+        const b = partes.slice(meio).join(' ').toLowerCase();
+        if (a && a === b) t = partes.slice(0, meio).join(' ');
+      }
+      return t;
+    };
+    const normalizarTesteMarcado = (txt) => limparTesteMarcado(txt).toLowerCase();
+    const reTestinho = /conte[úu]do\s+do\s+testinho(?:\s+(?:extra|\d+))?\s*:?\s*([^.;\n]+)/gi;
+    // regex para identificar data de postagem no blog (formato DD-MM-AAAA ou DD/MM/AAAA)
+    const reData = /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g;
+    const texto = blogText || '';
+    let mt;
+    const candidatos = [];
+    while ((mt = reTestinho.exec(texto)) !== null) {
+      const conteudo = limparTesteMarcado(mt[1]);
+      if (!conteudo) continue;
+      // encontra a data mais próxima ANTES desta ocorrência no texto
+      const trecho = texto.slice(0, mt.index);
+      let ultimaData = null, md;
+      reData.lastIndex = 0;
+      while ((md = reData.exec(trecho)) !== null) ultimaData = md;
+      if (ultimaData) {
+        const dia = ultimaData[1].padStart(2,'0');
+        const mes = ultimaData[2].padStart(2,'0');
+        const anoRaw = ultimaData[3];
+        const ano = anoRaw.length === 2 ? '20' + anoRaw : anoRaw;
+        const num = parseInt(ano + mes + dia, 10);
+        const data = dia + '/' + mes;
+        const ehExtraCordados = /testinho\s+extra/i.test(mt[0] || '') && /cordados/i.test(conteudo);
+        // Ulisses publicou o "testinho extra: Cordados" antes da data formal de início
+        // do 3º bimestre, mas ele é o conteúdo válido do retorno. Mantemos essa exceção
+        // estreita para não reabrir testinhos antigos do 2º bimestre.
+        const validoNoBimestre = dentroDoBimestreAtual(num) || (Number(estadoBimestre.numero) === 3 && ehExtraCordados);
+        if (num <= refNum && validoNoBimestre) {
+          candidatos.push({ conteudo, num, data });
+        }
+      }
+    }
+    if (candidatos.length > 0) {
+      // pega o mais recente válido para a data de referência
+      candidatos.sort((a, b) => b.num - a.num);
+      testeMarcadoTexto = candidatos[0].conteudo;
+      testeMarcadoData = candidatos[0].data;
+    }
+    // Se a extração da aula devolveu só o conteúdo do testinho marcado (ex: "Cordados."),
+    // não mostra isso como aula dada. O conteúdo aparece em materia_teste.
+    const normAula = normalizarTesteMarcado(aula_hoje || '');
+    const normTeste = normalizarTesteMarcado(testeMarcadoTexto || '');
+    if (normAula && normTeste && normAula === normTeste) {
+      aula_hoje = '';
+      deveres_aula = [];
     }
   }
 
@@ -1817,12 +2036,18 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // limpa a matéria do teste: remove sufixos de atividade/tarefa/páginas que não são
   // o CONTEÚDO em si (ex: "Parnasianismo; Atividades da apostila" → "Parnasianismo")
   if (materia_teste) {
-    materia_teste = materia_teste
+    materia_teste = limparTextoExtraido(materia_teste)
       .split(/[;.]\s*/)
       .filter(parte => parte.trim() && !/^\s*(atividades?|tarefas?|deveres?|exerc[íi]cios?|p[áa]g(\.|inas?)?|atividade complementar)\b/i.test(parte.trim()))
       .join('; ')
       .replace(/[;\s]+$/, '')
       .trim();
+  }
+
+  if (materia_teste_data && !dentroDoBimestreAtual(dataParaNum(materia_teste_data))) {
+    materia_teste = '';
+    materia_teste_data = '';
+    tem_avaliacao = false;
   }
 
   // REGRA ESPECIAL (Literatura): o testinho de "interpretação de texto" cobra o conteúdo
@@ -1885,6 +2110,12 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
       }
     }
     // CASO B (testinho normal hoje): não faz nada, mantém o que o padrão já definiu.
+  }
+
+  if (materia_teste_data && !dentroDoBimestreAtual(dataParaNum(materia_teste_data))) {
+    materia_teste = '';
+    materia_teste_data = '';
+    tem_avaliacao = false;
   }
 
   // ETAPA 2: gera resumo + questões só se houver matéria de teste (e a matéria usa teste)
@@ -2159,11 +2390,13 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
           data_prova: dataProvaSec || ''
         });
         if (naJanela) dados = Object.assign({}, dados, { materia_teste:'', tem_avaliacao:false, resumo:'', questoes:[], semana_provas:true });
+        else if (ehRecessoAtivo()) dados = Object.assign({}, dados, { materia_teste:'', materia_teste_data:'', tem_avaliacao:false, avaliacao_final:'', semana_provas:false, data_prova:'' });
         dados = Object.assign({}, dados, { deveres_pendentes: dedupDeveres(dados.deveres_pendentes) });
         return Object.assign({}, sec, { dados });
       });
       let base = Object.assign({}, result, { materiais: lista, secoes });
       if (naJanela) base = Object.assign({}, base, { semana_provas:true });
+      else if (ehRecessoAtivo()) base = Object.assign({}, base, { semana_provas:false });
       return base;
     }
     // card normal
@@ -2176,6 +2409,18 @@ async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
       base.aviso_avaliacao = item.avisoAvaliacao;
     }
     base = aplicarRegrasProva(base);
+    // RECESSO: esconde matéria do teste, avaliação e prova durante o período de recesso.
+    // O aluno vê tela limpa (sem aula, sem dever, sem teste) até o retorno.
+    if (ehRecessoAtivo()) {
+      base = Object.assign({}, base, {
+        materia_teste: '',
+        materia_teste_data: '',
+        tem_avaliacao: false,
+        avaliacao_final: '',
+        semana_provas: false,
+        data_prova: ''
+      });
+    }
     base.deveres_pendentes = dedupDeveres(base.deveres_pendentes);
     return base;
   }
@@ -2604,6 +2849,86 @@ app.get('/api/admin/seguranca', checkAdmin, (req, res) => {
   } catch (e) { res.json({ eventos: [], erro: e.message }); }
 });
 
+// ── BIMESTRE E RECESSO ───────────────────────────────────────────────────────
+app.get('/api/admin/bimestre-recesso', checkAdmin, (req, res) => {
+  res.json({
+    bimestre: estadoBimestre,
+    recesso: recessoConfig,
+    recessoAtivoHoje: emRecesso()
+  });
+});
+
+function limparCacheAulas() {
+  const qtd = Object.keys(cache).length;
+  for (const k of Object.keys(cache)) delete cache[k];
+  salvarCache();
+  return qtd;
+}
+
+app.post('/api/admin/salvar-bimestre', checkAdmin, (req, res) => {
+  const numero = parseInt(req.body.numero, 10);
+  const inicio = (req.body.inicio || '').trim();
+  if (!numero || numero < 1 || numero > 4) return res.json({ error: 'Informe um bimestre entre 1 e 4.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) return res.json({ error: 'Informe a data de início do bimestre.' });
+  estadoBimestre = {
+    numero,
+    inicio,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : numero,
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Bimestre salvo. Os deveres passam a contar a partir da nova data.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/zerar-deveres-bimestre', checkAdmin, (req, res) => {
+  const hoje = isoEfetivo();
+  estadoBimestre = {
+    numero: Number(estadoBimestre.numero) || 3,
+    inicio: hoje,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : (Number(estadoBimestre.numero) || 3),
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Deveres pendentes zerados sem mudar o número do bimestre.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/avancar-bimestre', checkAdmin, (req, res) => {
+  const hoje = isoEfetivo();
+  estadoBimestre = {
+    numero: Math.min((Number(estadoBimestre.numero) || 0) + 1, 4),
+    inicio: hoje,
+    versao: Number(estadoBimestre.versao) > 0 ? Number(estadoBimestre.versao) + 1 : ((Number(estadoBimestre.numero) || 0) + 1),
+    atualizadoEm: new Date().toISOString()
+  };
+  salvarEstadoBimestre();
+  const qtd = limparCacheAulas();
+  res.json({ ok: true, mensagem: 'Bimestre avançado. O novo bimestre começa vazio para todos os alunos.', bimestre: estadoBimestre, chavesCacheRemovidas: qtd });
+});
+
+app.post('/api/admin/definir-recesso', checkAdmin, (req, res) => {
+  const ativo = req.body.ativo === true || req.body.ativo === 'true';
+  const inicio = (req.body.inicio || '').trim();
+  const fim = (req.body.fim || '').trim();
+  const valida = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (ativo) {
+    if (!valida(inicio) || !valida(fim)) return res.json({ error: 'Datas inválidas. Use o seletor de data.' });
+    if (fim < inicio) return res.json({ error: 'A data final não pode ser antes da inicial.' });
+    recessoConfig = { ativo: true, inicio, fim };
+  } else {
+    recessoConfig = { ativo: false, inicio: valida(inicio) ? inicio : '', fim: valida(fim) ? fim : '' };
+  }
+  salvarRecesso();
+  res.json({ ok: true, mensagem: recessoConfig.ativo ? 'Recesso configurado.' : 'Recesso desativado.', recesso: recessoConfig, recessoAtivoHoje: emRecesso() });
+});
+
+app.post('/api/admin/desativar-recesso', checkAdmin, (req, res) => {
+  recessoConfig = { ativo: false, inicio: recessoConfig.inicio || '', fim: recessoConfig.fim || '' };
+  salvarRecesso();
+  res.json({ ok: true, mensagem: 'Recesso desativado.', recesso: recessoConfig });
+});
+
 // ── AVALIAÇÃO FINAL DO BIMESTRE (janela de exibição) ─────────────────────────
 app.get('/api/admin/janela-avaliacao', checkAdmin, (req, res) => {
   res.json({ janela: janelaAvaliacao, ativaHoje: dentroDaJanelaAvaliacao() });
@@ -2622,6 +2947,73 @@ app.post('/api/admin/limpar-janela-avaliacao', checkAdmin, (req, res) => {
   janelaAvaliacao = { inicio: '', fim: '' };
   salvarJanelaAvaliacao();
   res.json({ ok: true, mensagem: 'Janela removida. O bloco de avaliação não aparece mais.' });
+});
+
+// ── TESTE ADMIN DE MATÉRIAS (ignora recesso, não altera tela dos alunos) ───────
+app.get('/api/admin/testar-materias', checkAdmin, async (req, res) => {
+  const normalizarDia = (d) => (d || '').toString().trim().toLowerCase().slice(0, 3);
+  const dia = normalizarDia(req.query.dia || '');
+  const diasValidos = ['seg','ter','qua','qui','sex'];
+  if (!diasValidos.includes(dia)) {
+    return res.json({ error: 'Informe um dia válido: seg, ter, qua, qui ou sex.' });
+  }
+  // dataRef customizada para testes históricos (ex: ?dataRef=14/07/2026)
+  // Se não vier, calcula o próximo dia útil normalmente.
+  const dataRefQuery = (req.query.dataRef || '').trim();
+  const dataRef = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dataRefQuery) ? dataRefQuery : dataDoDia(dia);
+  const labelDia = DIAS_PT[dia];
+  const itens = GRADE[dia] || [];
+  const materiasTeste = [];
+
+  async function testarItem(item) {
+    if (Array.isArray(item.combinar)) {
+      const secoes = [];
+      for (const sub of item.combinar) {
+        secoes.push(await testarItem(sub));
+      }
+      return { materia: item.m, professor: item.p || '', combinada: true, secoes };
+    }
+    try {
+      const blogText = await fetchBlog(item.url);
+      if (!blogText || blogText.length < 30) {
+        return { materia: item.m, professor: item.p, ok: false, erro: 'Blog não retornou texto suficiente.', tamanhoTexto: blogText ? blogText.length : 0 };
+      }
+      const r = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior, item.testeNoDiaExato);
+      return {
+        materia: item.m,
+        professor: item.p,
+        formato: item.formato || item.tipo || 'padrao',
+        ok: true,
+        processadoOk: true,
+        tamanhoTexto: blogText.length,
+        aula_hoje: r.aula_hoje || '',
+        aula_data: r.aula_data || '',
+        deveres_aula: Array.isArray(r.deveres_aula) ? r.deveres_aula : [],
+        deveres_pendentes: Array.isArray(r.deveres_pendentes) ? r.deveres_pendentes : [],
+        materia_teste: r.materia_teste || '',
+        materia_teste_data: r.materia_teste_data || '',
+        tem_avaliacao: r.tem_avaliacao === true,
+        semana_provas: r.semana_provas === true,
+        erro: ''
+      };
+    } catch (e) {
+      return { materia: item.m, professor: item.p, ok: false, erro: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  for (const item of itens) {
+    materiasTeste.push(await testarItem(item));
+  }
+  res.json({
+    ok: true,
+    modo: 'teste-admin',
+    recessoAtivoHoje: emRecesso(),
+    dia,
+    diaLabel: labelDia,
+    dataRef,
+    total: materiasTeste.length,
+    materias: materiasTeste
+  });
 });
 
 // ── MATERIAIS DE APOIO (links de arquivos por matéria) ───────────────────────
@@ -2669,6 +3061,17 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  if (emRecesso()) {
+    res.write('data: ' + JSON.stringify({
+      type:'recesso',
+      bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao,
+      recesso: recessoConfig,
+      mensagem: 'Em recesso. Aulas voltam em ' + dataIsoParaBR(recessoConfig.fim) + '.'
+    }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ type:'done', bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
+    return res.end();
+  }
+
   // define o dia principal e o dia da prévia
   let diaPrincipal, diaPrevia;
   if (hojeDay >= 1 && hojeDay <= 5) {
@@ -2685,7 +3088,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   // calcula o total de matérias para o front montar os placeholders
   const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {
