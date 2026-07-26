@@ -3151,8 +3151,8 @@ app.get('/diag', async (req, res) => {
   // sem filtro: mostra o menu do que dá para pedir
   if (!dia && !materiaFiltro) {
     let menu = 'DIAG - o que inspecionar\n\n';
-    menu += 'Uso: /diag?senha=SUA_SENHA&dia=DIA&materia=PARTE_DO_NOME\n';
-    menu += '(dia e materia sao opcionais; materia casa por pedaco do nome, sem acento)\n\n';
+    menu += 'Uso: /diag?senha=SUA_SENHA&dia=DIA&materia=PARTE_DO_NOME&dataRef=DD/MM/AAAA\n';
+    menu += '(dia e materia sao opcionais; materia casa por pedaco do nome, sem acento; dataRef e opcional)\n\n';
     for (const dk of Object.keys(GRADE)) {
       const nomes = (GRADE[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
       menu += dk + ': ' + nomes.join(', ') + '\n';
@@ -3179,9 +3179,32 @@ app.get('/diag', async (req, res) => {
   const SEP = '==================================================';
   const sub = '--------------------------------------------------';
   const modoRaw = /^(1|true|sim|yes)$/i.test((req.query.raw || '').toString().trim());
+  const dataRefQuery = (req.query.dataRef || '').toString().trim();
+  const trechoDaData = (txt, dataRef) => {
+    const m = (dataRef || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!txt || !m) return '';
+    const d = m[1].padStart(2, '0');
+    const mes = m[2].padStart(2, '0');
+    const ano = m[3];
+    const variantes = [
+      d + '/' + mes + '/' + ano,
+      d + '-' + mes + '-' + ano,
+      String(Number(d)) + '/' + String(Number(mes)) + '/' + ano,
+      String(Number(d)) + '-' + String(Number(mes)) + '-' + ano,
+    ];
+    const lower = txt.toLowerCase();
+    let idx = -1;
+    for (const v of variantes) {
+      idx = lower.indexOf(v.toLowerCase());
+      if (idx >= 0) break;
+    }
+    if (idx < 0) return '';
+    const ini = Math.max(0, idx - 500);
+    return txt.slice(ini, idx + 3500);
+  };
   const linhas = [];
   for (const { dia: dk, item } of alvos) {
-    const dataRef = dataDoDia(dk);
+    const dataRef = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dataRefQuery) ? dataRefQuery : dataDoDia(dk);
     linhas.push(SEP);
     linhas.push('MATERIA: ' + item.m + '  (' + (item.p || '?') + ')  [dia: ' + dk + ']');
     linhas.push('URL: ' + item.url);
@@ -3224,6 +3247,15 @@ app.get('/diag', async (req, res) => {
     if (!cortado && !completo) {
       linhas.push('(blog nao retornou texto - todas as estrategias de busca falharam)');
     } else {
+      const trecho = trechoDaData(completo || cortado, dataRef);
+      if (trecho) {
+        linhas.push('TRECHO DA DATA ' + dataRef + ' (~4000 chars):');
+        linhas.push(trecho);
+        linhas.push(sub);
+      } else if (dataRefQuery) {
+        linhas.push('TRECHO DA DATA ' + dataRef + ': data nao encontrada no texto limpo.');
+        linhas.push(sub);
+      }
       linhas.push('TEXTO CRU (cortado - o que o parser de aula ve, ultimos 7000 chars):');
       linhas.push(cortado || '(vazio)');
       linhas.push(sub);
