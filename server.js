@@ -998,7 +998,7 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
 // (ex: copaanglo, gincana, olimpíadas, feira, festa junina, simulado de evento)
 function ehEventoEscolar(texto) {
   const t = (texto || '').toLowerCase();
-  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|prova\s+anglo|simulado\s+anglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida/i.test(t);
+  return /cop[ae]?[\s\-]*anglo|copanglo|copaanglo|prova\s+anglo|simulado\s+anglo|gincana|olimp[ií]ada|festa\s*junina|feira\s*de|feira\s*cultural|festival|interclasse|recesso|feriado|reuni[ãa]o de pais|conselho de classe|sábado letivo|s[áa]bado letivo|semana de avalia|jogos? (internos|escolares)|excurs[ãa]o|passeio|formatura|ensaio|aula concedida|aplica[çc][ãa]o\s+da\s+prova|prova\s+bimestral|avalia[çc][ãa]o\s+bimestral/i.test(t);
 }
 
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
@@ -1297,6 +1297,12 @@ async function processarDuasAulas(materia, professor, blogText, filtro, dataRef,
   // Linguística só tem testinho útil quando há aula na data consultada. Durante recesso
   // ou semana sem aula registrada, não mostra prova/aula antiga como matéria de teste.
   if (aulasDoDia.length === 0) {
+    materia_teste = '';
+    materia_teste_data = '';
+  }
+  // Se a matéria do teste é um evento escolar (prova bimestral, avaliação, etc.),
+  // não mostra — não é conteúdo pra estudar, confunde o aluno.
+  if (materia_teste && ehEventoEscolar(materia_teste)) {
     materia_teste = '';
     materia_teste_data = '';
   }
