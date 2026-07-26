@@ -1889,14 +1889,26 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
   // apenas os que estão dentro do bimestre atual. O mais recente válido é o que vale.
   let testeMarcadoTexto = '', testeMarcadoData = '';
   if (testeMarcado) {
-    const reTestinho = /conte[úu]do\s+do\s+testinho(?:\s+(?:extra|\d+))?\s*:\s*([^.;\n]+)/gi;
+    const limparTesteMarcado = (txt) => {
+      let t = (txt || '').replace(/\s+/g, ' ').replace(/[.;\s]+$/,'').trim();
+      const partes = t.split(/\s+/);
+      if (partes.length % 2 === 0) {
+        const meio = partes.length / 2;
+        const a = partes.slice(0, meio).join(' ').toLowerCase();
+        const b = partes.slice(meio).join(' ').toLowerCase();
+        if (a && a === b) t = partes.slice(0, meio).join(' ');
+      }
+      return t;
+    };
+    const normalizarTesteMarcado = (txt) => limparTesteMarcado(txt).toLowerCase();
+    const reTestinho = /conte[úu]do\s+do\s+testinho(?:\s+(?:extra|\d+))?\s*:?\s*([^.;\n]+)/gi;
     // regex para identificar data de postagem no blog (formato DD-MM-AAAA ou DD/MM/AAAA)
     const reData = /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g;
     const texto = blogText || '';
     let mt;
     const candidatos = [];
     while ((mt = reTestinho.exec(texto)) !== null) {
-      const conteudo = mt[1].trim();
+      const conteudo = limparTesteMarcado(mt[1]);
       if (!conteudo) continue;
       // encontra a data mais próxima ANTES desta ocorrência no texto
       const trecho = texto.slice(0, mt.index);
@@ -1928,8 +1940,8 @@ async function processWithAI(materia, professor, blogText, filtro, dataRef, labe
     }
     // Se a extração da aula devolveu só o conteúdo do testinho marcado (ex: "Cordados."),
     // não mostra isso como aula dada. O conteúdo aparece em materia_teste.
-    const normAula = (aula_hoje || '').replace(/[.;\s]+$/,'').trim().toLowerCase();
-    const normTeste = (testeMarcadoTexto || '').replace(/[.;\s]+$/,'').trim().toLowerCase();
+    const normAula = normalizarTesteMarcado(aula_hoje || '');
+    const normTeste = normalizarTesteMarcado(testeMarcadoTexto || '');
     if (normAula && normTeste && normAula === normTeste) {
       aula_hoje = '';
       deveres_aula = [];
