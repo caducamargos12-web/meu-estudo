@@ -364,13 +364,13 @@
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
   .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
-  .rep-modal.red-modal{max-width:min(680px,92vw);width:100%;max-height:90vh;padding:28px 32px}
+  .rep-modal.red-modal{max-width:min(720px,94vw);width:100%;max-height:96vh;padding:28px 32px}
   .rep-modal.red-modal .rep-title{font-size:22px;margin-bottom:8px}
   .rep-modal.red-modal .rep-sub{font-size:14px;margin-bottom:20px}
   .rep-modal.red-modal .rep-acoes{margin-top:20px}
   .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:13px;font-size:15px;border-radius:10px}
-  .red-tema{min-height:48px;font-size:14px;line-height:1.45;padding:13px 15px;border-radius:12px;margin-bottom:12px;resize:vertical}
-  .red-textarea{min-height:320px;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
+  .red-tema{min-height:42px;height:42px;font-size:14px;line-height:1.35;padding:11px 14px;border-radius:12px;margin-bottom:12px;resize:none;overflow:hidden}
+  .red-textarea{min-height:420px;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
   .red-conta{font-family:var(--mono);font-size:12px;color:var(--text-3);text-align:right;margin-top:8px}
   .red-result:not(:empty){margin-top:20px;border-top:1px solid var(--border);padding-top:20px}
   .red-carregando{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-2);padding:10px 0}
@@ -1405,7 +1405,7 @@ document.addEventListener('keydown',function(e){
   </div>
 </div>
 
-<div id="redacaoOverlay" class="rep-overlay" onclick="if(event.target===this)fecharRedacao()">
+<div id="redacaoOverlay" class="rep-overlay">
   <div class="rep-modal red-modal">
     <div class="rep-title">✍️ Corrigir redação</div>
     <div class="rep-sub">Cole sua redação abaixo. Se tiver o tema, informe também para deixar a C2 mais precisa. 1 correção por dia.</div>
