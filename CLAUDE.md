@@ -184,6 +184,60 @@ Estado atual:
 - Construir arquitetura multi-turma depois dos ajustes da base.
 - Validar interesse dos alunos antes de investir em features novas.
 
+## Workflow obrigatório com Claude Code
+
+Antes de iniciar qualquer tarefa no Meu Estudo, usar a skill `decidir-workflow-meu-estudo` para classificar a tarefa e decidir:
+
+- Se precisa de worktree.
+- Se precisa de sub-agentes.
+- Se precisa de loop de revisão.
+- Quais skills específicas devem ser usadas.
+- Se pode ir direto para `main` ou precisa de branch.
+
+Regra de Git:
+
+- Documentação e skills podem ir direto para `main`, se revisadas.
+- Código simples só pode ir direto para `main` com autorização explícita de Carlos.
+- Mudanças em `server.js`, parsers, cache, IA, auth, `GRADE` e multi-turma devem usar branch/worktree por padrão.
+- Multi-turma exige worktree, sub-agentes, plano aprovado e commits pequenos.
+
+Skills novas de workflow:
+
+- `decidir-workflow-meu-estudo`: decide workflow antes de implementar.
+- `loop-revisao-meu-estudo`: executa ciclos de planejar, implementar, validar, revisar e corrigir.
+- `entrega-git-meu-estudo`: padroniza commit, push, branch e instruções finais.
+
+Documento detalhado: `docs/workflow-git-worktrees-subagentes.md`.
+
+### Prompt automático de início de tarefa
+
+Quando Carlos pedir qualquer tarefa no Meu Estudo, Claude Code deve aplicar automaticamente este fluxo, sem Carlos precisar copiar o prompt:
+
+1. Usar `decidir-workflow-meu-estudo`.
+2. Classificar a tarefa.
+3. Informar se precisa de worktree.
+4. Informar se precisa de sub-agentes.
+5. Informar qual loop será usado.
+6. Listar skills necessárias.
+7. Apontar risco principal.
+8. Propor plano curto.
+9. Só implementar depois da aprovação de Carlos, exceto documentação simples.
+
+### Prompt automático de final de tarefa
+
+Quando terminar uma alteração, Claude Code deve aplicar automaticamente:
+
+1. Rodar `git status`.
+2. Separar arquivos alterados por tipo: app, docs, skills, config e temporários.
+3. Não usar `git add .` por padrão.
+4. Adicionar apenas arquivos relacionados à tarefa.
+5. Rodar validações obrigatórias.
+6. Mostrar resumo do commit.
+7. Pedir aprovação de Carlos.
+8. Só depois rodar `git commit` e `git push`.
+
+Se a mudança tocar `server.js`, `index.html` com JavaScript, parser, cache, IA, auth ou `GRADE`, não fazer push direto na `main` sem autorização explícita de Carlos.
+
 ## Preferências de resposta para Carlos
 
 - Português.
