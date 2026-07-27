@@ -2671,11 +2671,12 @@ function hashTexto(s) {
 
 app.post('/api/redacao', rateLimitGeral, auth, async (req, res) => {
   const texto = (req.body.texto || '').trim();
+  const tema = (req.body.tema || '').toString().trim().slice(0, 300);
   if (texto.length < 200) return res.json({ error: 'Escreva a redação completa (pelo menos alguns parágrafos) para eu corrigir.' });
   if (texto.length > 6000) return res.json({ error: 'Texto muito longo. Cole só a redação (até ~6000 caracteres).' });
 
-  // 1) cache por texto idêntico: não gasta IA nem conta no limite do dia
-  const ck = hashTexto(texto);
+  // 1) cache por texto + tema idênticos: não gasta IA nem conta no limite do dia
+  const ck = hashTexto((tema || 'sem-tema') + '\n---\n' + texto);
   if (redacaoCache[ck]) return res.json({ correcao: redacaoCache[ck], cached: true });
 
   // 2) limite diário por aluno (só conta correções que realmente chamam a IA)
@@ -2704,8 +2705,10 @@ app.post('/api/redacao', rateLimitGeral, auth, async (req, res) => {
     'texto com muitos erros básicos de ortografia, acentuação, pontuação ou concordância deve ficar entre 40 e 80 na C1.\n' +
     'Se o texto parecer apenas um parágrafo expandido, com tese vaga e solução genérica, a nota total deve tender a ficar abaixo de 500. ' +
     'Reserve 1000 apenas para redações completas, muito bem desenvolvidas e com proposta detalhada.\n' +
+    (tema ? ('Tema proposto: "' + tema + '". Use esse tema para avaliar com rigor a C2: penalize fuga total, tangenciamento, resposta genérica ou redação que não enfrenta o recorte proposto.\n') : 'Nenhum tema foi informado. Avalie a C2 pelo tema que a própria redação permite identificar, sem inventar recorte externo.\n') +
     'Seja honesto e criterioso, não infle notas. Responda APENAS JSON, sem markdown:\n' +
     '{"competencias":[{"n":1,"nota":0,"comentario":""},{"n":2,"nota":0,"comentario":""},{"n":3,"nota":0,"comentario":""},{"n":4,"nota":0,"comentario":""},{"n":5,"nota":0,"comentario":""}]}\n\n' +
+    (tema ? ('TEMA PROPOSTO:\n"""\n' + tema + '\n"""\n\n') : '') +
     'REDAÇÃO DO ALUNO:\n"""\n' + texto + '\n"""';
 
   try {

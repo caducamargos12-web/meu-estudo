@@ -369,6 +369,7 @@
   .rep-modal.red-modal .rep-sub{font-size:14px;margin-bottom:20px}
   .rep-modal.red-modal .rep-acoes{margin-top:20px}
   .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:13px;font-size:15px;border-radius:10px}
+  .red-tema{min-height:48px;font-size:14px;line-height:1.45;padding:13px 15px;border-radius:12px;margin-bottom:12px;resize:vertical}
   .red-textarea{min-height:320px;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
   .red-conta{font-family:var(--mono);font-size:12px;color:var(--text-3);text-align:right;margin-top:8px}
   .red-result:not(:empty){margin-top:20px;border-top:1px solid var(--border);padding-top:20px}
@@ -616,6 +617,7 @@ function renderCorrecao(c){
 }
 async function enviarRedacao(){
   const texto=document.getElementById('redacaoTexto').value.trim();
+  const tema=document.getElementById('redacaoTema').value.trim();
   const msg=document.getElementById('redacaoMsg');
   const resultado=document.getElementById('redacaoResultado');
   if(texto.length<200){msg.className='rep-msg erro';msg.textContent='Escreva a redação completa (pelo menos alguns parágrafos).';return;}
@@ -628,7 +630,7 @@ async function enviarRedacao(){
     const res=await fetch('/api/redacao',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-session-token':token},
-      body:JSON.stringify({texto})
+      body:JSON.stringify({texto,tema})
     });
     const data=await res.json();
     if(data.error){
@@ -1406,7 +1408,8 @@ document.addEventListener('keydown',function(e){
 <div id="redacaoOverlay" class="rep-overlay" onclick="if(event.target===this)fecharRedacao()">
   <div class="rep-modal red-modal">
     <div class="rep-title">✍️ Corrigir redação</div>
-    <div class="rep-sub">Cole sua redação abaixo. Eu corrijo pelas 5 competências do ENEM e mostro sua nota. 1 correção por dia.</div>
+    <div class="rep-sub">Cole sua redação abaixo. Se tiver o tema, informe também para deixar a C2 mais precisa. 1 correção por dia.</div>
+    <textarea id="redacaoTema" class="rep-textarea red-tema" placeholder="Tema da redação (opcional, mas recomendado)…" maxlength="300"></textarea>
     <textarea id="redacaoTexto" class="rep-textarea red-textarea" placeholder="Cole aqui o texto da sua redação…" maxlength="6000" oninput="contarRedacao()"></textarea>
     <div class="red-conta"><span id="redacaoCount">0</span> / 6000 caracteres</div>
     <div class="rep-acoes">
