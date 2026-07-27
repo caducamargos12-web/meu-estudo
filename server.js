@@ -2714,10 +2714,15 @@ app.post('/api/redacao', rateLimitGeral, auth, async (req, res) => {
     if (comps.length !== 5) return res.json({ error: 'Não consegui corrigir agora. Tente de novo em instantes.' });
     // recalcula a nota total no servidor (não confia na soma da IA); força múltiplos de 40
     let total = 0;
-    const competencias = comps.map(c => {
-      const nota = Math.max(0, Math.min(200, Math.round((Number(c.nota)||0)/40)*40));
+    const notasValidas = [0, 40, 80, 120, 160, 200];
+    const competencias = comps.map((c, i) => {
+      const rawNota = Number(c.nota);
+      const rawN = Number(c.n);
+      const nVeioComoNota = notasValidas.includes(rawN) && ![1, 2, 3, 4, 5].includes(rawN);
+      const valorNota = (!rawNota && nVeioComoNota) ? rawN : rawNota;
+      const nota = Math.max(0, Math.min(200, Math.round((valorNota||0)/40)*40));
       total += nota;
-      return { n: Number(c.n)||0, nota, comentario: (c.comentario||'').toString().trim() };
+      return { n: i + 1, nota, comentario: (c.comentario||'').toString().trim() };
     });
     const correcao = { nota_total: total, competencias };
     redacaoCache[ck] = correcao; salvarRedacaoCache();
