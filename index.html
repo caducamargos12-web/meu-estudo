@@ -364,22 +364,26 @@
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
   .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
-  .rep-modal.red-modal{max-width:min(85vw,1200px);width:85vw;max-height:90vh}
-  .red-textarea{min-height:280px;font-size:14.5px;line-height:1.55}
-  .red-conta{font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:right;margin-top:5px}
-  .red-result:not(:empty){margin-top:16px;border-top:1px solid var(--border);padding-top:16px}
-  .red-carregando{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2);padding:8px 0}
-  .red-total{display:flex;align-items:baseline;justify-content:space-between;background:var(--bg);border:1px solid var(--border-bright);border-radius:12px;padding:14px 16px;margin-bottom:14px}
-  .red-total-label{font-size:13px;font-weight:600;color:var(--text-2)}
-  .red-total-num{font-family:var(--mono);font-size:30px;font-weight:800;line-height:1}
-  .red-total-max{font-size:15px;color:var(--text-3);font-weight:600}
-  .red-comp{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:9px}
-  .red-comp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:10px}
-  .red-comp-nome{font-size:13px;font-weight:700;color:var(--text)}
-  .red-comp-nota{font-family:var(--mono);font-size:18px;font-weight:800;flex-shrink:0}
-  .red-comp-max{font-size:11px;color:var(--text-3);font-weight:600}
-  .red-comp-txt{font-size:13px;line-height:1.5;color:var(--text-2)}
-  .red-aviso{font-size:11px;color:var(--text-3);text-align:center;margin-top:12px;line-height:1.4}
+  .rep-modal.red-modal{max-width:min(680px,92vw);width:100%;max-height:90vh;padding:28px 32px}
+  .rep-modal.red-modal .rep-title{font-size:22px;margin-bottom:8px}
+  .rep-modal.red-modal .rep-sub{font-size:14px;margin-bottom:20px}
+  .rep-modal.red-modal .rep-acoes{margin-top:20px}
+  .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:13px;font-size:15px;border-radius:10px}
+  .red-textarea{min-height:320px;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
+  .red-conta{font-family:var(--mono);font-size:12px;color:var(--text-3);text-align:right;margin-top:8px}
+  .red-result:not(:empty){margin-top:20px;border-top:1px solid var(--border);padding-top:20px}
+  .red-carregando{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-2);padding:10px 0}
+  .red-total{display:flex;align-items:baseline;justify-content:space-between;background:var(--bg);border:1px solid var(--border-bright);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  .red-total-label{font-size:14px;font-weight:600;color:var(--text-2)}
+  .red-total-num{font-family:var(--mono);font-size:36px;font-weight:800;line-height:1}
+  .red-total-max{font-size:16px;color:var(--text-3);font-weight:600}
+  .red-comp{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+  .red-comp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:12px}
+  .red-comp-nome{font-size:14px;font-weight:700;color:var(--text)}
+  .red-comp-nota{font-family:var(--mono);font-size:22px;font-weight:800;flex-shrink:0}
+  .red-comp-max{font-size:12px;color:var(--text-3);font-weight:600}
+  .red-comp-txt{font-size:14px;line-height:1.55;color:var(--text-2)}
+  .red-aviso{font-size:12px;color:var(--text-3);text-align:center;margin-top:14px;line-height:1.5}
   .rep-overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:2147483600;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:20px;box-sizing:border-box}
   .rep-overlay.aberto{display:flex !important;align-items:center !important;justify-content:center !important;animation:repFade .25s ease}
   @keyframes repFade{from{opacity:0}to{opacity:1}}
