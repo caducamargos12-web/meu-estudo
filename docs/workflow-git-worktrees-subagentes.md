@@ -256,3 +256,48 @@ git add .claude\skills\nome-da-skill\SKILL.md
 ```
 
 Só usar `git add .` se `git status` mostrar que todas as mudanças pertencem claramente à mesma tarefa e não há arquivos temporários, cache ou mudanças de outra sessão.
+
+## Recuperação automática de erros Git
+
+Quando ocorrer erro de Git, Claude Code deve usar a skill `recuperar-git-meu-estudo` antes de pedir ajuda a Carlos.
+
+### Erros que Claude Code pode tentar resolver sozinho
+
+```text
+index.lock
+push rejected por fetch first
+stash no PowerShell com aspas
+pull --rebase com working tree limpa
+separação de arquivos misturados por tipo
+```
+
+### Erros em que Claude Code deve parar e pedir aprovação
+
+```text
+conflito em server.js ou index.html
+conflito após rebase ou stash pop
+necessidade de git reset --hard
+git clean -fd
+git push --force
+segredo no diff
+push direto na main com código sensível
+```
+
+### Protocolo automático resumido
+
+```text
+1. Rodar git status
+2. Identificar erro
+3. Usar recuperar-git-meu-estudo
+4. Aplicar apenas correção segura
+5. Parar se houver conflito ou risco
+6. Mostrar estado final e próximo passo
+```
+
+### Prompt curto de emergência
+
+Se Carlos vir erro de Git, pode pedir:
+
+```text
+Use recuperar-git-meu-estudo e resolva esse erro com segurança. Não use comandos destrutivos sem minha aprovação.
+```

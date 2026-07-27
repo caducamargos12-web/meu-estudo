@@ -206,6 +206,7 @@ Skills novas de workflow:
 - `decidir-workflow-meu-estudo`: decide workflow antes de implementar.
 - `loop-revisao-meu-estudo`: executa ciclos de planejar, implementar, validar, revisar e corrigir.
 - `entrega-git-meu-estudo`: padroniza commit, push, branch e instruções finais.
+- `recuperar-git-meu-estudo`: resolve erros comuns de Git com segurança, como `index.lock`, push rejeitado, stash, pull/rebase e arquivos misturados.
 
 Documento detalhado: `docs/workflow-git-worktrees-subagentes.md`.
 
@@ -237,6 +238,19 @@ Quando terminar uma alteração, Claude Code deve aplicar automaticamente:
 8. Só depois rodar `git commit` e `git push`.
 
 Se a mudança tocar `server.js`, `index.html` com JavaScript, parser, cache, IA, auth ou `GRADE`, não fazer push direto na `main` sem autorização explícita de Carlos.
+
+### Recuperação automática de erros Git
+
+Quando ocorrer erro de Git, Claude Code deve usar `recuperar-git-meu-estudo` antes de pedir ajuda a Carlos.
+
+Pode resolver automaticamente erros seguros, como:
+
+- `index.lock` quando não houver processo Git ativo.
+- `push rejected` por falta de `pull`, usando `stash` temporário quando necessário.
+- `stash@{0}` no PowerShell usando aspas.
+- Separação de arquivos misturados antes de commit.
+
+Deve parar e pedir decisão de Carlos quando houver conflito, risco de perda de alteração, comando destrutivo, segredo no diff ou push direto na `main` com código sensível.
 
 ## Preferências de resposta para Carlos
 
