@@ -2644,7 +2644,7 @@ function assuntoAvaliavel(materiaTeste) {
 // Limite: 1 correção por aluno por dia (controla custo, já que cada redação é única
 // e não dá pra cachear por assunto como resumo/simulado). Cache por texto idêntico:
 // reenviar a MESMA redação não gasta IA de novo nem conta no limite.
-const REDACAO_LIMITE_DIA = 5;
+const REDACAO_LIMITE_DIA = 1;
 let redacaoUso = {};   // { user: { data:'YYYY-MM-DD', n:0 } }
 let redacaoCache = {}; // { hashDoTexto: correcao }
 const REDACAO_USO_FILE = DATA_DIR + '/redacao_uso.json';
