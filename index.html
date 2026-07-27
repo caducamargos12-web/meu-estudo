@@ -364,7 +364,7 @@
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
   .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
-  .red-modal{max-width:min(85vw,1200px);max-height:90vh}
+  .rep-modal.red-modal{max-width:min(85vw,1200px);width:85vw;max-height:90vh}
   .red-textarea{min-height:280px;font-size:14.5px;line-height:1.55}
   .red-conta{font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:right;margin-top:5px}
   .red-result:not(:empty){margin-top:16px;border-top:1px solid var(--border);padding-top:16px}
@@ -763,24 +763,24 @@ function montarBoasVindas(){
   const nome=user.charAt(0).toUpperCase()+user.slice(1)+'!';
   const frase=FRASES[Math.floor(Math.random()*FRASES.length)];
 
-  // monta o nome letra por letra (revelação calma, mas mais ágil)
+  // monta o nome letra por letra (stagger 50ms, início em 0.3s)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${0.4+i*0.06}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${0.3+i*0.05}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
-  // monta a frase palavra por palavra
+  // monta a frase palavra por palavra (stagger 80ms, início após nome)
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
-  const nomeFim=0.4+nome.length*0.06;
-  const inicioFrase=nomeFim+0.3;
+  const nomeFim=0.3+nome.length*0.05;
+  const inicioFrase=nomeFim+0.25;
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.4}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.08}s">${p}</span>`
   ).join(' ');
 
   // calcula quando a última palavra termina de animar (em ms)
-  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.4+1.0)*1000;
-  welcomeMinTime=Math.min(fimAnimacao+300,5000); // teto reduzido para carregar mais rápido
+  const fimAnimacao=(inicioFrase+(palavras.length-1)*0.08+0.5)*1000;
+  welcomeMinTime=Math.min(fimAnimacao+400,4000); // teto para não prender o aluno
 
   // força o navegador a reiniciar as animações CSS do zero
   void wc.offsetWidth;
