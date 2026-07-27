@@ -763,19 +763,19 @@ function montarBoasVindas(){
   const nome=user.charAt(0).toUpperCase()+user.slice(1)+'!';
   const frase=FRASES[Math.floor(Math.random()*FRASES.length)];
 
-  // monta o nome letra por letra (stagger 50ms, início em 0.3s)
+  // monta o nome letra por letra (stagger 70ms, início em 0.5s — mais lento)
   const nameEl=document.getElementById('wcName');
   nameEl.innerHTML=nome.split('').map((ch,i)=>
-    `<span class="wc-char" style="animation-delay:${0.3+i*0.05}s">${ch===' '?'&nbsp;':ch}</span>`
+    `<span class="wc-char" style="animation-delay:${0.5+i*0.07}s">${ch===' '?'&nbsp;':ch}</span>`
   ).join('');
 
-  // monta a frase palavra por palavra (stagger 80ms, início após nome)
+  // monta a frase palavra por palavra (stagger 120ms, início após nome)
   const quoteEl=document.getElementById('wcQuote');
   const palavras=frase.split(' ');
-  const nomeFim=0.3+nome.length*0.05;
-  const inicioFrase=nomeFim+0.25;
+  const nomeFim=0.5+nome.length*0.07;
+  const inicioFrase=nomeFim+0.3;
   quoteEl.innerHTML=palavras.map((p,i)=>
-    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.08}s">${p}</span>`
+    `<span class="wc-word" style="animation-delay:${inicioFrase+i*0.12}s">${p}</span>`
   ).join(' ');
 
   // calcula quando a última palavra termina de animar (em ms)
