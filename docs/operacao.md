@@ -48,20 +48,24 @@ Se houver dúvida, preferir SIM quando a mudança toca dados de aula.
 Rodar:
 
 ```bash
+npm run check:server
+```
+
+Equivalente direto:
+
+```bash
 node -c server.js
 ```
 
 ### index.html
 
-Extrair blocos `<script>` e validar com Node.
-
-Exemplo de abordagem:
+Rodar:
 
 ```bash
-node scripts/validar-index-scripts.js
+npm run check:index
 ```
 
-Se esse script ainda não existir, criar ou extrair manualmente os scripts temporariamente.
+Esse comando usa `scripts/validate-index-scripts.js` para extrair e validar scripts inline do `index.html`.
 
 ### Teste com dados reais
 

@@ -105,12 +105,21 @@ Regra de negócio: IA deve ser usada com parcimônia. Sempre que for possível u
 
 Antes de qualquer entrega com código:
 
-1. Rodar `node -c server.js` se `server.js` foi alterado.
-2. Se `index.html` foi alterado, extrair os blocos `<script>` e validar com `node -c`.
-3. Testar a lógica nova com dados reais, preferencialmente via `/diag` ou conteúdo real de blog.
+1. Rodar `npm run check:server` ou `node -c server.js` se `server.js` foi alterado.
+2. Rodar `npm run check:index` se `index.html` foi alterado.
+3. Testar a lógica nova com dados reais, preferencialmente via `/diag`, conteúdo real de blog ou `test-fixtures/`.
 4. Não confiar só em validação de sintaxe.
 5. Explicar se precisa limpar cache.
 6. Não entregar mudança parcial como se estivesse completa.
+
+Estruturas profissionais de suporte:
+
+- `scripts/validate-index-scripts.js`: valida scripts inline do `index.html`.
+- `scripts/test-parser.js`: harness inicial para fixtures de parser.
+- `test-fixtures/`: exemplos reais sem segredo para validar parsers.
+- `.github/PULL_REQUEST_TEMPLATE.md`: checklist de revisão antes de merge.
+- `docs/decisions/`: decisões arquiteturais e de negócio.
+- `.gitignore`: protege caches, logs, `.env` e configurações locais.
 
 ## Segurança
 

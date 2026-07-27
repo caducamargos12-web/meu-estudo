@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "server.js",
   "engines": { "node": ">=18.0.0" },
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "check:server": "node -c server.js",
+    "check:index": "node scripts/validate-index-scripts.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "bcryptjs": "^2.4.3"

@@ -301,3 +301,161 @@ Se Carlos vir erro de Git, pode pedir:
 ```text
 Use recuperar-git-meu-estudo e resolva esse erro com segurança. Não use comandos destrutivos sem minha aprovação.
 ```
+
+## Etapa preparatória profissional antes da multi-turma
+
+Antes de implementar multi-turma, manter estas estruturas ativas:
+
+```text
+scripts/validate-index-scripts.js
+scripts/test-parser.js
+test-fixtures/
+.github/PULL_REQUEST_TEMPLATE.md
+docs/decisions/
+.gitignore
+```
+
+### Validações padronizadas
+
+Se `server.js` mudar:
+
+```powershell
+npm run check:server
+```
+
+Se `index.html` mudar:
+
+```powershell
+npm run check:index
+```
+
+Se parser/matéria mudar, usar dado real salvo em `test-fixtures/` sem senha.
+
+### Regra de PR
+
+Para branches de código, usar o template em `.github/PULL_REQUEST_TEMPLATE.md` antes de merge para `main`.
+
+### Regra de decisões
+
+Para decisões grandes, criar ADR em `docs/decisions/`, especialmente multi-turma, mudanças de IA, cache, auth e integrações.
+
+## Plano de entrada na multi-turma
+
+### Passo 1: criar worktree
+
+```powershell
+cd C:\Users\Carl\projects\meu-estudo
+git status
+git pull
+git worktree add ..\meu-estudo-multiturma -b feature/multiturma-arquitetura
+cd ..\meu-estudo-multiturma
+code .
+```
+
+Só seguir se `git status` estiver limpo antes.
+
+### Passo 2: prompt inicial de multi-turma
+
+```text
+Siga o workflow obrigatório do CLAUDE.md.
+
+Tarefa:
+Planejar a arquitetura multi-turma do Meu Estudo.
+
+Contexto:
+O app hoje é single-turma. A GRADE é fixa no server.js. Quero expandir para as 7 turmas da manhã, mas sem quebrar o 3º ano atual, que já está em produção e monetizado.
+
+Leia obrigatoriamente:
+- CLAUDE.md
+- docs/arquitetura.md
+- docs/fase-2-multiturma.md
+- docs/workflow-git-worktrees-subagentes.md
+- docs/bugs-resolvidos.md
+- docs/operacao.md
+- docs/seguranca.md
+- docs/decisions/001-workflow-producao.md
+- docs/decisions/002-multiturma-gradual.md
+
+Use sub-agentes antes de propor qualquer implementação:
+
+Sub-agente 1: arquitetura de dados e auth.
+Analise como representar turma, aluno, fallback para 3º ano, compatibilidade com usuários atuais e impacto no admin.
+
+Sub-agente 2: backend/server.js.
+Mapeie onde a GRADE global provavelmente é usada, como trocar por grade resolvida por turma, como preservar caches, parsers e /diag.
+
+Sub-agente 3: frontend/index.html.
+Analise impactos em SSE, localStorage, Central de Deveres, checkboxes, sessão do aluno e renderização por turma.
+
+Sub-agente 4: parsers e blogs.
+Analise como adicionar uma turma piloto sem quebrar parsers existentes, como coletar fixtures reais via /diag e como testar blogs novos.
+
+Sub-agente 5: testes, rollback e operação.
+Crie plano de validação, ordem de commits, riscos, rollback, necessidade de limpar cache e testes em aba anônima.
+
+Não implemente nada.
+Consolide um plano de arquitetura com:
+1. Decisão recomendada
+2. Alternativas descartadas
+3. Arquivos impactados
+4. Ordem de implementação
+5. Commits pequenos sugeridos
+6. Validações obrigatórias
+7. Riscos principais
+8. Plano de rollback
+9. O que depende de dados reais das turmas novas
+```
+
+### Ordem de implementação recomendada
+
+1. Preparar `GRADE_3_ANO`, `TURMAS` e fallback sem mudar comportamento.
+2. Trocar usos diretos de `GRADE` por grade resolvida pelo usuário.
+3. Adicionar campo de turma no usuário/admin, se necessário.
+4. Preparar estrutura para turma piloto.
+5. Adicionar dados reais da turma piloto.
+6. Expandir gradualmente só depois da turma piloto funcionar.
+
+### Commits pequenos sugeridos
+
+```text
+refactor(turmas): preparar grade do 3 ano para multi-turma
+refactor(turmas): resolver grade pelo usuário autenticado
+feat(admin): adicionar turma ao cadastro de aluno
+feat(turmas): adicionar estrutura para turma piloto
+feat(turmas): adicionar primeira matéria da turma piloto
+fix(parser): adaptar parser para blog da turma piloto
+```
+
+### Loop obrigatório da multi-turma
+
+```text
+planejar → aprovar → implementar pequena etapa → validar sintaxe → validar comportamento antigo → revisar diff → corrigir → validar de novo → commit pequeno → próxima etapa
+```
+
+Nunca implementar multi-turma inteira em um único commit.
+
+### Prompt para finalizar cada etapa
+
+```text
+Finalize esta etapa seguindo o workflow obrigatório do CLAUDE.md.
+
+Use validar-entrega-meu-estudo, loop-revisao-meu-estudo e entrega-git-meu-estudo.
+
+Antes de commit/push:
+1. Rode git status
+2. Separe arquivos por tipo
+3. Não use git add .
+4. Valide server.js com npm run check:server se mudou
+5. Valide index.html com npm run check:index se mudou
+6. Verifique segredos no diff
+7. Diga se precisa limpar cache
+8. Mostre o commit planejado
+9. Peça minha aprovação antes de commit/push
+```
+
+### Prompt para erro de Git
+
+```text
+Use recuperar-git-meu-estudo e resolva esse erro com segurança.
+Não use comandos destrutivos sem minha aprovação.
+```
