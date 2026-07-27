@@ -2697,6 +2697,13 @@ app.post('/api/redacao', rateLimitGeral, auth, async (req, res) => {
     'C5: proposta de intervenção detalhada (agente, ação, meio, finalidade), respeitando os direitos humanos.\n' +
     'Para cada competência dê a nota em múltiplos de 40 (0, 40, 80, 120, 160 ou 200) e UM comentário ' +
     'objetivo de 2 a 3 frases: o que sustentou a nota e como melhorar.\n' +
+    'Use uma régua rigorosa, próxima da correção real do ENEM. Não premie intenção vaga: avalie o que está escrito.\n' +
+    'Âncoras obrigatórias de nota: texto sem repertório sociocultural produtivo não deve passar de 120 na C2; ' +
+    'argumentação genérica, repetitiva ou sem desenvolvimento não deve passar de 80 na C3; ' +
+    'proposta sem agente, ação, meio, finalidade e detalhamento não deve passar de 40 na C5; ' +
+    'texto com muitos erros básicos de ortografia, acentuação, pontuação ou concordância deve ficar entre 40 e 80 na C1.\n' +
+    'Se o texto parecer apenas um parágrafo expandido, com tese vaga e solução genérica, a nota total deve tender a ficar abaixo de 500. ' +
+    'Reserve 1000 apenas para redações completas, muito bem desenvolvidas e com proposta detalhada.\n' +
     'Seja honesto e criterioso, não infle notas. Responda APENAS JSON, sem markdown:\n' +
     '{"competencias":[{"n":1,"nota":0,"comentario":""},{"n":2,"nota":0,"comentario":""},{"n":3,"nota":0,"comentario":""},{"n":4,"nota":0,"comentario":""},{"n":5,"nota":0,"comentario":""}]}\n\n' +
     'REDAÇÃO DO ALUNO:\n"""\n' + texto + '\n"""';
