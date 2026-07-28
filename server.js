@@ -2213,8 +2213,8 @@ function dataDoDia(dayKey) {
   return `${dd}/${mm}/${aaaa}`;
 }
 
-async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
-  const materias = GRADE[dayKey];
+async function processarDia(res, grade, dayKey, ehPrevia, offsetIndex) {
+  const materias = grade[dayKey] || [];
   const chave = chaveCacheHoje(dayKey);
   const dataRef = dataDoDia(dayKey);
   const labelDia = DIAS_PT[dayKey];
@@ -3128,6 +3128,9 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const ordem = ['seg','ter','qua','qui','sex'];
   const hojeDay = agoraEfetivo().getUTCDay();
+  const aluno = alunos[req.user] || null;
+  const turmaId = getTurmaIdDoUsuario(aluno);
+  const grade = getGradePorId(turmaId);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -3158,16 +3161,16 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   }
 
   // calcula o total de matérias para o front montar os placeholders
-  const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
+  const totalMaterias = (diaPrincipal ? (grade[diaPrincipal] || []).length : 0) + (diaPrevia ? (grade[diaPrevia] || []).length : 0);
 
   res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {
-    offset = await processarDia(res, diaPrincipal, false, offset);
+    offset = await processarDia(res, grade, diaPrincipal, false, offset);
   }
   if (diaPrevia) {
-    offset = await processarDia(res, diaPrevia, true, offset);
+    offset = await processarDia(res, grade, diaPrevia, true, offset);
   }
 
   // limpa caches de dias muito antigos (mantém os de hoje)
