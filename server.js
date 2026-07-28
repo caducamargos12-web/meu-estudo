@@ -3137,6 +3137,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   const hojeDay = agoraEfetivo().getUTCDay();
   const aluno = alunos[req.user] || null;
   const turmaId = getTurmaIdDoUsuario(aluno);
+  const turma = getTurmaPorId(turmaId);
   const grade = getGradePorId(turmaId);
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -3170,7 +3171,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   // calcula o total de matérias para o front montar os placeholders
   const totalMaterias = (diaPrincipal ? (grade[diaPrincipal] || []).length : 0) + (diaPrevia ? (grade[diaPrevia] || []).length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao, turmaId, turmaNome: turma.nome }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {
