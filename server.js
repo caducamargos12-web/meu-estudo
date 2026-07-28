@@ -487,6 +487,9 @@ function checkAdmin(req, res, next) {
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   const agora = new Date();
   const lista = Object.keys(alunos).map(user => {
+    const registro = alunos[user] || {};
+    const turmaId = getTurmaIdDoUsuario(registro);
+    const turma = getTurmaPorId(turmaId);
     const devs = dispositivosPorUser[user] || [];
     const pag = pagamentos[user] || null;
 
@@ -509,6 +512,8 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
 
     return {
       user,
+      turma: turmaId,
+      turmaNome: turma.nome,
       vinculado: devs.length > 0,
       qtd_dispositivos: devs.length,
       max_dispositivos: MAX_DISPOSITIVOS,
@@ -529,15 +534,16 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
 
 // ── cadastrar um novo aluno (senha guardada em hash) ─────────────────────────
 app.post('/api/admin/criar-aluno', checkAdmin, (req, res) => {
-  let { user, senha } = req.body;
+  let { user, senha, turma } = req.body;
   user = (user || '').trim();
   senha = (senha || '').trim();
+  turma = turmaValida(turma) ? turma : TURMA_PADRAO;
   if (!user || !senha) return res.json({ error: 'Informe usuário e senha' });
   if (user.length < 2) return res.json({ error: 'Usuário muito curto' });
   if (senha.length < 4) return res.json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
   if (/[,:]/.test(user)) return res.json({ error: 'Usuário não pode conter , ou :' });
   if (alunos[user]) return res.json({ error: 'Já existe um aluno com esse nome' });
-  alunos[user] = { hash: bcrypt.hashSync(senha, 10), criadoEm: new Date().toISOString() };
+  alunos[user] = { hash: bcrypt.hashSync(senha, 10), criadoEm: new Date().toISOString(), turma };
   salvarAlunos();
   res.json({ ok: true });
 });

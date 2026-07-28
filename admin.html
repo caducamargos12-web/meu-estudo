@@ -107,6 +107,9 @@
       <div class="form-aluno">
         <input id="novoUser" placeholder="Nome de usuário" autocomplete="off" />
         <input id="novoPass" placeholder="Senha (mín. 4 caracteres)" autocomplete="off" />
+        <select id="novoTurma">
+          <option value="3-ano">3º ano</option>
+        </select>
         <button class="btn-criar" onclick="criarAluno()">Cadastrar aluno</button>
       </div>
       <div id="criarMsg" class="form-msg"></div>
@@ -619,7 +622,7 @@ function renderLista(alunos){
       <div class="aluno-top">
         <div style="flex:1">
           <div class="aluno-nome">${esc(a.user)} ${badge}</div>
-          <div class="venc-info">${vencInfo}</div>
+          <div class="venc-info">Turma: ${esc(a.turmaNome||'3º ano')} · ${vencInfo}</div>
         </div>
         <div class="aluno-acoes">
           <button class="small pay" onclick="marcarPagamento('${a.user}')">✓ Marcar pago</button>
@@ -672,18 +675,20 @@ async function removerDispositivo(user, deviceId){
 async function criarAluno(){
   const user=document.getElementById('novoUser').value.trim();
   const senha=document.getElementById('novoPass').value.trim();
+  const turma=document.getElementById('novoTurma').value;
   const msg=document.getElementById('criarMsg');
   if(!user||!senha){msg.className='form-msg erro';msg.textContent='Preencha usuário e senha.';return;}
   try{
     const res=await fetch('/api/admin/criar-aluno',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({adminSenha,user,senha})
+      body:JSON.stringify({adminSenha,user,senha,turma})
     });
     const data=await res.json();
     if(data.error){msg.className='form-msg erro';msg.textContent=data.error;return;}
     msg.className='form-msg ok';msg.textContent='Aluno "'+user+'" cadastrado!';
     document.getElementById('novoUser').value='';
     document.getElementById('novoPass').value='';
+    document.getElementById('novoTurma').value='3-ano';
     carregar();
   }catch(e){msg.className='form-msg erro';msg.textContent='Erro de conexão.';}
 }
