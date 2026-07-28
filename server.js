@@ -728,7 +728,7 @@ app.post('/api/login', (req, res) => {
 //   'soDever'    = só aula do dia + deveres (sem teste, resumo ou simulado)
 //   'provaFinal' = aula + deveres + resumo; só mostra matéria do teste + simulado
 //                  quando detectar teste/prova/avaliação marcado no blog
-const GRADE = {
+const GRADE_3_ANO = {
   seg: [
     { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14, avaliacaoPorData:true, avisoAvaliacao:'Prova com consulta à apostila. Estude as páginas indicadas.' },
     { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true, maxDiasDever:14 },
@@ -760,6 +760,7 @@ const GRADE = {
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
+const GRADE = GRADE_3_ANO;
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
 // modelos em ordem de uso. Haiku primeiro (barato e rápido). Se ele falhar em gerar
 // JSON válido, o sistema sobe automaticamente para o Sonnet (mais capaz). Assim, o
