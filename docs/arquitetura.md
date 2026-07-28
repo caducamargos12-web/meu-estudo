@@ -4,7 +4,7 @@
 
 Meu Estudo é um micro-SaaS em Node.js/Express que agrega blogs Blogspot de professores do CNS Anglo e transforma conteúdo disperso em uma visão diária de estudo para alunos.
 
-O app hoje é single-turma. A `GRADE` é fixa no código e todos os alunos veem a mesma grade.
+A arquitetura atual está preparada para multi-turma na Fase 2A. A única turma cadastrada ainda é o `3-ano`, mas o fluxo principal já resolve a grade pela turma do aluno com fallback seguro.
 
 ## Backend
 
@@ -17,7 +17,7 @@ Responsabilidades:
 - Limpar HTML do Blogspot.
 - Processar conteúdo por matéria.
 - Chamar IA quando necessário.
-- Fazer cache por dia e por assunto.
+- Fazer cache por dia, turma e assunto.
 - Expor endpoints como `/api/redacao`, `/api/resumo`, `/api/simulado`, `/diag`.
 
 ## Frontend
@@ -32,18 +32,52 @@ Responsabilidades:
 - Salvar estado de dever feito no `localStorage`.
 - Exibir Central de Deveres.
 - Exibir overlays, como reporte de erro e correção de redação.
+- Guardar em memória a turma atual recebida no evento SSE `start`.
+
+## Turmas e grade
+
+A grade original do 3º ano foi separada como `GRADE_3_ANO`.
+
+A Fase 2A adicionou em `server.js`:
+
+- `TURMA_PADRAO = '3-ano'`.
+- `TURMAS` inline, inicialmente com apenas `3-ano`.
+- Helpers de turma e grade:
+  - `turmaValida(turmaId)`.
+  - `getTurmaPorId(turmaId)`.
+  - `getGradePorId(turmaId)`.
+  - `getTurmaIdDoUsuario(user)`.
+  - `getGradeDoUsuario(user)`.
+
+Regra de compatibilidade:
+
+- Usuário antigo sem campo `turma` cai em `3-ano`.
+- Turma ausente ou inválida cai em `3-ano`.
+- Nenhuma turma piloto foi adicionada na Fase 2A.
 
 ## Fluxo de leitura de matéria
 
-1. A `GRADE` define matéria, professor, URL, formato e filtros.
-2. `fetchBlog(url)` busca o HTML.
-3. `obterHtml()` tenta acesso direto e proxies.
-4. `limparHtmlBlog(html, removerBlocos)` remove ruído do Blogspot.
-5. O texto é cortado com estratégia topo+fim quando grande demais.
-6. O resultado entra no cache de blog.
-7. O processador específico da matéria extrai aula, dever e datas.
-8. `comMateriais` aplica regras universais de exibição.
-9. O frontend recebe por SSE e renderiza.
+1. `/api/today` autentica o aluno e lê `req.user`.
+2. O backend busca o registro em `alunos[req.user]`.
+3. `getTurmaIdDoUsuario(aluno)` resolve a turma com fallback para `3-ano`.
+4. `getGradePorId(turmaId)` resolve a grade.
+5. `processarDia(res, grade, turmaId, dayKey, ehPrevia, offsetIndex)` processa o dia usando a grade resolvida.
+6. Cada item da grade define matéria, professor, URL, formato e filtros.
+7. `fetchBlog(url)` busca o HTML.
+8. `obterHtml()` tenta acesso direto e proxies.
+9. `limparHtmlBlog(html, removerBlocos)` remove ruído do Blogspot.
+10. O texto é cortado com estratégia topo+fim quando grande demais.
+11. O resultado entra no cache de blog.
+12. O processador específico da matéria extrai aula, dever e datas.
+13. `comMateriais` aplica regras universais de exibição.
+14. O frontend recebe por SSE e renderiza.
+
+O evento SSE `start` agora inclui:
+
+- `turmaId`.
+- `turmaNome`.
+
+O frontend guarda esses dados em `window._turmaAtual`, sem alterar visual, `localStorage`, chaves `chk_*` ou Central de Deveres.
 
 ## Limpeza de HTML
 
@@ -92,12 +126,38 @@ Motivo: alguns blogs colocam conteúdo novo no topo, outros no fim. Cortar só o
 
 ## Cache
 
-- `blogCache`: cache de blog por cerca de 10 minutos.
-- `cacheDia`: cache de extração por dia, chave baseada em `isoEfetivo()+dayKey`.
+- `blogCache`: cache de blog por URL em memória. Pode ser compartilhado entre turmas quando a URL é a mesma.
+- `cacheDia`: cache de extração por dia e turma, chave baseada em `isoEfetivo()+turmaId+dayKey`.
 - `resumoCache`: cache de resumo/simulado por assunto.
 - Redação tem cache próprio por hash de texto.
 
-Cache reduz custo de IA porque a extração principal roda aproximadamente uma vez por dia por matéria, não uma vez por aluno.
+Formato do `cacheDia` após a Fase 2A:
+
+```text
+YYYY-MM-DD_turmaId_dayKey
+```
+
+Exemplo:
+
+```text
+2026-07-28_3-ano_ter
+```
+
+Cache reduz custo de IA porque a extração principal roda aproximadamente uma vez por dia por matéria e turma, não uma vez por aluno.
+
+## Admin e alunos
+
+Os alunos ficam persistidos em `alunos.json`.
+
+O admin agora:
+
+- Mostra `turma` e `turmaNome` na listagem de alunos.
+- Aceita `turma` ao criar aluno.
+- Valida a turma contra `TURMAS`.
+- Salva a turma no registro de novos alunos.
+- Usa fallback `3-ano` para alunos antigos sem turma.
+
+Ainda não existe endpoint `/api/admin/trocar-turma`. Ele só deve ser criado quando houver necessidade real de mover alunos entre turmas.
 
 ## Diagnóstico
 
