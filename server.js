@@ -827,12 +827,13 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-function chaveCacheHoje(dayKey) {
+function chaveCacheHoje(dayKey, turmaId) {
   const dia = isoEfetivo(); // AAAA-MM-DD (com virada às 22:30)
+  const turma = turmaValida(turmaId) ? turmaId : TURMA_PADRAO;
   // a versão NÃO entra mais na chave: assim um deploy não joga fora o cache bom.
   // o cache se renova sozinho a cada dia (a data está na chave). Para forçar
   // reprocessamento após mudar a lógica de leitura, use /api/limpar-cache.
-  return `${dia}_${dayKey}`;
+  return `${dia}_${turma}_${dayKey}`;
 }
 
 // ── busca blog ──────────────────────────────────────────────────────────────
@@ -2213,9 +2214,9 @@ function dataDoDia(dayKey) {
   return `${dd}/${mm}/${aaaa}`;
 }
 
-async function processarDia(res, grade, dayKey, ehPrevia, offsetIndex) {
+async function processarDia(res, grade, turmaId, dayKey, ehPrevia, offsetIndex) {
   const materias = grade[dayKey] || [];
-  const chave = chaveCacheHoje(dayKey);
+  const chave = chaveCacheHoje(dayKey, turmaId);
   const dataRef = dataDoDia(dayKey);
   const labelDia = DIAS_PT[dayKey];
 
@@ -3167,10 +3168,10 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
 
   let offset = 0;
   if (diaPrincipal) {
-    offset = await processarDia(res, grade, diaPrincipal, false, offset);
+    offset = await processarDia(res, grade, turmaId, diaPrincipal, false, offset);
   }
   if (diaPrevia) {
-    offset = await processarDia(res, grade, diaPrevia, true, offset);
+    offset = await processarDia(res, grade, turmaId, diaPrevia, true, offset);
   }
 
   // limpa caches de dias muito antigos (mantém os de hoje)
