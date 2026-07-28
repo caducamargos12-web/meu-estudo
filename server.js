@@ -760,6 +760,39 @@ const GRADE_3_ANO = {
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
+const TURMA_PADRAO = '3-ano';
+const TURMAS = {
+  '3-ano': {
+    id: '3-ano',
+    nome: '3º ano',
+    ativa: true,
+    grade: GRADE_3_ANO,
+  },
+};
+
+function turmaValida(turmaId) {
+  return typeof turmaId === 'string' && !!TURMAS[turmaId];
+}
+
+function getTurmaPorId(turmaId) {
+  return turmaValida(turmaId) ? TURMAS[turmaId] : TURMAS[TURMA_PADRAO];
+}
+
+function getGradePorId(turmaId) {
+  return getTurmaPorId(turmaId).grade;
+}
+
+function getTurmaIdDoUsuario(user) {
+  if (typeof user === 'string') {
+    return TURMA_PADRAO;
+  }
+  return turmaValida(user?.turma) ? user.turma : TURMA_PADRAO;
+}
+
+function getGradeDoUsuario(user) {
+  return getGradePorId(getTurmaIdDoUsuario(user));
+}
+
 const GRADE = GRADE_3_ANO;
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
 // modelos em ordem de uso. Haiku primeiro (barato e rápido). Se ele falhar em gerar
