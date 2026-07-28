@@ -1256,6 +1256,7 @@ function loadDay(){
     if(msg.type==='start'){
       total=msg.total;
       fimDeSemana=msg.fimDeSemana;
+      window._turmaAtual={id:msg.turmaId,nome:msg.turmaNome};
       document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':msg.dayLabel;
       const cards=document.getElementById('cards');
       cards.innerHTML='';

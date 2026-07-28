@@ -487,6 +487,9 @@ function checkAdmin(req, res, next) {
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   const agora = new Date();
   const lista = Object.keys(alunos).map(user => {
+    const registro = alunos[user] || {};
+    const turmaId = getTurmaIdDoUsuario(registro);
+    const turma = getTurmaPorId(turmaId);
     const devs = dispositivosPorUser[user] || [];
     const pag = pagamentos[user] || null;
 
@@ -509,6 +512,8 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
 
     return {
       user,
+      turma: turmaId,
+      turmaNome: turma.nome,
       vinculado: devs.length > 0,
       qtd_dispositivos: devs.length,
       max_dispositivos: MAX_DISPOSITIVOS,
@@ -529,15 +534,16 @@ app.get('/api/admin/alunos', checkAdmin, (req, res) => {
 
 // ── cadastrar um novo aluno (senha guardada em hash) ─────────────────────────
 app.post('/api/admin/criar-aluno', checkAdmin, (req, res) => {
-  let { user, senha } = req.body;
+  let { user, senha, turma } = req.body;
   user = (user || '').trim();
   senha = (senha || '').trim();
+  turma = turmaValida(turma) ? turma : TURMA_PADRAO;
   if (!user || !senha) return res.json({ error: 'Informe usuário e senha' });
   if (user.length < 2) return res.json({ error: 'Usuário muito curto' });
   if (senha.length < 4) return res.json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
   if (/[,:]/.test(user)) return res.json({ error: 'Usuário não pode conter , ou :' });
   if (alunos[user]) return res.json({ error: 'Já existe um aluno com esse nome' });
-  alunos[user] = { hash: bcrypt.hashSync(senha, 10), criadoEm: new Date().toISOString() };
+  alunos[user] = { hash: bcrypt.hashSync(senha, 10), criadoEm: new Date().toISOString(), turma };
   salvarAlunos();
   res.json({ ok: true });
 });
@@ -728,7 +734,7 @@ app.post('/api/login', (req, res) => {
 //   'soDever'    = só aula do dia + deveres (sem teste, resumo ou simulado)
 //   'provaFinal' = aula + deveres + resumo; só mostra matéria do teste + simulado
 //                  quando detectar teste/prova/avaliação marcado no blog
-const GRADE = {
+const GRADE_3_ANO = {
   seg: [
     { m:'Filosofia',      p:'Sandra Maisa',    url:'https://profsandracnsanglo.blogspot.com/p/3-ano-filosofia.html', tipo:'provaFinal', maxDiasDever:14, avaliacaoPorData:true, avisoAvaliacao:'Prova com consulta à apostila. Estude as páginas indicadas.' },
     { m:'Geografia',      p:'Gabriel Fonseca', url:'https://profgabrielcnsanglo.blogspot.com/p/3-ano-geografia.html', ignorarAvaliacao:true, testeAulaAnterior:true, maxDiasDever:14 },
@@ -760,6 +766,40 @@ const GRADE = {
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/3-ano.html', maxDeveres:1, formato:'fisica', aviso:'O professor de Física ficou afastado por motivo de saúde e um substituto assumiu as aulas, que podem não estar registradas no blog. Por isso, a análise de Física pode conter erros ou ficar desatualizada até o professor retornar e atualizar o conteúdo.' },
   ],
 };
+const TURMA_PADRAO = '3-ano';
+const TURMAS = {
+  '3-ano': {
+    id: '3-ano',
+    nome: '3º ano',
+    ativa: true,
+    grade: GRADE_3_ANO,
+  },
+};
+
+function turmaValida(turmaId) {
+  return typeof turmaId === 'string' && !!TURMAS[turmaId];
+}
+
+function getTurmaPorId(turmaId) {
+  return turmaValida(turmaId) ? TURMAS[turmaId] : TURMAS[TURMA_PADRAO];
+}
+
+function getGradePorId(turmaId) {
+  return getTurmaPorId(turmaId).grade;
+}
+
+function getTurmaIdDoUsuario(user) {
+  if (typeof user === 'string') {
+    return TURMA_PADRAO;
+  }
+  return turmaValida(user?.turma) ? user.turma : TURMA_PADRAO;
+}
+
+function getGradeDoUsuario(user) {
+  return getGradePorId(getTurmaIdDoUsuario(user));
+}
+
+const GRADE = GRADE_3_ANO;
 const DIAS_PT = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta' };
 // modelos em ordem de uso. Haiku primeiro (barato e rápido). Se ele falhar em gerar
 // JSON válido, o sistema sobe automaticamente para o Sonnet (mais capaz). Assim, o
@@ -793,12 +833,13 @@ function salvarCache() {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 // versão do cache: mudar este número invalida todo o cache antigo no próximo deploy
-function chaveCacheHoje(dayKey) {
+function chaveCacheHoje(dayKey, turmaId) {
   const dia = isoEfetivo(); // AAAA-MM-DD (com virada às 22:30)
+  const turma = turmaValida(turmaId) ? turmaId : TURMA_PADRAO;
   // a versão NÃO entra mais na chave: assim um deploy não joga fora o cache bom.
   // o cache se renova sozinho a cada dia (a data está na chave). Para forçar
   // reprocessamento após mudar a lógica de leitura, use /api/limpar-cache.
-  return `${dia}_${dayKey}`;
+  return `${dia}_${turma}_${dayKey}`;
 }
 
 // ── busca blog ──────────────────────────────────────────────────────────────
@@ -2179,9 +2220,9 @@ function dataDoDia(dayKey) {
   return `${dd}/${mm}/${aaaa}`;
 }
 
-async function processarDia(res, dayKey, ehPrevia, offsetIndex) {
-  const materias = GRADE[dayKey];
-  const chave = chaveCacheHoje(dayKey);
+async function processarDia(res, grade, turmaId, dayKey, ehPrevia, offsetIndex) {
+  const materias = grade[dayKey] || [];
+  const chave = chaveCacheHoje(dayKey, turmaId);
   const dataRef = dataDoDia(dayKey);
   const labelDia = DIAS_PT[dayKey];
 
@@ -3094,6 +3135,10 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   const dayMap = { 1:'seg', 2:'ter', 3:'qua', 4:'qui', 5:'sex' };
   const ordem = ['seg','ter','qua','qui','sex'];
   const hojeDay = agoraEfetivo().getUTCDay();
+  const aluno = alunos[req.user] || null;
+  const turmaId = getTurmaIdDoUsuario(aluno);
+  const turma = getTurmaPorId(turmaId);
+  const grade = getGradePorId(turmaId);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -3124,16 +3169,16 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   }
 
   // calcula o total de matérias para o front montar os placeholders
-  const totalMaterias = (diaPrincipal ? GRADE[diaPrincipal].length : 0) + (diaPrevia ? GRADE[diaPrevia].length : 0);
+  const totalMaterias = (diaPrincipal ? (grade[diaPrincipal] || []).length : 0) + (diaPrevia ? (grade[diaPrevia] || []).length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
+  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao, turmaId, turmaNome: turma.nome }) + '\n\n');
 
   let offset = 0;
   if (diaPrincipal) {
-    offset = await processarDia(res, diaPrincipal, false, offset);
+    offset = await processarDia(res, grade, turmaId, diaPrincipal, false, offset);
   }
   if (diaPrevia) {
-    offset = await processarDia(res, diaPrevia, true, offset);
+    offset = await processarDia(res, grade, turmaId, diaPrevia, true, offset);
   }
 
   // limpa caches de dias muito antigos (mantém os de hoje)
