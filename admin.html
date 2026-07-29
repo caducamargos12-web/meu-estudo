@@ -1334,6 +1334,7 @@ function renderFiltroTurmas(alunos){
     sel.value = atual;
   }
   renderAbasTurmas();
+  renderSelectCadastroTurmas();
   atualizarInfoFiltro(alunos.length, alunos.length);
 }
 
@@ -1351,10 +1352,26 @@ function renderAbasTurmas(){
   tabs.innerHTML = botao('todas','Todas') + turmas.map(t=>botao(t.id,t.nome)).join('');
 }
 
+function turmaCadastroPadrao(){
+  if(turmaSelecionada && turmaSelecionada !== 'todas')return turmaSelecionada;
+  return '3-ano';
+}
+
+function renderSelectCadastroTurmas(){
+  const sel = document.getElementById('novoTurma');
+  if(!sel)return;
+  const turmas = turmasParaInterface(alunosCarregados);
+  const valorAtual = turmas.some(t=>t.id===sel.value) ? sel.value : turmaCadastroPadrao();
+  const valor = turmas.some(t=>t.id===turmaCadastroPadrao()) ? turmaCadastroPadrao() : valorAtual;
+  sel.innerHTML = turmas.map(t=>`<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
+  sel.value = valor;
+}
+
 function selecionarAbaTurma(id){
   turmaSelecionada = id || 'todas';
   const sel = document.getElementById('filtroTurma');
   if(sel)sel.value = turmaSelecionada;
+  renderSelectCadastroTurmas();
   aplicarFiltroTurma();
 }
 
@@ -1508,7 +1525,7 @@ async function criarAluno(){
     msg.className='form-msg ok';msg.textContent='Aluno "'+user+'" cadastrado!';
     document.getElementById('novoUser').value='';
     document.getElementById('novoPass').value='';
-    document.getElementById('novoTurma').value='3-ano';
+    document.getElementById('novoTurma').value=turmaCadastroPadrao();
     carregar();
   }catch(e){msg.className='form-msg erro';msg.textContent='Erro de conexão.';}
 }
