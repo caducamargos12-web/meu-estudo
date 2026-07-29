@@ -3152,6 +3152,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
     res.write('data: ' + JSON.stringify({
       type:'recesso',
       bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao,
+      turmaId, turmaNome: turma.nome,
       recesso: recessoConfig,
       mensagem: 'Em recesso. Aulas voltam em ' + dataIsoParaBR(recessoConfig.fim) + '.'
     }) + '\n\n');
