@@ -483,6 +483,18 @@ function checkAdmin(req, res, next) {
   next();
 }
 
+// lista turmas cadastradas para montar as abas do painel admin
+app.get('/api/admin/turmas', checkAdmin, (req, res) => {
+  const turmas = Object.values(TURMAS).map(t => ({
+    id: t.id,
+    nome: t.nome,
+    ativa: !!t.ativa,
+    temGrade: !!t.grade,
+    padrao: t.id === TURMA_PADRAO,
+  }));
+  res.json({ turmas, padrao: TURMA_PADRAO });
+});
+
 // lista alunos e os dispositivos vinculados (com detalhes)
 app.get('/api/admin/alunos', checkAdmin, (req, res) => {
   const agora = new Date();
