@@ -774,24 +774,46 @@ const TURMAS = {
     ativa: true,
     grade: GRADE_3_ANO,
   },
+  // Turmas cadastradas no admin. Ainda não têm grade ativa no app dos alunos;
+  // servem apenas para organizar cadastro, listagem e ações por turma no painel.
+  // Quando uma turma nova ganhar grade, defina ativa:true e preencha grade.
+  '6-fund':  { id: '6-fund',  nome: '6º ano',  ativa: false, grade: null },
+  '7-fund':  { id: '7-fund',  nome: '7º ano',  ativa: false, grade: null },
+  '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: false, grade: null },
+  '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: false, grade: null },
+  '1-medio': { id: '1-medio', nome: '1º médio', ativa: false, grade: null },
+  '2-medio': { id: '2-medio', nome: '2º médio', ativa: false, grade: null },
 };
 
+// turma "existe" no cadastro = id está no mapa. Não confunde com "ativa no app".
 function turmaValida(turmaId) {
   return typeof turmaId === 'string' && !!TURMAS[turmaId];
 }
 
+// turma utilizável no app dos alunos = existe E está ativa E tem grade.
+// Qualquer turma cadastrada no admin pode ser usada como filtro de listagem,
+// mesmo que ainda não tenha grade. Para rotas de aluno (/api/today, grade), só
+// turma com grade vale; caso contrário, caímos no fallback (3-ano).
 function getTurmaPorId(turmaId) {
   return turmaValida(turmaId) ? TURMAS[turmaId] : TURMAS[TURMA_PADRAO];
 }
 
+function getTurmaAtivaPorId(turmaId) {
+  const t = getTurmaPorId(turmaId);
+  return t && t.ativa && t.grade ? t : TURMAS[TURMA_PADRAO];
+}
+
 function getGradePorId(turmaId) {
-  return getTurmaPorId(turmaId).grade;
+  return getTurmaAtivaPorId(turmaId).grade;
 }
 
 function getTurmaIdDoUsuario(user) {
   if (typeof user === 'string') {
     return TURMA_PADRAO;
   }
+  // Se o aluno tem uma turma cadastrada (mesmo inativa), usamos a id dele
+  // para fins de admin/listagem. Para rotas de aluno, getGradePorId cai em 3-ano
+  // quando a turma não tem grade — assim, nenhum aluno vê tela quebrada.
   return turmaValida(user?.turma) ? user.turma : TURMA_PADRAO;
 }
 
