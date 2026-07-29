@@ -748,6 +748,11 @@ app.post('/api/login', (req, res) => {
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE_3_ANO = require('./grades/3-ano');
 const GRADE_2_MEDIO = require('./grades/2-medio');
+const GRADE_1_MEDIO = require('./grades/1-medio');
+const GRADE_9_FUND = require('./grades/9-fund');
+const GRADE_8_FUND = require('./grades/8-fund');
+const GRADE_7_FUND = require('./grades/7-fund');
+const GRADE_6_FUND = require('./grades/6-fund');
 const TURMA_PADRAO = '3-ano';
 const TURMAS = {
   '3-ano': {
@@ -759,11 +764,11 @@ const TURMAS = {
   // Turmas cadastradas no admin. Ainda não têm grade ativa no app dos alunos;
   // servem apenas para organizar cadastro, listagem e ações por turma no painel.
   // Quando uma turma nova ganhar grade, defina ativa:true e preencha grade.
-  '6-fund':  { id: '6-fund',  nome: '6º ano',  ativa: false, grade: null },
-  '7-fund':  { id: '7-fund',  nome: '7º ano',  ativa: false, grade: null },
-  '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: false, grade: null },
-  '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: false, grade: null },
-  '1-medio': { id: '1-medio', nome: '1º médio', ativa: false, grade: null },
+  '6-fund':  { id: '6-fund',  nome: '6º ano',  ativa: true, grade: GRADE_6_FUND },
+  '7-fund':  { id: '7-fund',  nome: '7º ano',  ativa: true, grade: GRADE_7_FUND },
+  '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: true, grade: GRADE_8_FUND },
+  '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: true, grade: GRADE_9_FUND },
+  '1-medio': { id: '1-medio', nome: '1º médio', ativa: true, grade: GRADE_1_MEDIO },
   '2-medio': { id: '2-medio', nome: '2º médio', ativa: true, grade: GRADE_2_MEDIO },
 };
 
