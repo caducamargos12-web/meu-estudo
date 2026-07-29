@@ -748,6 +748,11 @@ app.post('/api/login', (req, res) => {
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE_3_ANO = require('./grades/3-ano');
 const GRADE_2_MEDIO = require('./grades/2-medio');
+const GRADE_1_MEDIO = require('./grades/1-medio');
+const GRADE_9_FUND = require('./grades/9-fund');
+const GRADE_8_FUND = require('./grades/8-fund');
+const GRADE_7_FUND = require('./grades/7-fund');
+const GRADE_6_FUND = require('./grades/6-fund');
 const TURMA_PADRAO = '3-ano';
 const TURMAS = {
   '3-ano': {
@@ -759,11 +764,11 @@ const TURMAS = {
   // Turmas cadastradas no admin. Ainda não têm grade ativa no app dos alunos;
   // servem apenas para organizar cadastro, listagem e ações por turma no painel.
   // Quando uma turma nova ganhar grade, defina ativa:true e preencha grade.
-  '6-fund':  { id: '6-fund',  nome: '6º ano',  ativa: false, grade: null },
-  '7-fund':  { id: '7-fund',  nome: '7º ano',  ativa: false, grade: null },
-  '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: false, grade: null },
-  '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: false, grade: null },
-  '1-medio': { id: '1-medio', nome: '1º médio', ativa: false, grade: null },
+  '6-fund':  { id: '6-fund',  nome: '6º ano',  ativa: true, grade: GRADE_6_FUND },
+  '7-fund':  { id: '7-fund',  nome: '7º ano',  ativa: true, grade: GRADE_7_FUND },
+  '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: true, grade: GRADE_8_FUND },
+  '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: true, grade: GRADE_9_FUND },
+  '1-medio': { id: '1-medio', nome: '1º médio', ativa: true, grade: GRADE_1_MEDIO },
   '2-medio': { id: '2-medio', nome: '2º médio', ativa: true, grade: GRADE_2_MEDIO },
 };
 
@@ -3217,7 +3222,8 @@ app.get('/api/limpar-cache', (req, res) => {
 // ── DIAGNÓSTICO: mostra o texto CRU que o app leu de cada blog, para depurar
 // quando uma matéria não puxa a aula/dever (ex: o professor mudou o formato do blog).
 // Protegido pela senha de admin (mesmo padrão do /api/limpar-cache). Uso:
-//   /diag?senha=ADMIN_SENHA                       -> lista os dias e as matérias
+//   /diag?senha=ADMIN_SENHA                       -> lista os dias e as matérias do 3º ano
+//   /diag?senha=ADMIN_SENHA&turma=2-medio         -> lista os dias e as matérias da turma
 //   /diag?senha=ADMIN_SENHA&dia=ter               -> todas as matérias de terça
 //   /diag?senha=ADMIN_SENHA&dia=ter&materia=quim  -> só a que casar com "quim"
 //   /diag?senha=ADMIN_SENHA&materia=historia      -> busca em todos os dias
@@ -3235,14 +3241,17 @@ app.get('/diag', async (req, res) => {
   const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   const dia = (req.query.dia || '').toString().trim().toLowerCase();
   const materiaFiltro = (req.query.materia || '').toString().trim();
+  const turmaIdDiag = turmaValida(req.query.turma) ? req.query.turma : TURMA_PADRAO;
+  const gradeDiag = getGradePorId(turmaIdDiag);
 
   // sem filtro: mostra o menu do que dá para pedir
   if (!dia && !materiaFiltro) {
     let menu = 'DIAG - o que inspecionar\n\n';
-    menu += 'Uso: /diag?senha=SUA_SENHA&dia=DIA&materia=PARTE_DO_NOME&dataRef=DD/MM/AAAA\n';
-    menu += '(dia e materia sao opcionais; materia casa por pedaco do nome, sem acento; dataRef e opcional)\n\n';
-    for (const dk of Object.keys(GRADE)) {
-      const nomes = (GRADE[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
+    menu += 'Turma: ' + turmaIdDiag + ' (' + getTurmaAtivaPorId(turmaIdDiag).nome + ')\n';
+    menu += 'Uso: /diag?senha=SUA_SENHA&turma=TURMA_ID&dia=DIA&materia=PARTE_DO_NOME&dataRef=DD/MM/AAAA\n';
+    menu += '(turma, dia e materia sao opcionais; materia casa por pedaco do nome, sem acento; dataRef e opcional)\n\n';
+    for (const dk of Object.keys(gradeDiag)) {
+      const nomes = (gradeDiag[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
       menu += dk + ': ' + nomes.join(', ') + '\n';
     }
     return res.send(menu);
@@ -3250,9 +3259,9 @@ app.get('/diag', async (req, res) => {
 
   // coleta os itens que casam com o filtro
   const alvos = [];
-  const dias = dia ? [dia] : Object.keys(GRADE);
+  const dias = dia ? [dia] : Object.keys(gradeDiag);
   for (const dk of dias) {
-    for (const it of (GRADE[dk] || [])) {
+    for (const it of (gradeDiag[dk] || [])) {
       const subs = Array.isArray(it.combinar) ? it.combinar : [it];
       for (const s of subs) {
         if (materiaFiltro && !normalizar(s.m).includes(normalizar(materiaFiltro))) continue;
