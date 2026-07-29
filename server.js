@@ -3222,7 +3222,8 @@ app.get('/api/limpar-cache', (req, res) => {
 // ── DIAGNÓSTICO: mostra o texto CRU que o app leu de cada blog, para depurar
 // quando uma matéria não puxa a aula/dever (ex: o professor mudou o formato do blog).
 // Protegido pela senha de admin (mesmo padrão do /api/limpar-cache). Uso:
-//   /diag?senha=ADMIN_SENHA                       -> lista os dias e as matérias
+//   /diag?senha=ADMIN_SENHA                       -> lista os dias e as matérias do 3º ano
+//   /diag?senha=ADMIN_SENHA&turma=2-medio         -> lista os dias e as matérias da turma
 //   /diag?senha=ADMIN_SENHA&dia=ter               -> todas as matérias de terça
 //   /diag?senha=ADMIN_SENHA&dia=ter&materia=quim  -> só a que casar com "quim"
 //   /diag?senha=ADMIN_SENHA&materia=historia      -> busca em todos os dias
@@ -3240,14 +3241,17 @@ app.get('/diag', async (req, res) => {
   const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   const dia = (req.query.dia || '').toString().trim().toLowerCase();
   const materiaFiltro = (req.query.materia || '').toString().trim();
+  const turmaIdDiag = turmaValida(req.query.turma) ? req.query.turma : TURMA_PADRAO;
+  const gradeDiag = getGradePorId(turmaIdDiag);
 
   // sem filtro: mostra o menu do que dá para pedir
   if (!dia && !materiaFiltro) {
     let menu = 'DIAG - o que inspecionar\n\n';
-    menu += 'Uso: /diag?senha=SUA_SENHA&dia=DIA&materia=PARTE_DO_NOME&dataRef=DD/MM/AAAA\n';
-    menu += '(dia e materia sao opcionais; materia casa por pedaco do nome, sem acento; dataRef e opcional)\n\n';
-    for (const dk of Object.keys(GRADE)) {
-      const nomes = (GRADE[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
+    menu += 'Turma: ' + turmaIdDiag + ' (' + getTurmaAtivaPorId(turmaIdDiag).nome + ')\n';
+    menu += 'Uso: /diag?senha=SUA_SENHA&turma=TURMA_ID&dia=DIA&materia=PARTE_DO_NOME&dataRef=DD/MM/AAAA\n';
+    menu += '(turma, dia e materia sao opcionais; materia casa por pedaco do nome, sem acento; dataRef e opcional)\n\n';
+    for (const dk of Object.keys(gradeDiag)) {
+      const nomes = (gradeDiag[dk]||[]).flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s=>s.m) : [it.m]);
       menu += dk + ': ' + nomes.join(', ') + '\n';
     }
     return res.send(menu);
@@ -3255,9 +3259,9 @@ app.get('/diag', async (req, res) => {
 
   // coleta os itens que casam com o filtro
   const alvos = [];
-  const dias = dia ? [dia] : Object.keys(GRADE);
+  const dias = dia ? [dia] : Object.keys(gradeDiag);
   for (const dk of dias) {
-    for (const it of (GRADE[dk] || [])) {
+    for (const it of (gradeDiag[dk] || [])) {
       const subs = Array.isArray(it.combinar) ? it.combinar : [it];
       for (const s of subs) {
         if (materiaFiltro && !normalizar(s.m).includes(normalizar(materiaFiltro))) continue;
