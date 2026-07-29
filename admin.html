@@ -7,74 +7,669 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0c0f1a;--surface:#131929;--card:#1a2236;--border:#243050;--accent:#4f9eff;--accent2:#7c5cfc;--green:#2ecc8a;--yellow:#f5c842;--red:#ff5f6d;--text:#e4eaf8;--muted:#6a7a9b;--mono:'Space Mono',monospace;--sans:'Syne',sans-serif}
+  :root {
+    --bg:#0c0f1a;
+    --surface:#131929;
+    --card:#1a2236;
+    --border:#243050;
+    --accent:#4f9eff;
+    --accent2:#7c5cfc;
+    --green:#2ecc8a;
+    --yellow:#f5c842;
+    --red:#ff5f6d;
+    --text:#e4eaf8;
+    --muted:#6a7a9b;
+    --mono:'Space Mono',monospace;
+    --sans:'Syne',sans-serif;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --radius-lg:14px;
+    --spacing-xs:4px;
+    --spacing-sm:8px;
+    --spacing-md:12px;
+    --spacing-lg:16px;
+    --spacing-xl:20px;
+    --spacing-2xl:24px;
+  }
+
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:24px}
-  .wrap{max-width:560px;margin:0 auto}
-  h1{font-size:24px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
-  .sub{font-size:13px;color:var(--muted);margin-bottom:24px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
-  label{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px}
-  input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:11px 13px;outline:none;margin-bottom:14px}
-  input:focus{border-color:var(--accent)}
-  button{padding:11px 18px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer}
-  button:hover{opacity:.85}
-  button.small{padding:6px 12px;font-size:12px;background:var(--surface);border:1px solid var(--accent);color:var(--accent)}
-  .resumo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .rc{background:var(--surface);border-radius:10px;padding:14px 10px;text-align:center}
-  .rc-num{font-size:24px;font-weight:800;line-height:1}
-  .rc-lbl{font-size:10px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.5px}
-  @media (max-width:480px){.resumo-grid{grid-template-columns:repeat(2,1fr)}}
-  .aluno-block{background:var(--surface);border-radius:10px;padding:14px;margin-bottom:10px;border-left:3px solid var(--border)}
-  .aluno-block.status-vencido{border-left-color:var(--red)}
-  .aluno-block.status-pago{border-left-color:var(--green)}
-  .aluno-block.status-pendente{border-left-color:var(--yellow)}
-  .aluno-block.status-novo{border-left-color:var(--muted)}
-  .aluno-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
-  .pg-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;margin-left:6px;vertical-align:middle}
-  .pg-pago{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
-  .pg-vencido{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
-  .pg-pendente{background:color-mix(in srgb,var(--yellow) 18%,transparent);color:var(--yellow)}
-  .pg-novo{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--muted)}
-  .venc-info{font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
-  .aluno-acoes{display:flex;gap:6px;flex-shrink:0}
-  button.small.pay{border-color:var(--green);color:var(--green)}
-  button.small.pay:hover{background:var(--green);color:#fff}
-  .hist{margin:8px 0;font-size:12px}
-  .hist summary{cursor:pointer;color:var(--accent);font-family:var(--mono);font-size:11px}
-  .hist-item{font-size:11px;color:var(--muted);padding:3px 0 3px 14px;font-family:var(--mono)}
-  .sub-sec{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-  .sub-titulo{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)}
-  .mini-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;text-decoration:underline;padding:0;font-family:var(--mono)}
-  .mini-link.danger{color:var(--red)}
-  .rep-badge{display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;margin-left:6px;vertical-align:middle}
-  .rep-item{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:9px;padding:12px;margin-bottom:8px}
-  .rep-item.resolvido{border-left-color:var(--green);opacity:.6}
-  .rep-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-  .rep-user{font-size:13px;font-weight:700;color:var(--text)}
-  .rep-data{font-size:10px;color:var(--muted);font-family:var(--mono)}
-  .rep-texto{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px}
-  .rep-contexto{font-size:11px;color:var(--muted);font-family:var(--mono);background:var(--card);padding:5px 8px;border-radius:6px;margin-bottom:8px}
-  .rep-item-acoes{display:flex;gap:14px}
-  .dev-list{display:flex;flex-direction:column;gap:6px}
-  .dev-item{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:7px}
-  .dev-info{flex:1;min-width:0}
-  .dev-aparelho{font-size:13px;font-weight:600;color:var(--text)}
-  .dev-data{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px}
-  button.small.danger{border-color:var(--red);color:var(--red)}
-  button.small.danger:hover{background:var(--red);color:#fff}
-  .aluno-nome{font-size:14px;font-weight:600}
-  .erro{color:var(--red);font-size:13px;margin-top:8px}
-  .ok{color:var(--green);font-size:13px;margin-top:8px}
-  .section-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-  .form-aluno{display:flex;gap:8px;flex-wrap:wrap}
-  .form-aluno input{flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:var(--sans)}
-  .form-aluno input:focus{outline:none;border-color:var(--accent)}
-  .btn-criar{background:var(--accent);border:none;border-radius:8px;color:#1a1611;font-weight:600;padding:10px 18px;cursor:pointer;font-size:14px;font-family:var(--sans);white-space:nowrap}
-  .btn-criar:hover{opacity:.9}
-  .form-msg{font-size:13px;margin-top:10px;min-height:18px}
-  .form-msg.ok{color:var(--green)}
-  .form-msg.erro{color:var(--red)}
+
+  body {
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:var(--spacing-2xl);
+  }
+
+  .wrap {
+    max-width:620px;
+    margin:0 auto;
+  }
+
+  /* ── Tipografia ── */
+  h1 {
+    font-size:28px;
+    font-weight:800;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    margin-bottom:var(--spacing-xs);
+    line-height:1.2;
+  }
+
+  .sub {
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:var(--spacing-xl);
+    font-weight:500;
+  }
+
+  label {
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    display:block;
+    margin-bottom:var(--spacing-sm);
+    font-weight:600;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    padding:var(--spacing-xl);
+    margin-bottom:var(--spacing-lg);
+    transition:border-color 0.2s ease;
+  }
+
+  .card:hover {
+    border-color:#2d3d52;
+  }
+
+  /* ── Inputs e Textareas ── */
+  input, select, textarea {
+    width:100%;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:14px;
+    padding:10px 12px;
+    outline:none;
+    margin-bottom:var(--spacing-lg);
+    transition:border-color 0.2s ease;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(79,158,255,0.1);
+  }
+
+  textarea {
+    resize:vertical;
+    font-family:var(--sans);
+  }
+
+  select {
+    cursor:pointer;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236a7a9b' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    padding-right:36px;
+  }
+
+  /* ── Botões Principais ── */
+  button {
+    padding:10px 18px;
+    border-radius:var(--radius-md);
+    border:none;
+    background:linear-gradient(135deg,var(--accent2),var(--accent));
+    color:#fff;
+    font-family:var(--sans);
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    transition:opacity 0.2s ease;
+  }
+
+  button:hover {
+    opacity:0.9;
+  }
+
+  button:active {
+    opacity:0.8;
+  }
+
+  /* ── Botões Secundários ── */
+  button.small {
+    padding:7px 13px;
+    font-size:12px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    color:var(--muted);
+    font-weight:600;
+    transition:all 0.2s ease;
+  }
+
+  button.small:hover {
+    border-color:var(--accent);
+    color:var(--accent);
+  }
+
+  button.small.pay {
+    border-color:var(--green);
+    color:var(--green);
+  }
+
+  button.small.pay:hover {
+    background:var(--green);
+    color:#fff;
+  }
+
+  button.small.danger {
+    border-color:var(--red);
+    color:var(--red);
+  }
+
+  button.small.danger:hover {
+    background:var(--red);
+    color:#fff;
+  }
+
+  /* ── Botão de Criar ── */
+  .btn-criar {
+    background:var(--accent);
+    border:none;
+    border-radius:var(--radius-md);
+    color:#1a1611;
+    font-weight:700;
+    padding:11px 20px;
+    cursor:pointer;
+    font-size:14px;
+    font-family:var(--sans);
+    white-space:nowrap;
+    transition:opacity 0.2s ease;
+  }
+
+  .btn-criar:hover {
+    opacity:0.85;
+  }
+
+  /* ── Mini Links ── */
+  .mini-link {
+    background:none;
+    border:none;
+    color:var(--accent);
+    cursor:pointer;
+    font-size:11px;
+    text-decoration:underline;
+    padding:0;
+    font-family:var(--mono);
+    transition:color 0.2s ease;
+  }
+
+  .mini-link:hover {
+    color:#6eb3ff;
+  }
+
+  .mini-link.danger {
+    color:var(--red);
+  }
+
+  .mini-link.danger:hover {
+    color:#ff8a94;
+  }
+
+  /* ── Resumo Grid ── */
+  .resumo-grid {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:var(--spacing-sm);
+    margin-bottom:var(--spacing-lg);
+  }
+
+  .rc {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:var(--spacing-md);
+    text-align:center;
+    transition:border-color 0.2s ease;
+  }
+
+  .rc:hover {
+    border-color:var(--border);
+  }
+
+  .rc-num {
+    font-size:26px;
+    font-weight:800;
+    line-height:1;
+  }
+
+  .rc-lbl {
+    font-size:10px;
+    color:var(--muted);
+    margin-top:var(--spacing-xs);
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    font-weight:600;
+  }
+
+  @media (max-width:600px) {
+    .resumo-grid {
+      grid-template-columns:repeat(2,1fr);
+    }
+
+    h1 {
+      font-size:24px;
+    }
+
+    .wrap {
+      max-width:100%;
+    }
+  }
+
+  /* ── Section Labels ── */
+  .section-label {
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:var(--spacing-md);
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:var(--spacing-sm);
+  }
+
+  /* ── Aluno Block ── */
+  .aluno-block {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-left:4px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:var(--spacing-md);
+    margin-bottom:var(--spacing-md);
+    transition:all 0.2s ease;
+  }
+
+  .aluno-block:hover {
+    border-color:#2d3d52;
+  }
+
+  .aluno-block.status-vencido {
+    border-left-color:var(--red);
+  }
+
+  .aluno-block.status-pago {
+    border-left-color:var(--green);
+  }
+
+  .aluno-block.status-pendente {
+    border-left-color:var(--yellow);
+  }
+
+  .aluno-block.status-novo {
+    border-left-color:var(--muted);
+  }
+
+  .aluno-top {
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:var(--spacing-md);
+    margin-bottom:var(--spacing-md);
+  }
+
+  .aluno-nome {
+    font-size:15px;
+    font-weight:700;
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    gap:var(--spacing-xs);
+  }
+
+  .venc-info {
+    font-size:12px;
+    color:var(--muted);
+    margin-top:var(--spacing-xs);
+    font-family:var(--mono);
+    line-height:1.4;
+  }
+
+  .aluno-acoes {
+    display:flex;
+    gap:var(--spacing-xs);
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+
+  /* ── Badges ── */
+  .pg-badge {
+    font-size:10px;
+    font-weight:700;
+    padding:3px 10px;
+    border-radius:100px;
+    vertical-align:middle;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+
+  .pg-pago {
+    background:color-mix(in srgb,var(--green) 20%,transparent);
+    color:var(--green);
+  }
+
+  .pg-vencido {
+    background:color-mix(in srgb,var(--red) 20%,transparent);
+    color:var(--red);
+  }
+
+  .pg-pendente {
+    background:color-mix(in srgb,var(--yellow) 20%,transparent);
+    color:var(--yellow);
+  }
+
+  .pg-novo {
+    background:color-mix(in srgb,var(--muted) 20%,transparent);
+    color:var(--muted);
+  }
+
+  .turma-badge {
+    font-size:9px;
+    font-weight:700;
+    padding:2px 8px;
+    border-radius:4px;
+    background:color-mix(in srgb,var(--accent) 15%,transparent);
+    color:var(--accent);
+    display:inline-block;
+  }
+
+  /* ── Histórico ── */
+  .hist {
+    margin:var(--spacing-md) 0;
+    font-size:12px;
+  }
+
+  .hist summary {
+    cursor:pointer;
+    color:var(--accent);
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:600;
+    padding:var(--spacing-xs) var(--spacing-sm);
+    border-radius:var(--radius-sm);
+    transition:background 0.2s ease;
+  }
+
+  .hist summary:hover {
+    background:var(--card);
+  }
+
+  .hist-item {
+    font-size:11px;
+    color:var(--muted);
+    padding:var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-lg);
+    font-family:var(--mono);
+    line-height:1.4;
+  }
+
+  /* ── Sub-seção ── */
+  .sub-sec {
+    margin-top:var(--spacing-md);
+    padding-top:var(--spacing-md);
+    border-top:1px solid var(--border);
+  }
+
+  .sub-titulo {
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--muted);
+    margin-bottom:var(--spacing-md);
+    font-weight:700;
+    font-family:var(--mono);
+  }
+
+  /* ── Dispositivos ── */
+  .dev-list {
+    display:flex;
+    flex-direction:column;
+    gap:var(--spacing-sm);
+  }
+
+  .dev-item {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:var(--spacing-md);
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    transition:all 0.2s ease;
+  }
+
+  .dev-item:hover {
+    border-color:var(--border);
+  }
+
+  .dev-info {
+    flex:1;
+    min-width:0;
+  }
+
+  .dev-aparelho {
+    font-size:13px;
+    font-weight:700;
+    color:var(--text);
+  }
+
+  .dev-data {
+    font-size:10px;
+    color:var(--muted);
+    font-family:var(--mono);
+    margin-top:var(--spacing-xs);
+  }
+
+  /* ── Reports ── */
+  .rep-badge {
+    display:none;
+    background:var(--red);
+    color:#fff;
+    font-size:10px;
+    font-weight:700;
+    padding:2px 8px;
+    border-radius:100px;
+    vertical-align:middle;
+  }
+
+  .rep-item {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-left:4px solid var(--yellow);
+    border-radius:var(--radius-md);
+    padding:var(--spacing-md);
+    margin-bottom:var(--spacing-md);
+    transition:all 0.2s ease;
+  }
+
+  .rep-item:hover {
+    border-color:#2d3d52;
+  }
+
+  .rep-item.resolvido {
+    border-left-color:var(--green);
+    opacity:0.6;
+  }
+
+  .rep-item-top {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:var(--spacing-sm);
+  }
+
+  .rep-user {
+    font-size:13px;
+    font-weight:700;
+    color:var(--text);
+  }
+
+  .rep-data {
+    font-size:10px;
+    color:var(--muted);
+    font-family:var(--mono);
+  }
+
+  .rep-texto {
+    font-size:13px;
+    color:var(--text);
+    line-height:1.5;
+    margin-bottom:var(--spacing-md);
+  }
+
+  .rep-contexto {
+    font-size:11px;
+    color:var(--muted);
+    font-family:var(--mono);
+    background:var(--card);
+    padding:var(--spacing-sm);
+    border-radius:var(--radius-sm);
+    margin-bottom:var(--spacing-md);
+    border-left:2px solid var(--border);
+    padding-left:var(--spacing-md);
+  }
+
+  .rep-item-acoes {
+    display:flex;
+    gap:var(--spacing-lg);
+    flex-wrap:wrap;
+  }
+
+  /* ── Mensagens ── */
+  .erro {
+    color:var(--red);
+    font-size:13px;
+    margin-top:var(--spacing-md);
+    font-weight:600;
+  }
+
+  .ok {
+    color:var(--green);
+    font-size:13px;
+    margin-top:var(--spacing-md);
+    font-weight:600;
+  }
+
+  .form-msg {
+    font-size:13px;
+    margin-top:var(--spacing-md);
+    min-height:18px;
+    font-weight:600;
+  }
+
+  .form-msg.ok {
+    color:var(--green);
+  }
+
+  .form-msg.erro {
+    color:var(--red);
+  }
+
+  /* ── Form Aluno ── */
+  .form-aluno {
+    display:flex;
+    gap:var(--spacing-md);
+    flex-wrap:wrap;
+    margin-bottom:var(--spacing-md);
+  }
+
+  .form-aluno input {
+    flex:1;
+    min-width:140px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:10px 12px;
+    color:var(--text);
+    font-size:14px;
+    font-family:var(--sans);
+  }
+
+  .form-aluno input:focus {
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(79,158,255,0.1);
+  }
+
+  .form-aluno select {
+    flex:1;
+    min-width:140px;
+  }
+
+  /* ── Filtro por Turma ── */
+  .filtro-turmas {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:var(--spacing-md);
+    margin-bottom:var(--spacing-lg);
+    padding:var(--spacing-md);
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+  }
+
+  .filtro-turmas label {
+    margin-bottom:0;
+    flex-shrink:0;
+  }
+
+  .filtro-turmas select {
+    max-width:220px;
+    margin-bottom:0;
+  }
+
+  .filtro-info {
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+
+  @media (max-width:600px) {
+    .filtro-turmas {
+      align-items:stretch;
+      flex-direction:column;
+    }
+
+    .filtro-turmas select {
+      max-width:100%;
+    }
+
+    .aluno-top {
+      flex-direction:column;
+    }
+
+    .aluno-acoes {
+      width:100%;
+    }
+
+    .aluno-acoes button {
+      flex:1;
+    }
+  }
 </style>
 </head>
 <body>
@@ -90,33 +685,63 @@
   </div>
 
   <div id="painel" style="display:none">
+    <!-- ── REPORTS ── -->
     <div class="card">
       <div class="section-label">Reports de erro <span id="repBadge" class="rep-badge"></span></div>
       <div id="listaReports"></div>
     </div>
+
+    <!-- ── RESUMO ── -->
     <div class="card">
       <div class="section-label">Resumo</div>
       <div id="resumoCards" class="resumo-grid"></div>
-      <div class="section-label" style="margin-top:18px">Alunos</div>
+    </div>
+
+    <!-- ── LISTAGEM DE ALUNOS ── -->
+    <div class="card">
+      <div class="section-label">Alunos</div>
+      <div class="filtro-turmas">
+        <label for="filtroTurma">Filtrar por turma</label>
+        <select id="filtroTurma" onchange="filtrarTurma()">
+          <option value="todas">Todas</option>
+        </select>
+        <div id="filtroTurmaInfo" class="filtro-info">Todas as turmas</div>
+      </div>
       <div id="listaAlunos"></div>
       <div id="painelMsg"></div>
-      <button class="small" onclick="carregar()" style="margin-top:8px">↻ Atualizar lista</button>
+      <button class="small" onclick="carregar()" style="margin-top:var(--spacing-md)">↻ Atualizar lista</button>
     </div>
+
+    <!-- ── CADASTRO DE ALUNO ── -->
     <div class="card">
       <div class="section-label">Adicionar novo aluno</div>
       <div class="form-aluno">
-        <input id="novoUser" placeholder="Nome de usuário" autocomplete="off" />
-        <input id="novoPass" placeholder="Senha (mín. 4 caracteres)" autocomplete="off" />
-        <select id="novoTurma">
-          <option value="3-ano">3º ano</option>
-        </select>
-        <button class="btn-criar" onclick="criarAluno()">Cadastrar aluno</button>
+        <div style="flex:1;min-width:160px">
+          <label for="novoUser">Usuário</label>
+          <input id="novoUser" placeholder="Nome de usuário" autocomplete="off" />
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label for="novoPass">Senha inicial</label>
+          <input id="novoPass" placeholder="Mínimo 4 caracteres" autocomplete="off" />
+        </div>
+        <div style="flex:1;min-width:140px">
+          <label for="novoTurma">Turma</label>
+          <select id="novoTurma">
+            <option value="3-ano">3º ano</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn-criar" onclick="criarAluno()">Cadastrar aluno</button>
+        </div>
       </div>
       <div id="criarMsg" class="form-msg"></div>
-      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px">
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:var(--spacing-lg)">
         A senha é guardada de forma segura (criptografada), nunca em texto puro. Para <strong style="color:var(--text)">trocar a senha</strong> ou <strong style="color:var(--text)">remover</strong> um aluno, use os botões na lista de alunos acima.<br><br>
         O botão <strong style="color:var(--accent)">Liberar dispositivos</strong> serve para quando um aluno trocou de aparelho ou limpou o navegador e ficou travado. Cada aluno usa até <strong style="color:var(--text)">2 dispositivos</strong>. Liberar zera os aparelhos para ele cadastrar de novo.
       </div>
+    </div>
+
+    <!-- ── AÇÕES ADMIN ── -->
     <div class="card">
       <div class="section-label">⚠️ Plano de contingência: sobrescrever matéria</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
@@ -205,6 +830,8 @@
 
 <script>
 let adminSenha = '';
+let alunosCarregados = [];
+let turmaSelecionada = 'todas';
 
 function entrar(){
   adminSenha = document.getElementById('adminPass').value;
@@ -222,8 +849,10 @@ async function carregar(){
     }
     document.getElementById('loginCard').style.display='none';
     document.getElementById('painel').style.display='block';
-    renderResumo(data.alunos);
-    renderLista(data.alunos);
+    alunosCarregados = Array.isArray(data.alunos) ? data.alunos : [];
+    renderResumo(alunosCarregados);
+    renderFiltroTurmas(alunosCarregados);
+    aplicarFiltroTurma();
     carregarReports();
   }catch(e){
     document.getElementById('loginErro').textContent = 'Erro de conexão.';
@@ -572,9 +1201,53 @@ function fmtData(iso){
   return new Date(iso).toLocaleDateString('pt-BR');
 }
 
+function turmaAluno(a){
+  return a.turmaNome || '3º ano';
+}
+
+function renderFiltroTurmas(alunos){
+  const sel = document.getElementById('filtroTurma');
+  if(!sel)return;
+  const turmas = [...new Set(alunos.map(turmaAluno))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const atual = turmas.includes(turmaSelecionada) ? turmaSelecionada : 'todas';
+  turmaSelecionada = atual;
+  sel.innerHTML = '<option value="todas">Todas</option>' + turmas.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  sel.value = atual;
+  atualizarInfoFiltro(alunos.length, alunos.length);
+}
+
+function filtrarTurma(){
+  const sel = document.getElementById('filtroTurma');
+  turmaSelecionada = sel ? sel.value : 'todas';
+  aplicarFiltroTurma();
+}
+
+function aplicarFiltroTurma(){
+  const lista = turmaSelecionada==='todas'
+    ? alunosCarregados
+    : alunosCarregados.filter(a=>turmaAluno(a)===turmaSelecionada);
+  renderLista(lista);
+  atualizarInfoFiltro(lista.length, alunosCarregados.length);
+}
+
+function atualizarInfoFiltro(visiveis, total){
+  const info = document.getElementById('filtroTurmaInfo');
+  if(!info)return;
+  if(turmaSelecionada==='todas'){
+    info.textContent = total === 1 ? '1 aluno' : total + ' alunos';
+  }else{
+    info.textContent = visiveis + ' de ' + total + ' aluno' + (total!==1?'s':'');
+  }
+}
+
 function renderLista(alunos){
   const cont = document.getElementById('listaAlunos');
-  if(!alunos.length){cont.innerHTML='<div style="color:var(--muted);font-size:13px">Nenhum aluno cadastrado.</div>';return;}
+  if(!alunos.length){
+    cont.innerHTML = turmaSelecionada==='todas'
+      ? '<div style="color:var(--muted);font-size:13px">Nenhum aluno cadastrado.</div>'
+      : '<div style="color:var(--muted);font-size:13px">Nenhum aluno nesta turma.</div>';
+    return;
+  }
 
   // ordena: vencidos primeiro, depois quem vence em breve
   alunos.sort((a,b)=>{
@@ -621,8 +1294,12 @@ function renderLista(alunos){
     <div class="aluno-block status-${a.statusPag}">
       <div class="aluno-top">
         <div style="flex:1">
-          <div class="aluno-nome">${esc(a.user)} ${badge}</div>
-          <div class="venc-info">Turma: ${esc(a.turmaNome||'3º ano')} · ${vencInfo}</div>
+          <div class="aluno-nome">
+            <span>${esc(a.user)}</span>
+            <span class="turma-badge">${esc(a.turmaNome||'3º ano')}</span>
+            ${badge}
+          </div>
+          <div class="venc-info">${vencInfo}</div>
         </div>
         <div class="aluno-acoes">
           <button class="small pay" onclick="marcarPagamento('${a.user}')">✓ Marcar pago</button>
