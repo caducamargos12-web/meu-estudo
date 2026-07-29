@@ -617,27 +617,93 @@
     min-width:140px;
   }
 
+  /* ── Abas por Turma ── */
+  .turma-painel-topo {
+    padding:0;
+    overflow:hidden;
+  }
+
+  .turma-tabs-header {
+    padding:var(--spacing-lg) var(--spacing-xl) var(--spacing-sm);
+    border-bottom:1px solid var(--border);
+  }
+
+  .turma-tabs-titulo {
+    font-size:10px;
+    font-family:var(--mono);
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:var(--spacing-xs);
+    font-weight:700;
+  }
+
+  .turma-tabs-sub {
+    font-size:13px;
+    color:var(--text);
+    font-weight:700;
+  }
+
+  .turma-tabs {
+    display:flex;
+    gap:var(--spacing-sm);
+    overflow-x:auto;
+    padding:var(--spacing-md) var(--spacing-xl) var(--spacing-lg);
+    scrollbar-width:thin;
+  }
+
+  .turma-tab {
+    flex:0 0 auto;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:999px;
+    color:var(--muted);
+    padding:9px 14px;
+    font-size:12px;
+    font-family:var(--mono);
+    font-weight:700;
+    letter-spacing:.3px;
+  }
+
+  .turma-tab:hover {
+    border-color:var(--accent);
+    color:var(--accent);
+    opacity:1;
+  }
+
+  .turma-tab.ativo {
+    background:linear-gradient(135deg,color-mix(in srgb,var(--accent2) 28%,var(--surface)),color-mix(in srgb,var(--accent) 24%,var(--surface)));
+    border-color:color-mix(in srgb,var(--accent) 58%,var(--border));
+    color:var(--text);
+    box-shadow:0 0 0 3px rgba(79,158,255,0.08);
+  }
+
+  .turma-tab-count {
+    color:var(--accent);
+    margin-left:4px;
+  }
+
   /* ── Filtro por Turma ── */
   .filtro-turmas {
     display:flex;
     align-items:center;
-    justify-content:space-between;
+    justify-content:flex-end;
     gap:var(--spacing-md);
     margin-bottom:var(--spacing-lg);
-    padding:var(--spacing-md);
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius-md);
+    padding:0 0 var(--spacing-sm);
   }
 
-  .filtro-turmas label {
-    margin-bottom:0;
-    flex-shrink:0;
-  }
-
+  .filtro-turmas label,
   .filtro-turmas select {
-    max-width:220px;
-    margin-bottom:0;
+    position:absolute;
+    width:1px;
+    height:1px;
+    padding:0;
+    margin:-1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+    border:0;
   }
 
   .filtro-info {
@@ -649,13 +715,16 @@
   }
 
   @media (max-width:600px) {
-    .filtro-turmas {
-      align-items:stretch;
-      flex-direction:column;
+    .turma-tabs-header {
+      padding:var(--spacing-md) var(--spacing-md) var(--spacing-sm);
     }
 
-    .filtro-turmas select {
-      max-width:100%;
+    .turma-tabs {
+      padding:var(--spacing-md);
+    }
+
+    .filtro-turmas {
+      justify-content:flex-start;
     }
 
     .aluno-top {
@@ -685,6 +754,17 @@
   </div>
 
   <div id="painel" style="display:none">
+    <!-- ── ABAS POR TURMA ── -->
+    <div class="card turma-painel-topo">
+      <div class="turma-tabs-header">
+        <div class="turma-tabs-titulo">Painéis por turma</div>
+        <div class="turma-tabs-sub">Escolha uma turma para ver só os alunos dela.</div>
+      </div>
+      <div id="turmaTabs" class="turma-tabs" role="tablist" aria-label="Turmas do painel admin">
+        <button type="button" class="turma-tab ativo" data-turma="todas" onclick="selecionarAbaTurma('todas')" role="tab" aria-selected="true">Todas</button>
+      </div>
+    </div>
+
     <!-- ── REPORTS ── -->
     <div class="card">
       <div class="section-label">Reports de erro <span id="repBadge" class="rep-badge"></span></div>
@@ -831,6 +911,7 @@
 <script>
 let adminSenha = '';
 let alunosCarregados = [];
+let turmasCarregadas = [];
 let turmaSelecionada = 'todas';
 
 function entrar(){
@@ -850,12 +931,25 @@ async function carregar(){
     document.getElementById('loginCard').style.display='none';
     document.getElementById('painel').style.display='block';
     alunosCarregados = Array.isArray(data.alunos) ? data.alunos : [];
+    await carregarTurmasAdmin();
     renderResumo(alunosCarregados);
     renderFiltroTurmas(alunosCarregados);
     aplicarFiltroTurma();
     carregarReports();
   }catch(e){
     document.getElementById('loginErro').textContent = 'Erro de conexão.';
+  }
+}
+
+async function carregarTurmasAdmin(){
+  try{
+    const res = await fetch('/api/admin/turmas?adminSenha=' + encodeURIComponent(adminSenha));
+    const data = await res.json();
+    if(data.error)return;
+    turmasCarregadas = Array.isArray(data.turmas) ? data.turmas : [];
+    renderAbasTurmas();
+  }catch(e){
+    renderAbasTurmas();
   }
 }
 
@@ -1205,15 +1299,80 @@ function turmaAluno(a){
   return a.turmaNome || '3º ano';
 }
 
+function turmaIdAluno(a){
+  return a.turma || '3-ano';
+}
+
+function nomeTurmaPorId(id){
+  const t = turmasCarregadas.find(x=>x.id===id);
+  if(t)return t.nome;
+  const aluno = alunosCarregados.find(a=>turmaIdAluno(a)===id);
+  return aluno ? turmaAluno(aluno) : '3º ano';
+}
+
+function contarAlunosPorTurma(id){
+  if(id==='todas')return alunosCarregados.length;
+  return alunosCarregados.filter(a=>turmaIdAluno(a)===id).length;
+}
+
+function turmasParaInterface(alunos){
+  if(turmasCarregadas.length)return turmasCarregadas;
+  const vistas = {};
+  alunos.forEach(a=>{ vistas[turmaIdAluno(a)] = turmaAluno(a); });
+  if(!vistas['3-ano'])vistas['3-ano'] = '3º ano';
+  return Object.keys(vistas).map(id=>({id,nome:vistas[id]})).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+}
+
 function renderFiltroTurmas(alunos){
   const sel = document.getElementById('filtroTurma');
-  if(!sel)return;
-  const turmas = [...new Set(alunos.map(turmaAluno))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const atual = turmas.includes(turmaSelecionada) ? turmaSelecionada : 'todas';
+  const turmas = turmasParaInterface(alunos);
+  const ids = turmas.map(t=>t.id);
+  const atual = turmaSelecionada==='todas' || ids.includes(turmaSelecionada) ? turmaSelecionada : 'todas';
   turmaSelecionada = atual;
-  sel.innerHTML = '<option value="todas">Todas</option>' + turmas.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
-  sel.value = atual;
+  if(sel){
+    sel.innerHTML = '<option value="todas">Todas</option>' + turmas.map(t=>`<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
+    sel.value = atual;
+  }
+  renderAbasTurmas();
+  renderSelectCadastroTurmas();
   atualizarInfoFiltro(alunos.length, alunos.length);
+}
+
+function renderAbasTurmas(){
+  const tabs = document.getElementById('turmaTabs');
+  if(!tabs)return;
+  const turmas = turmasParaInterface(alunosCarregados);
+  const botao = (id, nome) => {
+    const total = contarAlunosPorTurma(id);
+    const ativo = turmaSelecionada===id;
+    return `<button type="button" class="turma-tab ${ativo?'ativo':''}" data-turma="${esc(id)}" onclick="selecionarAbaTurma('${esc(id)}')" role="tab" aria-selected="${ativo?'true':'false'}">
+      ${esc(nome)} <span class="turma-tab-count">${total}</span>
+    </button>`;
+  };
+  tabs.innerHTML = botao('todas','Todas') + turmas.map(t=>botao(t.id,t.nome)).join('');
+}
+
+function turmaCadastroPadrao(){
+  if(turmaSelecionada && turmaSelecionada !== 'todas')return turmaSelecionada;
+  return '3-ano';
+}
+
+function renderSelectCadastroTurmas(){
+  const sel = document.getElementById('novoTurma');
+  if(!sel)return;
+  const turmas = turmasParaInterface(alunosCarregados);
+  const valorAtual = turmas.some(t=>t.id===sel.value) ? sel.value : turmaCadastroPadrao();
+  const valor = turmas.some(t=>t.id===turmaCadastroPadrao()) ? turmaCadastroPadrao() : valorAtual;
+  sel.innerHTML = turmas.map(t=>`<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
+  sel.value = valor;
+}
+
+function selecionarAbaTurma(id){
+  turmaSelecionada = id || 'todas';
+  const sel = document.getElementById('filtroTurma');
+  if(sel)sel.value = turmaSelecionada;
+  renderSelectCadastroTurmas();
+  aplicarFiltroTurma();
 }
 
 function filtrarTurma(){
@@ -1225,8 +1384,9 @@ function filtrarTurma(){
 function aplicarFiltroTurma(){
   const lista = turmaSelecionada==='todas'
     ? alunosCarregados
-    : alunosCarregados.filter(a=>turmaAluno(a)===turmaSelecionada);
+    : alunosCarregados.filter(a=>turmaIdAluno(a)===turmaSelecionada);
   renderLista(lista);
+  renderAbasTurmas();
   atualizarInfoFiltro(lista.length, alunosCarregados.length);
 }
 
@@ -1234,9 +1394,9 @@ function atualizarInfoFiltro(visiveis, total){
   const info = document.getElementById('filtroTurmaInfo');
   if(!info)return;
   if(turmaSelecionada==='todas'){
-    info.textContent = total === 1 ? '1 aluno' : total + ' alunos';
+    info.textContent = total === 1 ? '1 aluno no painel Todas' : total + ' alunos no painel Todas';
   }else{
-    info.textContent = visiveis + ' de ' + total + ' aluno' + (total!==1?'s':'');
+    info.textContent = nomeTurmaPorId(turmaSelecionada) + ': ' + visiveis + ' de ' + total + ' aluno' + (total!==1?'s':'');
   }
 }
 
@@ -1365,7 +1525,7 @@ async function criarAluno(){
     msg.className='form-msg ok';msg.textContent='Aluno "'+user+'" cadastrado!';
     document.getElementById('novoUser').value='';
     document.getElementById('novoPass').value='';
-    document.getElementById('novoTurma').value='3-ano';
+    document.getElementById('novoTurma').value=turmaCadastroPadrao();
     carregar();
   }catch(e){msg.className='form-msg erro';msg.textContent='Erro de conexão.';}
 }
