@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>Meu Estudo – 3º Ano CNS Anglo</title>
+<title>Meu Estudo – CNS Anglo</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -419,7 +419,7 @@
 <div id="loginScreen" style="display:none">
   <div class="login-box">
     <div class="login-brand">
-      <div class="login-logo"><span class="dot"></span>CNS Anglo · 3º Ano</div>
+      <div class="login-logo"><span class="dot"></span>CNS Anglo</div>
       <h1>Meu Estudo</h1>
       <div class="tag">Seu resumo do dia, pronto em segundos.</div>
     </div>
@@ -1257,7 +1257,8 @@ function loadDay(){
       total=msg.total;
       fimDeSemana=msg.fimDeSemana;
       window._turmaAtual={id:msg.turmaId,nome:msg.turmaNome};
-      document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':msg.dayLabel;
+      const turmaNome=window._turmaAtual.nome;
+      document.getElementById('subtitle').textContent=`${fimDeSemana?'Prévia de segunda':msg.dayLabel}${turmaNome?' · '+turmaNome:''}`;
       const cards=document.getElementById('cards');
       cards.innerHTML='';
       window._itensDoDia=[]; // coletor para a central de deveres
@@ -1300,7 +1301,8 @@ function loadDay(){
       if(estaEmRecesso)return;
       esconderBoasVindas();
       if(total>0){
-        document.getElementById('subtitle').textContent=fimDeSemana?'Prévia de segunda':`${total} matérias`;
+        const turmaNome=window._turmaAtual?.nome;
+        document.getElementById('subtitle').textContent=`${fimDeSemana?'Prévia de segunda':`${total} matérias`}${turmaNome?' · '+turmaNome:''}`;
         document.getElementById('cards').insertAdjacentHTML('beforeend',
           `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}</div>`);
         // abre a primeira matéria automaticamente
