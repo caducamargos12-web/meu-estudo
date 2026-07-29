@@ -32,3 +32,5 @@ node_modules/
 tmp/
 temp/
 *.tmp
+.mcp.json
+start-with-env.ps1
