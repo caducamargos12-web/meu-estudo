@@ -747,6 +747,7 @@ app.post('/api/login', (req, res) => {
 //   'provaFinal' = aula + deveres + resumo; só mostra matéria do teste + simulado
 //                  quando detectar teste/prova/avaliação marcado no blog
 const GRADE_3_ANO = require('./grades/3-ano');
+const GRADE_2_MEDIO = require('./grades/2-medio');
 const TURMA_PADRAO = '3-ano';
 const TURMAS = {
   '3-ano': {
@@ -763,7 +764,7 @@ const TURMAS = {
   '8-fund':  { id: '8-fund',  nome: '8º ano',  ativa: false, grade: null },
   '9-fund':  { id: '9-fund',  nome: '9º ano',  ativa: false, grade: null },
   '1-medio': { id: '1-medio', nome: '1º médio', ativa: false, grade: null },
-  '2-medio': { id: '2-medio', nome: '2º médio', ativa: false, grade: null },
+  '2-medio': { id: '2-medio', nome: '2º médio', ativa: true, grade: GRADE_2_MEDIO },
 };
 
 // turma "existe" no cadastro = id está no mapa. Não confunde com "ativa no app".
