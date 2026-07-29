@@ -905,9 +905,18 @@ function sincronizarBimestre(bimestreAtivo,bimestreVersao){
   }
 }
 
+function textoComTurma(base){
+  const turmaNome=window._turmaAtual?.nome;
+  return `${base}${turmaNome?' · '+turmaNome:''}`;
+}
+
+function atualizarSubtitle(base){
+  document.getElementById('subtitle').textContent=textoComTurma(base);
+}
+
 function mostrarRecesso(msg){
   esconderBoasVindas();
-  document.getElementById('subtitle').textContent='Recesso escolar';
+  atualizarSubtitle('Recesso escolar');
   const main=document.getElementById('main');
   main.innerHTML=`<div class="recesso-box">
     <div class="recesso-emoji">🌙</div>
@@ -1237,7 +1246,7 @@ function renderCard(item, idx, ehPrevia, dataRef){
 }
 
 function loadDay(){
-  document.getElementById('subtitle').textContent='Carregando…';
+  atualizarSubtitle('Carregando…');
   const main=document.getElementById('main');
   main.innerHTML=`<div id="cards"></div>`;
 
@@ -1250,6 +1259,7 @@ function loadDay(){
     if(msg.bimestreAtivo)sincronizarBimestre(msg.bimestreAtivo,msg.bimestreVersao);
     if(msg.type==='recesso'){
       estaEmRecesso=true;
+      window._turmaAtual={id:msg.turmaId,nome:msg.turmaNome};
       mostrarRecesso(msg.mensagem);
       return;
     }
@@ -1257,8 +1267,7 @@ function loadDay(){
       total=msg.total;
       fimDeSemana=msg.fimDeSemana;
       window._turmaAtual={id:msg.turmaId,nome:msg.turmaNome};
-      const turmaNome=window._turmaAtual.nome;
-      document.getElementById('subtitle').textContent=`${fimDeSemana?'Prévia de segunda':msg.dayLabel}${turmaNome?' · '+turmaNome:''}`;
+      atualizarSubtitle(fimDeSemana?'Prévia de segunda':msg.dayLabel);
       const cards=document.getElementById('cards');
       cards.innerHTML='';
       window._itensDoDia=[]; // coletor para a central de deveres
@@ -1301,8 +1310,7 @@ function loadDay(){
       if(estaEmRecesso)return;
       esconderBoasVindas();
       if(total>0){
-        const turmaNome=window._turmaAtual?.nome;
-        document.getElementById('subtitle').textContent=`${fimDeSemana?'Prévia de segunda':`${total} matérias`}${turmaNome?' · '+turmaNome:''}`;
+        atualizarSubtitle(fimDeSemana?'Prévia de segunda':`${total} matérias`);
         document.getElementById('cards').insertAdjacentHTML('beforeend',
           `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}</div>`);
         // abre a primeira matéria automaticamente
