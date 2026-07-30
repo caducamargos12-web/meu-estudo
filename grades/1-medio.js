@@ -11,7 +11,7 @@ module.exports = {
   ],
   ter: [
     { m:'Química A',      p:'Washington Gois', url:'https://profwashingtonanglo.blogspot.com/p/1-ano.html', formato:'testesPorData' },
-    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/1-ano.html', filtro:'História', tipo:'acumulativo' },
+    { m:'História',       p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/7-ano.html', filtro:'História', tipo:'acumulativo' },
     { m:'Redação',        p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/1-ano.html', filtro:'Redação', tipo:'provaFinal', formato:'agrupado', maxDiasDever:14, avaliacaoFixa:'Redação estilo ENEM' },
     { m:'Matemática B',   p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/1-ano-em-formacao-geral.html', formato:'rotulosSaulo' },
   ],
@@ -29,7 +29,7 @@ module.exports = {
   sex: [
     { m:'Biologia',       p:'Angelita Pimenta',url:'https://profangelitacnsanglo.blogspot.com/p/1-ano.html', maxDiasDever:14 },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/1-ano.html', filtro:'Literatura', maxDiasDever:14 },
-    { m:'Sociologia',     p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/1-ano.html', filtro:'Sociologia' },
+    { m:'Sociologia',     p:'Gustavo',         url:'https://profgustavocnsanglo.blogspot.com/p/7-ano.html', filtro:'Sociologia' },
     { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/1-ano.html', formato:'fisica' },
   ],
 };
