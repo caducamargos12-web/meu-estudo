@@ -3219,6 +3219,144 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// ── DIAGNÓSTICO DE RESULTADO: mostra o resultado PROCESSADO (o que o aluno veria)
+// para validar se parsers/IA estão extraindo corretamente. Retorna JSON.
+// Uso: /diag-resultado?senha=ADMIN_SENHA&turma=2-medio&dia=ter&materia=fisica
+app.get('/diag-resultado', async (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'desconhecido';
+  if (!checarRateLimit(ip)) {
+    return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  }
+  if (!senhaIgual(req.query.senha || '', process.env.ADMIN_SENHA)) {
+    registrarFalha(ip);
+    return res.status(401).json({ error: 'senha invalida' });
+  }
+
+  const normalizar = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const turmaId = turmaValida(req.query.turma) ? req.query.turma : TURMA_PADRAO;
+  const turmaObj = getTurmaAtivaPorId(turmaId);
+  const grade = turmaObj.grade;
+  const dia = (req.query.dia || '').toString().trim().toLowerCase().slice(0, 3);
+  const materiaFiltro = (req.query.materia || '').toString().trim();
+  const dataRefQuery = (req.query.dataRef || '').toString().trim();
+
+  if (!dia || !['seg','ter','qua','qui','sex'].includes(dia)) {
+    return res.status(400).json({ error: 'Informe dia válido: seg, ter, qua, qui ou sex.' });
+  }
+  if (!materiaFiltro) {
+    return res.status(400).json({ error: 'Informe materia (match parcial, sem acento).' });
+  }
+
+  // encontra a matéria na grade do dia
+  const itens = grade[dia] || [];
+  let itemAlvo = null;
+  for (const it of itens) {
+    const subs = Array.isArray(it.combinar) ? it.combinar : [it];
+    for (const s of subs) {
+      if (normalizar(s.m).includes(normalizar(materiaFiltro))) {
+        itemAlvo = s;
+        break;
+      }
+    }
+    if (itemAlvo) break;
+  }
+
+  if (!itemAlvo) {
+    return res.status(404).json({
+      error: 'Matéria não encontrada na grade.',
+      turma: turmaId,
+      dia,
+      materiaFiltro,
+      materias_disponiveis: itens.flatMap(it => Array.isArray(it.combinar) ? it.combinar.map(s => s.m) : [it.m])
+    });
+  }
+
+  const dataRef = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dataRefQuery) ? dataRefQuery : dataDoDia(dia);
+  const labelDia = DIAS_PT[dia];
+  const inicio = Date.now();
+
+  try {
+    // 1) busca o blog
+    const blogText = await fetchBlog(itemAlvo.url);
+    const charsEntrada = blogText ? blogText.length : 0;
+
+    if (!blogText || blogText.length < 30) {
+      return res.json({
+        turma: turmaId,
+        dia,
+        materia: itemAlvo.m,
+        professor: itemAlvo.p || '?',
+        parser: itemAlvo.formato || itemAlvo.tipo || 'padrao',
+        chars_entrada: charsEntrada,
+        tempo_ms: Date.now() - inicio,
+        resultado: { aula: '', deveres: [], teste: null, avisos: ['Blog sem texto suficiente'] },
+        status: 'vazio',
+        erro: null
+      });
+    }
+
+    // 2) processa com o mesmo fluxo que /api/today usaria
+    const r = await processWithAI(
+      itemAlvo.m, itemAlvo.p, blogText, itemAlvo.filtro, dataRef, labelDia,
+      itemAlvo.tipo, itemAlvo.maxDeveres, itemAlvo.maxDiasDever, itemAlvo.formato,
+      itemAlvo.ignorarAvaliacao, itemAlvo.testeAulaAnterior, itemAlvo.testeMarcado,
+      itemAlvo.interpretacaoComAnterior, itemAlvo.testeNoDiaExato
+    );
+
+    // monta a resposta
+    const deveres = [];
+    if (Array.isArray(r.deveres_aula) && r.deveres_aula.length) {
+      deveres.push(...r.deveres_aula);
+    }
+    if (Array.isArray(r.deveres_pendentes)) {
+      for (const g of r.deveres_pendentes) {
+        if (Array.isArray(g.deveres)) deveres.push(...g.deveres);
+      }
+    }
+
+    const teste = (r.materia_teste && r.materia_teste.trim())
+      ? { data: r.materia_teste_data || '', materia: r.materia_teste }
+      : null;
+
+    const avisos = [];
+    if (!r.aula_hoje || !r.aula_hoje.trim()) avisos.push('Aula vazia após processamento');
+
+    const status = (r.aula_hoje && r.aula_hoje.trim()) ? 'ok'
+      : (blogText.length > 200 ? 'sem_aula' : 'vazio');
+
+    return res.json({
+      turma: turmaId,
+      dia,
+      materia: itemAlvo.m,
+      professor: itemAlvo.p || '?',
+      parser: itemAlvo.formato || itemAlvo.tipo || 'padrao',
+      chars_entrada: charsEntrada,
+      tempo_ms: Date.now() - inicio,
+      resultado: {
+        aula: r.aula_hoje || '',
+        deveres,
+        teste,
+        avisos
+      },
+      status,
+      erro: null
+    });
+  } catch (e) {
+    return res.json({
+      turma: turmaId,
+      dia,
+      materia: itemAlvo.m,
+      professor: itemAlvo.p || '?',
+      parser: itemAlvo.formato || itemAlvo.tipo || 'padrao',
+      chars_entrada: 0,
+      tempo_ms: Date.now() - inicio,
+      resultado: { aula: '', deveres: [], teste: null, avisos: [] },
+      status: 'erro',
+      erro: e && e.message ? e.message : String(e)
+    });
+  }
+});
+
 // ── DIAGNÓSTICO: mostra o texto CRU que o app leu de cada blog, para depurar
 // quando uma matéria não puxa a aula/dever (ex: o professor mudou o formato do blog).
 // Protegido pela senha de admin (mesmo padrão do /api/limpar-cache). Uso:
