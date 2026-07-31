@@ -11,19 +11,19 @@ module.exports = {
   ],
   ter: [
     { m:'Ciências',       p:'Flávia Vidigal',   url:'https://profflaviacnsanglo.blogspot.com/p/6-ano-azul.html', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', formato:'rotulosSaulo', maxDiasDever:14 },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', maxDiasDever:14 },
     { m:'Redação',        p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-redacao.html', filtro:'Redação', formato:'agrupado', maxDiasDever:14 },
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/6-ano-azul.html', tipo:'provaFinal', maxDiasDever:14 },
   ],
   qua: [
     { m:'Ciências',       p:'Flávia Vidigal',   url:'https://profflaviacnsanglo.blogspot.com/p/6-ano-azul.html', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', formato:'rotulosSaulo', maxDiasDever:14 },
-    { m:'Gramática',      p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-gramatica.html', formato:'duasAulas' },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', maxDiasDever:14 },
+    { m:'Gramática',      p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-gramatica.html', formato:'duasAulas', maxDiasDever:14 },
   ],
   qui: [
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', formato:'rotulosSaulo', maxDiasDever:14 },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', maxDiasDever:14 },
     { m:'História',       p:'Cintya Alves',    url:'https://profcintyacnsanglo.blogspot.com/p/6-ano-historia.html', tipo:'acumulativo' },
-    { m:'Literatura',     p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-literatura.html', filtro:'Literatura', maxDiasDever:14 },
+    { m:'Literatura',     p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-literatura.html', filtro:'Literatura', formato:'agrupado', maxDiasDever:14 },
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/6-ano-azul.html', tipo:'provaFinal', maxDiasDever:14 },
   ],
   sex: [
@@ -31,6 +31,6 @@ module.exports = {
     { m:'Ciências',       p:'Flávia Vidigal',   url:'https://profflaviacnsanglo.blogspot.com/p/6-ano-azul.html', maxDiasDever:14 },
     { m:'Geografia',      p:'Florencia',       url:'https://profflorenciacnsanglo.blogspot.com/p/6-ano-geografia.html', maxDiasDever:14 },
     { m:'Redação',        p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/6-ano-redacao.html', filtro:'Redação', formato:'agrupado', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', formato:'rotulosSaulo', maxDiasDever:14 },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/7ano-azul-matematica-reforco.html', maxDiasDever:14 },
   ],
 };
