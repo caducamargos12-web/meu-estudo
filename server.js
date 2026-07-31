@@ -1054,6 +1054,8 @@ function ehEventoEscolar(texto) {
 // converte "DD/MM" ou "DD/MM/AAAA" em número comparável (AAAAMMDD)
 function dataParaNum(ddmm) {
   if (!ddmm) return 0;
+  // Proteção contra valores que não são strings (ex: IA retorna true ou number)
+  if (typeof ddmm !== 'string') return 0;
   const m = ddmm.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
   if (!m) return 0;
   const dia = parseInt(m[1],10), mes = parseInt(m[2],10);

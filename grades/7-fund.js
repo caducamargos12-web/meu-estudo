@@ -9,7 +9,7 @@ module.exports = {
     { m:'História',       p:'Cintya Alves',    url:'https://profcintyacnsanglo.blogspot.com/p/7-ano-historia.html', tipo:'acumulativo' },
   ],
   ter: [
-    { m:'Educacross',     p:'Natan Augusto',   url:'https://profnatancnsanglo.blogspot.com/p/7-ano-lidereeducacross.html', tipo:'soDever', maxDiasDever:14 },
+    { m:'Educacross',     p:'Natan Augusto',   url:'https://profnatancnsanglo.blogspot.com/p/7-ano-educacross.html', tipo:'soDever', maxDiasDever:14 },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/7-ano.html', filtro:'Literatura', formato:'agrupado', maxDiasDever:14 },
     { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/6-ano-azul-reforco.html', maxDiasDever:14 },
     { m:'História',       p:'Cintya Alves',    url:'https://profcintyacnsanglo.blogspot.com/p/7-ano-historia.html', tipo:'acumulativo' },
