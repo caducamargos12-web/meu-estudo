@@ -7,12 +7,12 @@ module.exports = {
   seg: [
     { m:'Biologia',       p:'Flávia Vidigal',   url:'https://profflaviacnsanglo.blogspot.com/p/8-ano_31.html', maxDiasDever:14 },
     { m:'História',       p:'Cintya Alves',    url:'https://profcintyacnsanglo.blogspot.com/p/8-ano-historia.html', tipo:'acumulativo' },
-    { m:'Gramática',      p:'Fernanda Lacerda',url:'https://proffernandalacerdaanglo.blogspot.com/p/8-ano-gramatica.html' },
+    { m:'Gramática',      p:'Fernanda Lacerda',url:'https://proffernandalacerdaanglo.blogspot.com/p/8-ano-gramatica.html', formato:'duasAulas', maxDiasDever:14 },
   ],
   ter: [
     { m:'Biologia',       p:'Flávia Vidigal',   url:'https://profflaviacnsanglo.blogspot.com/p/8-ano_31.html', maxDiasDever:14 },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/8-ano.html', filtro:'Literatura', formato:'agrupado', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', formato:'rotulosSaulo', maxDiasDever:14 },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', maxDiasDever:14 },
     { m:'História',       p:'Cintya Alves',    url:'https://profcintyacnsanglo.blogspot.com/p/8-ano-historia.html', tipo:'acumulativo' },
   ],
   qua: [
@@ -25,15 +25,15 @@ module.exports = {
     ] },
   ],
   qui: [
-    { m:'Gramática',      p:'Fernanda Lacerda',url:'https://proffernandalacerdaanglo.blogspot.com/p/8-ano-gramatica.html' },
+    { m:'Gramática',      p:'Fernanda Lacerda',url:'https://proffernandalacerdaanglo.blogspot.com/p/8-ano-gramatica.html', formato:'duasAulas', maxDiasDever:14 },
     { m:'Literatura',     p:'Fábio',           url:'https://proffabiocnsanglo.blogspot.com/p/8-ano.html', filtro:'Literatura', formato:'agrupado', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', formato:'rotulosSaulo', maxDiasDever:14 },
-    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/8-ano.html', formato:'fisica' },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', maxDiasDever:14 },
+    { m:'Física',         p:'Leonardo José',   url:'https://profleonardojosecnsanglo.blogspot.com/p/8-ano.html', formato:'fisica', maxDiasDever:14 },
   ],
   sex: [
     { m:'Educacross',     p:'Natan Augusto',   url:'https://profnatancnsanglo.blogspot.com/p/8-ano-educacross.html', tipo:'soDever', maxDiasDever:14 },
-    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/8-ano-lidere.html', tipo:'soDever', maxDiasDever:14 },
-    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', formato:'rotulosSaulo', maxDiasDever:14 },
+    { m:'Prog. Lidere',   p:'Lenon Soares',    url:'https://proflenoncnsanglo.blogspot.com/p/8-ano-lidere.html', formato:'duasAulas', maxDiasDever:14 },
+    { m:'Matemática',     p:'Luciano',         url:'https://proflucianocnanglo.blogspot.com/p/8-ano-azul-matematica.html', maxDiasDever:14 },
     { m:'Redação',        p:'Leonardo Ferreira',url:'https://profleonardomouracnsanglo.blogspot.com/p/8-ano-redacao.html', filtro:'Redação', formato:'agrupado', maxDiasDever:14 },
   ],
 };
