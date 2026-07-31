@@ -3229,6 +3229,19 @@ app.get('/api/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd, mensagem: 'Cache limpo. Recarregue o app para reprocessar.' });
 });
 
+// ── limpar cache via token (para automações n8n) ────────────────────────────
+// Protegido por N8N_SECRET_TOKEN (diferente da ADMIN_SENHA, não expõe no admin)
+app.post('/api/n8n/limpar-cache', (req, res) => {
+  const token = (req.headers['x-n8n-token'] || '').trim();
+  if (!process.env.N8N_SECRET_TOKEN || !token || token !== process.env.N8N_SECRET_TOKEN) {
+    return res.status(401).json({ error: 'token invalido' });
+  }
+  const qtd = Object.keys(cache).length;
+  for (const k of Object.keys(cache)) delete cache[k];
+  salvarCache();
+  res.json({ ok: true, chavesRemovidas: qtd });
+});
+
 // ── DIAGNÓSTICO DE RESULTADO: mostra o resultado PROCESSADO (o que o aluno veria)
 // para validar se parsers/IA estão extraindo corretamente. Retorna JSON.
 // Uso: /diag-resultado?senha=ADMIN_SENHA&turma=2-medio&dia=ter&materia=fisica
