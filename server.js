@@ -2850,6 +2850,14 @@ app.post('/api/reportar', auth, (req, res) => {
   reports.unshift(report); // mais recente primeiro
   if (reports.length > 200) reports = reports.slice(0, 200); // limita acúmulo
   salvarReports();
+  // notifica n8n para processamento automático (fire-and-forget)
+  if (process.env.N8N_WEBHOOK_REPORT) {
+    fetch(process.env.N8N_WEBHOOK_REPORT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report)
+    }).catch(() => {}); // silencioso: não bloqueia o aluno se n8n estiver fora
+  }
   res.json({ ok: true });
 });
 
