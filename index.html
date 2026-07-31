@@ -523,6 +523,8 @@ const scores={};
 
 let _repDia='',_repMateria='';
 const _diasNomes={seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta'};
+// matérias carregadas por dia (populado pelo SSE)
+let _materiasCarregadas=[];
 
 function abrirReporte(){
   const ov=document.getElementById('reporteOverlay');
@@ -536,29 +538,45 @@ function abrirReporte(){
   document.getElementById('repStep1').style.display='';
   document.getElementById('repStep2').style.display='none';
   document.getElementById('repMaterias').innerHTML='';
-  document.querySelectorAll('.rep-chip').forEach(c=>c.classList.remove('ativo'));
+  document.querySelectorAll('#repDias .rep-chip').forEach(c=>c.classList.remove('ativo'));
   // contexto automático (turma)
   let ctx='';
   const sub=document.getElementById('subtitle');
   if(sub&&sub.textContent)ctx=sub.textContent.trim();
   document.getElementById('reporteContexto').textContent='';
   document.getElementById('reporteTexto')._turma=ctx;
+  // pré-selecionar dia atual e popular matérias
+  const hoje=new Date();
+  const diasSemana=['','seg','ter','qua','qui','sex','',''];
+  const diaHoje=diasSemana[hoje.getDay()]||'';
+  if(diaHoje){
+    const btn=document.querySelector(`#repDias .rep-chip[data-dia="${diaHoje}"]`);
+    if(btn) selecionarDia(btn);
+  }
 }
 
 function selecionarDia(el){
   document.querySelectorAll('#repDias .rep-chip').forEach(c=>c.classList.remove('ativo'));
   el.classList.add('ativo');
   _repDia=el.dataset.dia;
-  // popular matérias do dia baseado nos cards carregados
+  // popular matérias: usa as matérias carregadas nos cards (do dia atual do SSE)
   const materias=[];
-  document.querySelectorAll('.card .c-subj').forEach(s=>{
-    const nome=s.textContent.trim();
-    if(nome&&!materias.includes(nome))materias.push(nome);
+  _materiasCarregadas.forEach(m=>{
+    if(m&&!materias.includes(m))materias.push(m);
   });
-  // se não tem cards carregados, usa lista genérica
-  const lista=materias.length?materias:['Matemática','Português','História','Geografia','Ciências','Física','Química','Biologia','Inglês','Redação','Literatura','Filosofia','Sociologia','Educacross','Prog. Lidere'];
+  // fallback: pegar dos cards no DOM
+  if(!materias.length){
+    document.querySelectorAll('.card .c-subj').forEach(s=>{
+      const nome=s.textContent.trim();
+      if(nome&&!materias.includes(nome))materias.push(nome);
+    });
+  }
   const container=document.getElementById('repMaterias');
-  container.innerHTML=lista.map(m=>`<button class="rep-chip" data-mat="${m}" onclick="selecionarMateria(this)">${m}</button>`).join('');
+  if(materias.length){
+    container.innerHTML=materias.map(m=>`<button class="rep-chip" data-mat="${m}" onclick="selecionarMateria(this)">${m}</button>`).join('');
+  } else {
+    container.innerHTML='<span style="font-size:12px;color:var(--text-3)">Nenhuma matéria carregada. Recarregue o app.</span>';
+  }
 }
 
 function selecionarMateria(el){
@@ -572,6 +590,11 @@ function selecionarMateria(el){
 }
 
 function fecharReporte(){
+  // confirmação se já preencheu algo
+  const txt=document.getElementById('reporteTexto')?.value?.trim()||'';
+  if(txt||_repMateria){
+    if(!confirm('Tem certeza que quer sair? O report não será enviado.')) return;
+  }
   document.getElementById('reporteOverlay').classList.remove('aberto');
   document.body.style.overflow='';
 }
@@ -1294,6 +1317,7 @@ function loadDay(){
   const token=localStorage.getItem('sessionToken');
   const evtSource=new EventSource(`/api/today?token=${encodeURIComponent(token)}`);
   let total=0;let done=0;let fimDeSemana=false;let estaEmRecesso=false;
+  _materiasCarregadas=[]; // limpa matérias ao iniciar novo SSE
 
   evtSource.onmessage=function(e){
     const msg=JSON.parse(e.data);
@@ -1345,6 +1369,8 @@ function loadDay(){
       const dataRef=(window._dataRefSecao||{})[msg.index]||'';
       if(slot)slot.innerHTML=renderCard(msg.item,msg.index,msg.ehPrevia,dataRef);
       (window._itensDoDia=window._itensDoDia||[]).push({item:msg.item,ehPrevia:msg.ehPrevia});
+      // tracking de matérias para o modal de report
+      if(msg.item&&msg.item.m&&!_materiasCarregadas.includes(msg.item.m))_materiasCarregadas.push(msg.item.m);
     }
     if(msg.type==='done'){
       evtSource.close();
@@ -1443,7 +1469,7 @@ document.addEventListener('keydown',function(e){
 </script>
 
 <!-- modal de reportar erro (filho direto do body para position:fixed centralizar certo) -->
-<div id="reporteOverlay" class="rep-overlay" onclick="if(event.target===this)fecharReporte()">
+<div id="reporteOverlay" class="rep-overlay">
   <div class="rep-modal">
     <div class="rep-title">Reportar um erro</div>
     <div class="rep-sub">Selecione a matéria e o dia, depois descreva o problema.</div>
