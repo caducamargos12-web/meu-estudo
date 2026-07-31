@@ -555,12 +555,23 @@ function abrirReporte(){
   }
 }
 
+// matérias por turma (fallback quando SSE não carregou cards, ex: recesso)
+const _materiasPorTurma={
+  '3-ano':{'seg':['Filosofia','Geografia','Prog. Lidere'],'ter':['História','Química B','Física'],'qua':['Linguística','Matemática A','Matemática B','Inglês'],'qui':['Biologia','Matemática B','Química A','Redação'],'sex':['Sociologia','Biologia','Redação','Literatura','Física']},
+  '2-medio':{'seg':['Geografia','Filosofia','Prog. Lidere'],'ter':['Física','Química A','Matemática B','História'],'qua':['Inglês','Matemática B','Linguística','Matemática A'],'qui':['Química B','Biologia B','Literatura','Redação'],'sex':['Sociologia','Biologia A','História','Física','Literatura']},
+  '1-medio':{'seg':['Filosofia','Geografia','Matemática B'],'ter':['Química A','História','Redação','Matemática B'],'qua':['Matemática A','Linguística','Prog. Lidere','Inglês'],'qui':['Literatura','Biologia','Química B'],'sex':['Biologia','Literatura','Sociologia','Física']},
+  '9-fund':{'seg':['Gramática','Biologia/Química','Matemática','Geografia','Educacross'],'ter':['Inglês','Física','Redação'],'qua':['Matemática','Biologia/Química','Matemática','História'],'qui':['Matemática','Prog. Lidere','Geografia','Redação'],'sex':['Gramática','Literatura']},
+  '8-fund':{'seg':['Biologia','História','Gramática'],'ter':['Biologia','Literatura','Matemática','História'],'qua':['Biologia','Inglês','Geografia','Redação','Educacross'],'qui':['Gramática','Literatura','Matemática','Física'],'sex':['Educacross','Prog. Lidere','Matemática','Redação']},
+  '7-fund':{'seg':['Gramática','História'],'ter':['Educacross','Literatura','Matemática','História','Redação'],'qua':['Matemática','Literatura','Inglês','Redação'],'qui':['Matemática','Gramática','Geografia'],'sex':['Prog. Lidere','Ciências','Matemática','Geografia']},
+  '6-fund':{'seg':['História','Geografia','Educacross'],'ter':['Ciências','Matemática','Redação','Inglês'],'qua':['Ciências','Matemática','Gramática'],'qui':['Matemática','História','Literatura','Inglês'],'sex':['Prog. Lidere','Ciências','Geografia','Redação','Matemática']}
+};
+
 function selecionarDia(el){
   document.querySelectorAll('#repDias .rep-chip').forEach(c=>c.classList.remove('ativo'));
   el.classList.add('ativo');
   _repDia=el.dataset.dia;
-  // popular matérias: usa as matérias carregadas nos cards (do dia atual do SSE)
-  const materias=[];
+  // popular matérias: primeiro tenta as carregadas pelo SSE
+  let materias=[];
   _materiasCarregadas.forEach(m=>{
     if(m&&!materias.includes(m))materias.push(m);
   });
@@ -571,11 +582,19 @@ function selecionarDia(el){
       if(nome&&!materias.includes(nome))materias.push(nome);
     });
   }
+  // fallback: lista fixa por turma e dia
+  if(!materias.length){
+    const turmaId=window._turmaAtual?.id||'3-ano';
+    const turmaGrade=_materiasPorTurma[turmaId];
+    if(turmaGrade&&turmaGrade[_repDia]){
+      materias=turmaGrade[_repDia];
+    }
+  }
   const container=document.getElementById('repMaterias');
   if(materias.length){
     container.innerHTML=materias.map(m=>`<button class="rep-chip" data-mat="${m}" onclick="selecionarMateria(this)">${m}</button>`).join('');
   } else {
-    container.innerHTML='<span style="font-size:12px;color:var(--text-3)">Nenhuma matéria carregada. Recarregue o app.</span>';
+    container.innerHTML='<span style="font-size:12px;color:var(--text-3)">Nenhuma matéria encontrada para este dia.</span>';
   }
 }
 
