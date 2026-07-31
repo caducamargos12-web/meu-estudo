@@ -3242,6 +3242,18 @@ app.post('/api/n8n/limpar-cache', (req, res) => {
   res.json({ ok: true, chavesRemovidas: qtd });
 });
 
+// ── diagnóstico via token n8n (para agentes consultarem resultado processado) ──
+app.get('/api/n8n/diag-resultado', async (req, res) => {
+  const token = (req.headers['x-n8n-token'] || req.query.token || '').trim();
+  if (!process.env.N8N_SECRET_TOKEN || !token || token !== process.env.N8N_SECRET_TOKEN) {
+    return res.status(401).json({ error: 'token invalido' });
+  }
+  // redireciona internamente para /diag-resultado com senha preenchida
+  req.query.senha = process.env.ADMIN_SENHA;
+  // delega para o handler existente (próxima rota)
+  return res.redirect(`/diag-resultado?senha=${encodeURIComponent(process.env.ADMIN_SENHA)}&turma=${req.query.turma||''}&dia=${req.query.dia||''}&materia=${encodeURIComponent(req.query.materia||'')}`);
+});
+
 // ── DIAGNÓSTICO DE RESULTADO: mostra o resultado PROCESSADO (o que o aluno veria)
 // para validar se parsers/IA estão extraindo corretamente. Retorna JSON.
 // Uso: /diag-resultado?senha=ADMIN_SENHA&turma=2-medio&dia=ter&materia=fisica
