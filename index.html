@@ -362,6 +362,13 @@
   .beta-fechar:hover{color:var(--amber,#d9a865)}
   .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
+  .rep-step{margin:12px 0}
+  .rep-label{font-size:12px;color:var(--text-2);margin-bottom:6px;display:block;font-weight:500}
+  .rep-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .rep-chip{padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--surface);color:var(--text-1);font-size:12.5px;cursor:pointer;transition:all .15s}
+  .rep-chip:hover{border-color:var(--amber);color:var(--amber)}
+  .rep-chip.ativo{background:var(--amber);color:#1a1a1a;border-color:var(--amber);font-weight:600}
+  .rep-sel-info{font-size:12px;color:var(--amber);margin-bottom:8px;font-weight:500}
   .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
   .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
   .rep-modal.red-modal{max-width:min(720px,94vw);width:100%;height:96vh;max-height:96vh;padding:28px 32px;display:flex;flex-direction:column}
@@ -514,47 +521,81 @@ const EMOJIS={'Filosofia':'🧠','Geografia':'🌍','Prog. Lidere':'🎯','Hist�
 const CORES=['#d9a865','#c99a78','#a8c08a','#e0b876','#d9a0a0','#b89a7a','#cbb88a','#d4a574']; // TODO: converter para CSS custom properties ou data-attr
 const scores={};
 
+let _repDia='',_repMateria='';
+const _diasNomes={seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta'};
+
 function abrirReporte(){
   const ov=document.getElementById('reporteOverlay');
   ov.classList.add('aberto');
-  // "portal": move o modal para ser filho direto do body, escapando de qualquer
-  // ancestral com backdrop-filter/transform que possa prender o position:fixed
   if(ov.parentElement !== document.body){ document.body.appendChild(ov); }
-  document.body.style.overflow='hidden'; // trava o scroll do fundo enquanto o modal está aberto
+  document.body.style.overflow='hidden';
   document.getElementById('reporteTexto').value='';
   document.getElementById('reporteMsg').textContent='';
   document.getElementById('reporteEnviar').disabled=false;
-  // captura qual matéria está aberta no momento (contexto pro admin)
+  _repDia='';_repMateria='';
+  document.getElementById('repStep1').style.display='';
+  document.getElementById('repStep2').style.display='none';
+  document.getElementById('repMaterias').innerHTML='';
+  document.querySelectorAll('.rep-chip').forEach(c=>c.classList.remove('ativo'));
+  // contexto automático (turma)
   let ctx='';
-  const aberto=document.querySelector('.card.open .c-subj');
-  const dia=document.getElementById('subtitle');
-  if(aberto)ctx='Matéria: '+aberto.textContent.trim();
-  if(dia&&dia.textContent)ctx+=(ctx?' · ':'')+dia.textContent.trim();
-  document.getElementById('reporteContexto').textContent=ctx?('Contexto: '+ctx):'';
-  document.getElementById('reporteTexto')._ctx=ctx;
+  const sub=document.getElementById('subtitle');
+  if(sub&&sub.textContent)ctx=sub.textContent.trim();
+  document.getElementById('reporteContexto').textContent='';
+  document.getElementById('reporteTexto')._turma=ctx;
+}
+
+function selecionarDia(el){
+  document.querySelectorAll('#repDias .rep-chip').forEach(c=>c.classList.remove('ativo'));
+  el.classList.add('ativo');
+  _repDia=el.dataset.dia;
+  // popular matérias do dia baseado nos cards carregados
+  const materias=[];
+  document.querySelectorAll('.card .c-subj').forEach(s=>{
+    const nome=s.textContent.trim();
+    if(nome&&!materias.includes(nome))materias.push(nome);
+  });
+  // se não tem cards carregados, usa lista genérica
+  const lista=materias.length?materias:['Matemática','Português','História','Geografia','Ciências','Física','Química','Biologia','Inglês','Redação','Literatura','Filosofia','Sociologia','Educacross','Prog. Lidere'];
+  const container=document.getElementById('repMaterias');
+  container.innerHTML=lista.map(m=>`<button class="rep-chip" data-mat="${m}" onclick="selecionarMateria(this)">${m}</button>`).join('');
+}
+
+function selecionarMateria(el){
+  document.querySelectorAll('#repMaterias .rep-chip').forEach(c=>c.classList.remove('ativo'));
+  el.classList.add('ativo');
+  _repMateria=el.dataset.mat;
+  // mostrar step 2
+  document.getElementById('repStep2').style.display='';
+  document.getElementById('repSelInfo').textContent=_repMateria+' ('+(_diasNomes[_repDia]||_repDia)+')';
   setTimeout(()=>document.getElementById('reporteTexto').focus(),100);
 }
+
 function fecharReporte(){
   document.getElementById('reporteOverlay').classList.remove('aberto');
-  document.body.style.overflow=''; // libera o scroll do fundo
+  document.body.style.overflow='';
 }
+
 async function enviarReporte(){
   const txt=document.getElementById('reporteTexto').value.trim();
   const msg=document.getElementById('reporteMsg');
-  if(!txt){msg.className='rep-msg erro';msg.textContent='Escreva o que está errado.';return;}
+  if(!_repDia||!_repMateria){msg.className='rep-msg erro';msg.textContent='Selecione o dia e a matéria primeiro.';return;}
+  if(!txt){msg.className='rep-msg erro';msg.textContent='Descreva o que está errado.';return;}
   const btn=document.getElementById('reporteEnviar');
   btn.disabled=true;btn.textContent='Enviando…';
   try{
     const token=localStorage.getItem('sessionToken');
-    const ctx=document.getElementById('reporteTexto')._ctx||'';
+    const turma=document.getElementById('reporteTexto')._turma||'';
+    const contexto=turma+' | '+_repMateria+' | '+(_diasNomes[_repDia]||_repDia)+' ('+_repDia+')';
+    const mensagem='['+_repMateria+' - '+(_diasNomes[_repDia]||_repDia)+'] '+txt;
     const res=await fetch('/api/reportar',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-session-token':token},
-      body:JSON.stringify({mensagem:txt,contexto:ctx})
+      body:JSON.stringify({mensagem,contexto})
     });
     const data=await res.json();
     if(data.error){msg.className='rep-msg erro';msg.textContent=data.error;btn.disabled=false;btn.textContent='Enviar';return;}
-    msg.className='rep-msg ok';msg.textContent='Obrigado! Report enviado. 🙌';
+    msg.className='rep-msg ok';msg.textContent='Report enviado! Vamos resolver. 🙌';
     btn.textContent='Enviado';
     setTimeout(fecharReporte,1400);
   }catch(e){
@@ -1405,8 +1446,23 @@ document.addEventListener('keydown',function(e){
 <div id="reporteOverlay" class="rep-overlay" onclick="if(event.target===this)fecharReporte()">
   <div class="rep-modal">
     <div class="rep-title">Reportar um erro</div>
-    <div class="rep-sub">Viu algo errado? Conta pra gente que arrumamos rápido.</div>
-    <textarea id="reporteTexto" class="rep-textarea" placeholder="Ex: o dever de matemática do dia 10 está na matéria errada..." maxlength="1000"></textarea>
+    <div class="rep-sub">Selecione a matéria e o dia, depois descreva o problema.</div>
+    <div class="rep-step" id="repStep1">
+      <label class="rep-label">Dia da semana:</label>
+      <div class="rep-chips" id="repDias">
+        <button class="rep-chip" data-dia="seg" onclick="selecionarDia(this)">Seg</button>
+        <button class="rep-chip" data-dia="ter" onclick="selecionarDia(this)">Ter</button>
+        <button class="rep-chip" data-dia="qua" onclick="selecionarDia(this)">Qua</button>
+        <button class="rep-chip" data-dia="qui" onclick="selecionarDia(this)">Qui</button>
+        <button class="rep-chip" data-dia="sex" onclick="selecionarDia(this)">Sex</button>
+      </div>
+      <label class="rep-label" style="margin-top:10px">Matéria:</label>
+      <div class="rep-chips" id="repMaterias"></div>
+    </div>
+    <div class="rep-step" id="repStep2" style="display:none">
+      <div class="rep-sel-info" id="repSelInfo"></div>
+      <textarea id="reporteTexto" class="rep-textarea" placeholder="Descreva o que está errado. Ex: o dever pendente mostrado não bate com o que o professor colocou no blog..." maxlength="1000"></textarea>
+    </div>
     <div class="rep-ctx" id="reporteContexto"></div>
     <div class="rep-acoes">
       <button class="rep-cancelar" onclick="fecharReporte()">Cancelar</button>
