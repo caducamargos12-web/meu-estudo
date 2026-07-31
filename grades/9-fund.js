@@ -9,7 +9,7 @@ module.exports = {
     { m:'Biologia/Química', p:'Flávia Vidigal', url:'https://profflaviacnsanglo.blogspot.com/p/9-ano-azul.html', maxDiasDever:14 },
     { m:'Matemática',     p:'Saulo Rodrigues', url:'https://profsauloanglo.blogspot.com/p/matematica-9-ano.html', maxDiasDever:14 },
     { m:'Geografia',      p:'Florencia',       url:'https://profflorenciacnsanglo.blogspot.com/p/9-ano-geografia.html', maxDiasDever:14 },
-    { m:'Educacross',     p:'Natan Augusto',   url:'https://profnatancnsanglo.blogspot.com/p/9-ano-educacross.html', tipo:'soDever', maxDiasDever:14 },
+    { m:'Educacross',     p:'Natan Augusto',   url:'https://profnatancnsanglo.blogspot.com/p/9-ano-lidereeducacross.html', tipo:'soDever', maxDiasDever:14 },
   ],
   ter: [
     { m:'Inglês',         p:'Jully Alvim',     url:'https://profjullycnsanglo.blogspot.com/p/9ano-azul.html', tipo:'provaFinal', maxDiasDever:14 },
