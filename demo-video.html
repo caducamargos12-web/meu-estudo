@@ -271,13 +271,14 @@
   .chip.ativo{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 
   /* ═══ MODAL REDAÇÃO ═══ */
-  .rep-modal.red-modal{max-width:min(720px,94vw);width:100%;height:96vh;max-height:96vh;padding:28px 32px;display:flex;flex-direction:column}
-  .rep-modal.red-modal .rep-title{font-size:22px;margin-bottom:8px}
-  .rep-modal.red-modal .rep-sub{font-size:14px;margin-bottom:20px}
-  .rep-modal.red-modal .rep-acoes{margin-top:20px}
-  .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:13px;font-size:15px;border-radius:10px}
-  .rep-modal.red-modal .red-tema{min-height:0;height:42px;font-size:14px;line-height:1.35;padding:11px 14px;border-radius:12px;margin-bottom:12px;resize:none;overflow:hidden}
-  .rep-modal.red-modal .red-textarea{min-height:0;flex:1;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
+  .rep-modal.red-modal{max-width:min(720px,94vw);width:100%;height:90vh;max-height:90vh;padding:20px 18px;display:flex;flex-direction:column}
+  .rep-modal.red-modal .rep-title{font-size:20px;margin-bottom:6px}
+  .rep-modal.red-modal .rep-sub{font-size:13px;margin-bottom:14px;line-height:1.5}
+  .rep-modal.red-modal .rep-acoes{margin-top:14px}
+  .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:12px;font-size:14px;border-radius:10px;flex:1}
+  .rep-modal.red-modal .red-tema{min-height:48px;height:auto;font-size:13px;line-height:1.4;padding:12px 14px;border-radius:10px;margin-bottom:10px;resize:none}
+  .rep-modal.red-modal .red-textarea{min-height:0;flex:1;font-size:14px;line-height:1.6;padding:14px;border-radius:10px;border-width:1px}
+  .rep-modal.red-modal .red-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-dim)}
   .red-conta{font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:right;margin-top:4px}
   .rep-cancelar{background:var(--surface-2);color:var(--text);border:1px solid var(--border);cursor:pointer;font-family:var(--sans);transition:all .2s}
   .rep-cancelar:hover{background:var(--border)}
