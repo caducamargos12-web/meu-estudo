@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" ">
+<title>Meu Estudo – CNS Anglo</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1a1611;
+    --bg-elev:#211c15;
+    --surface:#2a241b;
+    --surface-2:#332c21;
+    --border:#3a3225;
+    --border-bright:#4d4332;
+    --accent:#d9a865;
+    --accent-dim:#a87d44;
+    --accent-glow:rgba(217,168,101,.18);
+    --green:#a8c08a;
+    --amber:#e0b876;
+    --red:#d99080;
+    --red-soft:#d98a8a;
+    --red-label:#e0a0a0;
+    --red-bright:#e0726a;
+    --red-muted:#d9a0a0;
+    --blue:#6f9cff;
+    --ink:#e8dcc8;
+    --text:#f4ede0;
+    --text-2:#c4b8a4;
+    --text-3:#8a7d68;
+    --sans:'Inter',system-ui,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-font-smoothing:antialiased}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;position:relative}
+
+  /* ═══ FOCUS-VISIBLE PADRONIZADO ═══ */
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  :focus:not(:focus-visible){outline:none}
+
+  /* imagem de fundo visível — fica FIXA atrás de tudo */
+  .bg-layer{position:fixed;inset:0;z-index:-2;background:url('fundo.jpg') center/cover no-repeat;opacity:.6}
+  .bg-tint{position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(26,22,17,.35),rgba(26,22,17,.55))}
+
+  /* ═══ animações ═══ */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+    .card,.wc-hello,.wc-name,.wc-quote,.wc-loader,.wc-mark,.wc-char,.wc-word{opacity:1!important;filter:none!important}
+  }
+
+  /* otimização para celular: blur trava em mobile, então usamos
+     movimentos próprios (nomes -m) com scale/translate, sem redefinir os de cima */
+  @media (max-width:768px){
+    .card{backdrop-filter:none;-webkit-backdrop-filter:none;background:linear-gradient(180deg,rgba(38,32,24,.95),rgba(30,25,19,.96));animation-name:cardInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.2s}
+    header{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:10px 12px;overflow:hidden}
+    .head-row{flex-wrap:nowrap;gap:8px}
+    .head-left{gap:8px;flex:1;min-width:0}
+    .head-mark{width:32px;height:32px;min-width:32px;font-size:15px;border-radius:8px;flex-shrink:0}
+    .head-titles{min-width:0;text-align:center}
+    .head-titles h1{font-size:15px;white-space:nowrap}
+    .head-titles .sub{font-size:10.5px;white-space:normal;line-height:1.3}
+    .head-right{gap:6px;flex-shrink:0}
+    .report-btn-mini,.redacao-btn-mini,.music-btn-mini{width:30px;height:30px}
+    #clock{display:none}
+    .logout-btn{padding:5px 9px;font-size:11px}
+    /* curva calma (desacelera no fim) e durações longas para clima suave e lento */
+    .wc-char{animation-name:charInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.5s;background:none;-webkit-text-fill-color:var(--accent);color:var(--accent);will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-word{animation-name:wordInM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.6s;animation-fill-mode:both;opacity:0;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-mark{animation-name:wcMarkM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.9s;will-change:transform,opacity;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+    .wc-hello,.wc-loader{animation-name:wcRiseM;animation-timing-function:cubic-bezier(.22,.61,.36,1);animation-duration:1.6s}
+    #welcome{animation-name:welcomeInM;animation-duration:1.2s}
+    #welcome.fade-out{animation-name:welcomeOutM}
+  }
+  /* logo: surge suave, leve subida, sem giro agressivo */
+  @keyframes wcMarkM{
+    0%{opacity:0;transform:scale(.82) translateY(16px)}
+    100%{opacity:1;transform:scale(1) translateY(0)}
+  }
+  /* nome: cada letra emerge de baixo com calma, sutil */
+  @keyframes charInM{
+    0%{opacity:0;transform:translateY(14px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
+  /* frase: cada palavra se materializa do nada (surge da transparência, cresce levemente) */
+  @keyframes wordInM{
+    0%{opacity:0;transform:translateY(6px) scale(.86)}
+    60%{opacity:1}
+    100%{opacity:1;transform:translateY(0) scale(1)}
+  }
+  /* saudação e loader: revelação calma de baixo */
+  @keyframes wcRiseM{
+    0%{opacity:0;transform:translateY(12px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
+  @keyframes cardInM{
+    0%{opacity:0;transform:translateY(16px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
+  @keyframes welcomeOutM{
+    from{opacity:1;transform:scale(1)}
+    to{opacity:0;visibility:hidden;transform:scale(1.02)}
+  }
+  @keyframes welcomeInM{
+    from{opacity:0}
+    to{opacity:1}
+  }
+
+  /* ═══ HEADER ═══ */
+  #appScreen{position:relative;z-index:1}
+  header{position:sticky;top:0;z-index:100;background:rgba(26,22,17,.65);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:16px 22px}
+  .head-row{max-width:720px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+  .head-left{display:flex;align-items:center;gap:12px}
+  .head-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff;box-shadow:0 2px 12px var(--accent-glow)}
+  .head-titles{text-align:center}
+  .head-titles h1{font-size:17px;font-weight:700;letter-spacing:-.3px;line-height:1}
+  .head-titles .sub{font-size:12px;color:var(--text-2);margin-top:3px}
+  .head-right{display:flex;align-items:center;gap:14px}
+  #clock{font-family:var(--mono);font-size:13px;color:var(--text-3)}
+  .logout-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-2);font-size:12px;padding:6px 11px;cursor:pointer;transition:all .15s;font-family:var(--sans)}
+  .logout-btn:hover{border-color:var(--border-bright);color:var(--text)}
+
+  main{max-width:720px;margin:0 auto;padding:24px 22px 80px}
+
+  /* ═══ DAY HEADER ═══ */
+  .day-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;margin-top:6px;animation:fadeUp .5s cubic-bezier(.2,.8,.2,1)}
+  .day-head.previa{margin-top:28px}
+  .day-badge{font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-glow);border:1px solid var(--accent-dim);padding:5px 13px;border-radius:100px}
+  .day-badge.badge-previa{color:var(--text-2);background:color-mix(in srgb,var(--text-2) 10%,transparent);border-color:var(--border-bright)}
+  .day-line{flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
+  .day-count{font-family:var(--mono);font-size:12px;color:var(--text-3)}
+  /* card de prévia: levemente esmaecido para diferenciar de hoje */
+  .card-previa{opacity:.82}
+  .card-previa:hover{opacity:1}
+  .tag-previa{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-2);background:color-mix(in srgb,var(--text-2) 14%,transparent);padding:2px 7px;border-radius:5px;vertical-align:middle;margin-left:6px}
+
+  /* ═══ CARDS ═══ */
+  .card{background:linear-gradient(180deg,rgba(42,36,27,.88),rgba(33,28,21,.92));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border-bright);border-radius:16px;margin-bottom:12px;overflow:hidden;animation:cardIn .8s cubic-bezier(.2,.8,.2,1) both;transition:border-color .4s ease}
+  @keyframes cardIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  .card.open{border-color:color-mix(in srgb,var(--cor,var(--accent)) 45%,transparent)}
+  .card-glow{height:2px;background:linear-gradient(90deg,transparent,var(--cor,var(--accent)),transparent);opacity:.6}
+  /* cabeçalho clicável */
+  .c-head{display:flex;align-items:center;gap:13px;padding:16px 18px;cursor:pointer;user-select:none;transition:background .35s ease}
+  .c-head:hover{background:color-mix(in srgb,var(--cor,var(--accent)) 6%,transparent)}
+  .c-chevron{margin-left:auto;color:var(--text-3);transition:transform .5s cubic-bezier(.34,1.3,.5,1),color .4s;flex-shrink:0;font-size:18px}
+  .card.open .c-chevron{transform:rotate(180deg);color:var(--cor,var(--accent))}
+  /* conteúdo expansível */
+  .c-body{max-height:0;overflow:hidden;transition:max-height .6s cubic-bezier(.25,.8,.25,1),opacity .5s ease;opacity:0}
+  .card.open .c-body{max-height:4000px;opacity:1}
+  .c-body-in{padding:0 18px 18px}
+  .sub-sec{padding:4px 0}
+  .sub-titulo{font-weight:700;font-size:1.05rem;color:var(--cor,var(--accent));margin:10px 0 8px;letter-spacing:.01em}
+  .sub-divisor{height:1px;background:color-mix(in srgb,var(--accent) 18%,transparent);margin:16px 0}
+  .dev-simple{padding:3px 0;color:var(--ink);font-size:.95rem}
+  .c-icon{width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cor,var(--accent)) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--cor,var(--accent)) 30%,transparent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .c-meta{flex:1;min-width:0}
+  .c-subj{font-size:18px;font-weight:700;letter-spacing:-.3px}
+  .c-prof{font-size:12px;color:var(--text-2);margin-top:2px;font-family:var(--mono)}
+
+  .blk{border:1px solid var(--border);background:var(--bg);border-radius:13px;padding:14px;margin-bottom:11px}
+  .blk-head{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+  .blk-ic{font-size:13px}
+  .blk-label{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+  .blk-body{font-size:14px;line-height:1.65;color:var(--text)}
+  .blk-aula .blk-label{color:var(--text-2)}
+  .blk-teste{border-color:color-mix(in srgb,var(--accent) 35%,transparent);background:color-mix(in srgb,var(--accent) 9%,var(--bg))}
+  .blk-aval-final{border-color:color-mix(in srgb,var(--red-soft) 45%,transparent);background:color-mix(in srgb,var(--red-soft) 12%,var(--bg))}
+  .blk-aval-final .blk-label{color:var(--red-label)}
+  .blk-teste .blk-label{color:var(--accent)}
+  .blk-dev{border-color:color-mix(in srgb,var(--amber) 22%,transparent);background:color-mix(in srgb,var(--amber) 5%,var(--bg))}
+  .blk-dev .blk-label{color:var(--amber)}
+  .blk-dev-novo{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
+  .blk-dev-novo .blk-label{color:var(--green)}
+  .blk-res{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
+  .blk-res .blk-label{color:var(--accent)}
+  .blk-quiz{border-color:color-mix(in srgb,var(--green) 22%,transparent);background:color-mix(in srgb,var(--green) 5%,var(--bg))}
+  .btn-gerar-quiz{background:color-mix(in srgb,var(--green) 16%,var(--bg));border:1px solid color-mix(in srgb,var(--green) 40%,transparent);color:var(--green);border-radius:9px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);margin-top:4px;transition:all .2s}
+  .btn-gerar-quiz:hover{background:color-mix(in srgb,var(--green) 24%,var(--bg))}
+  .btn-gerar-quiz:disabled{opacity:.6;cursor:wait}
+  .blk-quiz .blk-label{color:var(--green)}
+  .blk-prox{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--bg))}
+  .blk-prox .blk-label{color:var(--accent)}
+  .blk-sub{font-size:11px;color:var(--text-3);margin:-2px 0 9px;font-style:italic}
+
+  .dev-group{margin-bottom:11px}
+  .dev-group:last-child{margin-bottom:0}
+  .dev-date{font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:5px;font-weight:500}
+  .dev-item{display:flex;gap:8px;font-size:13px;line-height:1.5;margin-bottom:4px;color:var(--text)}
+  .dev-dot{color:var(--amber);flex-shrink:0}
+  .muted{font-size:13px;color:var(--text-3)}
+  /* checkbox de dever */
+  .dev-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.5;margin-bottom:7px;cursor:pointer;color:var(--text);user-select:none}
+  .dev-check input{position:absolute;opacity:0;width:0;height:0}
+  .dev-box{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:2px solid var(--border-bright);margin-top:1px;position:relative;transition:all .2s}
+  .dev-check:hover .dev-box{border-color:var(--green)}
+  .dev-check input:checked+.dev-box{background:var(--green);border-color:var(--green)}
+  .dev-check input:checked+.dev-box::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+  .dev-check.feito .dev-txt{text-decoration:line-through;color:var(--text-3)}
+  .dev-txt{transition:all .2s}
+
+  /* central de deveres */
+  .central-dev{background:var(--surface);border:1px solid var(--border-bright);border-radius:14px;padding:16px;margin-bottom:18px}
+  .cd-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cd-titulo{font-size:15px;font-weight:700;color:var(--text)}
+  .cd-prog{font-family:var(--mono);font-size:12px;color:var(--green);font-weight:600}
+  .cd-grupo{margin-bottom:13px}
+  .cd-grupo:last-child{margin-bottom:0}
+  .cd-mat{font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+  .cd-item{margin-bottom:6px}
+  .cd-data{font-family:var(--mono);font-size:11px;color:var(--amber);margin-right:6px}
+  .cd-vazio{font-size:13px;color:var(--text-3)}
+  .cd-plurall{display:inline-block;margin-top:13px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:600}
+  .cd-plurall:hover{text-decoration:underline}
+
+  .foot{text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:28px;letter-spacing:.5px}
+
+  /* ═══ MARCA D'ÁGUA (anti-compartilhamento) ═══ */
+  #watermark{position:fixed;inset:0;z-index:400;pointer-events:none;overflow:hidden;opacity:.06;display:flex;flex-direction:column;justify-content:center;gap:60px}
+  #watermark .wm-row{display:flex;white-space:nowrap;transform:rotate(-28deg);justify-content:center}
+  .wm-text{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);padding:0 35px;letter-spacing:1px;flex-shrink:0}
+
+  /* ═══ PLAYER DE MÚSICA (mini, no header) ═══ */
+  .beta-aviso{position:sticky;top:0;z-index:90;background:color-mix(in srgb,var(--amber,#d9a865) 14%,var(--bg));border-bottom:1px solid color-mix(in srgb,var(--amber,#d9a865) 30%,transparent)}
+  .beta-aviso.escondido{display:none}
+  .beta-aviso-in{max-width:760px;margin:0 auto;padding:11px 18px;display:flex;align-items:flex-start;gap:11px}
+  .beta-ic{font-size:18px;flex-shrink:0;line-height:1.4}
+  .beta-ic-inline{display:inline}
+  .beta-txt{font-size:12.5px;line-height:1.55;color:var(--text-2,#cbb89a)}
+  .beta-txt b{color:var(--amber,#d9a865)}
+  .beta-fechar{flex-shrink:0;background:transparent;border:none;color:var(--text-3,#8a7d68);font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;transition:color .2s}
+  .beta-fechar:hover{color:var(--amber,#d9a865)}
+  .report-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .report-btn-mini:hover{border-color:var(--amber);color:var(--amber)}
+  .redacao-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .redacao-btn-mini:hover{border-color:var(--green);color:var(--green)}
+  .music-btn-mini{width:32px;height:32px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+  .music-btn-mini:hover{border-color:var(--accent)}
+  .music-btn-mini.playing{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .note-icon{transition:transform .2s}
+
+  /* ═══ MODAIS ═══ */
+  .rep-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;display:none;align-items:center;justify-content:center}
+  .rep-overlay.aberto{display:flex}
+  .rep-modal{background:var(--surface);border:1px solid var(--border-bright);border-radius:18px;padding:24px;max-width:420px;width:92%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal-head{font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px;letter-spacing:-.3px}
+  .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text-2);cursor:pointer;font-size:20px;padding:4px 8px;transition:color .2s}
+  .modal-close:hover{color:var(--text)}
+  .modal-section{margin-bottom:16px}
+  .modal-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-2);margin-bottom:8px;display:block}
+  .modal-select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:13px;width:100%;cursor:pointer;transition:border-color .2s}
+  .modal-select:hover{border-color:var(--border-bright)}
+  .modal-textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:12px;font-family:var(--sans);font-size:13px;width:100%;min-height:100px;resize:vertical;transition:border-color .2s;line-height:1.5}
+  .modal-textarea:focus{outline:none;border-color:var(--accent)}
+  .modal-textarea::placeholder{color:var(--text-3)}
+  .modal-btn{background:var(--accent);color:var(--bg);border:none;border-radius:9px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:12px;transition:all .2s;font-family:var(--sans)}
+  .modal-btn:hover{background:var(--accent-dim)}
+  .modal-btn-cancel{background:var(--surface-2);color:var(--text);border:1px solid var(--border);margin-top:0}
+  .modal-btn-cancel:hover{background:var(--border)}
+  .modal-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .chip{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;transition:all .2s}
+  .chip:hover{border-color:var(--border-bright);background:var(--border)}
+  .chip.ativo{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+
+  /* ═══ MODAL REDAÇÃO ═══ */
+  .rep-modal.red-modal{max-width:min(720px,94vw);width:100%;height:96vh;max-height:96vh;padding:28px 32px;display:flex;flex-direction:column}
+  .rep-modal.red-modal .rep-title{font-size:22px;margin-bottom:8px}
+  .rep-modal.red-modal .rep-sub{font-size:14px;margin-bottom:20px}
+  .rep-modal.red-modal .rep-acoes{margin-top:20px}
+  .rep-modal.red-modal .rep-cancelar,.rep-modal.red-modal .rep-enviar{padding:13px;font-size:15px;border-radius:10px}
+  .rep-modal.red-modal .red-tema{min-height:0;height:42px;font-size:14px;line-height:1.35;padding:11px 14px;border-radius:12px;margin-bottom:12px;resize:none;overflow:hidden}
+  .rep-modal.red-modal .red-textarea{min-height:0;flex:1;font-size:15px;line-height:1.6;padding:16px;border-radius:12px}
+  .red-conta{font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:right;margin-top:4px}
+  .rep-cancelar{background:var(--surface-2);color:var(--text);border:1px solid var(--border);cursor:pointer;font-family:var(--sans);transition:all .2s}
+  .rep-cancelar:hover{background:var(--border)}
+  .rep-enviar{background:var(--accent);color:var(--bg);border:none;cursor:pointer;font-family:var(--sans);transition:all .2s;font-weight:600}
+  .rep-enviar:hover{background:var(--accent-dim)}
+  .rep-enviar:disabled{opacity:.6;cursor:wait}
+  .rep-textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;font-family:var(--sans);transition:border-color .2s}
+  .rep-textarea:focus{outline:none;border-color:var(--accent)}
+  .rep-textarea::placeholder{color:var(--text-3)}
+  .rep-msg{font-size:13px;margin-top:12px;padding:0}
+  .rep-msg.ok{color:var(--green)}
+  .red-result{margin-top:16px;font-size:13px;color:var(--text)}
+</style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="bg-tint"></div>
+
+<!-- ═══ APP ═══ -->
+<div id="appScreen">
+  <div id="watermark"></div>
+  <header>
+    <div class="head-row">
+      <div class="head-left">
+        <div class="head-mark">M</div>
+        <div class="head-titles">
+          <h1>Meu Estudo</h1>
+          <div class="sub" id="subtitle">3º ano<br><span style="opacity:.7;font-size:0.9em">Segunda-feira</span></div>
+        </div>
+      </div>
+      <div class="head-right">
+        <button class="music-btn-mini" aria-label="Música" title="Música de fundo">
+          <svg class="note-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+            <path d="M9 18V5l12-2v13"></path>
+          </svg>
+        </button>
+        <button class="redacao-btn-mini" aria-label="Corrigir redação" title="Corrigir redação">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+          </svg>
+        </button>
+        <button class="report-btn-mini" aria-label="Reportar erro" title="Reportar erro">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 9v4"></path><path d="M12 17h.01"></path>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          </svg>
+        </button>
+        <span id="clock">14:32</span>
+        <button class="logout-btn">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="beta-aviso" id="betaAviso">
+    <div class="beta-aviso-in">
+      <span class="beta-ic">🧪</span>
+      <div class="beta-txt">
+        <b>App em fase de testes (beta).</b> Às vezes uma matéria pode vir incompleta ou errada, geralmente quando o professor ainda não atualizou o blog, ou por algum ajuste que ainda estamos fazendo. Se notar algo errado, toca no botão de reportar <span class="beta-ic-inline">⚠️</span> aqui em cima e nos avisa. Isso ajuda demais a melhorar o app!
+      </div>
+      <button class="beta-fechar" aria-label="Fechar aviso">✕</button>
+    </div>
+  </div>
+
+  <main id="main">
+    <div id="cards">
+
+      <!-- ═══ DAY HEADER ═══ -->
+      <div class="day-head">
+        <span class="day-badge">Segunda-feira</span>
+        <span class="day-line"></span>
+        <span class="day-count">3 mat.</span>
+      </div>
+
+      <!-- ═══ CENTRAL DE DEVERES ═══ -->
+      <div id="centralDeveres" class="central-dev">
+        <div class="cd-head">
+          <span class="cd-titulo">✅ Meus deveres</span>
+          <span class="cd-prog" id="cdProg">0/4 feitos</span>
+        </div>
+        <div class="cd-body">
+
+          <div class="cd-grupo">
+            <div class="cd-mat">📊 Matemática B (Saulo)</div>
+            <label class="dev-check cd-item">
+              <input type="checkbox" data-devid="chk_Matematica_B_cd_1" onchange="toggleDever('chk_Matematica_B_cd_1',this)">
+              <span class="dev-box"></span>
+              <span class="dev-txt"><span class="cd-data">05/08</span>TC4 - Logaritmos p.88-90 (vence 05/08)</span>
+            </label>
+          </div>
+
+          <div class="cd-grupo">
+            <div class="cd-mat">🔬 Química A (Maurélio)</div>
+            <label class="dev-check cd-item">
+              <input type="checkbox" data-devid="chk_Quimica_A_cd_2" onchange="toggleDever('chk_Quimica_A_cd_2',this)">
+              <span class="dev-box"></span>
+              <span class="dev-txt"><span class="cd-data">03/08</span>Exercícios Frente A p.34-36 (vence 03/08)</span>
+            </label>
+          </div>
+
+          <div class="cd-grupo">
+            <div class="cd-mat">✍️ Redação (Fábio)</div>
+            <label class="dev-check cd-item">
+              <input type="checkbox" data-devid="chk_Redacao_cd_3" onchange="toggleDever('chk_Redacao_cd_3',this)">
+              <span class="dev-box"></span>
+              <span class="dev-txt"><span class="cd-data">06/08</span>Redação ENEM - 'Desafios da mobilidade urbana' (vence 06/08)</span>
+            </label>
+          </div>
+
+          <div class="cd-grupo">
+            <div class="cd-mat">📜 História (Gustavo)</div>
+            <label class="dev-check cd-item">
+              <input type="checkbox" data-devid="chk_Historia_cd_4" onchange="toggleDever('chk_Historia_cd_4',this)">
+              <span class="dev-box"></span>
+              <span class="dev-txt"><span class="cd-data">04/08</span>Resumo cap.12 - Era Vargas (vence 04/08)</span>
+            </label>
+          </div>
+
+        </div>
+        <a class="cd-plurall" href="#" onclick="return false;">Abrir Plurall (aba Tarefas) ↗</a>
+      </div>
+
+      <!-- ═══ CARD 1: FILOSOFIA ═══ -->
+      <div class="card open" style="--cor:#d9a865;animation-delay:0s" id="card-0">
+        <div class="card-glow"></div>
+        <div class="c-head" onclick="toggleCard(0)">
+          <div class="c-icon">🧠</div>
+          <div class="c-meta">
+            <div class="c-subj">Filosofia</div>
+            <div class="c-prof">Sandra Maisa</div>
+          </div>
+          <span class="c-chevron">⌄</span>
+        </div>
+        <div class="c-body">
+          <div class="c-body-in">
+
+            <div class="blk blk-aula">
+              <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+              <div class="blk-body">Existencialismo: liberdade e responsabilidade em Sartre. Leitura do texto "O Existencialismo é um Humanismo" (apostila p.112-115).</div>
+            </div>
+
+            <div class="blk blk-teste">
+              <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div>
+              <div class="blk-body">Filosofia Moderna: Sartre e Simone de Beauvoir</div>
+            </div>
+
+            <div class="blk blk-dev">
+              <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+              <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
+              <div class="dev-group">
+                <div class="dev-date">28/07</div>
+                <label class="dev-check feito">
+                  <input type="checkbox" data-devid="chk_Filosofia_pend_28_07_demo1" checked onchange="toggleDever('chk_Filosofia_pend_28_07_demo1',this)">
+                  <span class="dev-box"></span>
+                  <span class="dev-txt">Fichamento cap.7</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="blk blk-dev-novo">
+              <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
+              <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
+              <div class="dev-group">
+                <label class="dev-check">
+                  <input type="checkbox" data-devid="chk_Filosofia_aula_demo2" onchange="toggleDever('chk_Filosofia_aula_demo2',this)">
+                  <span class="dev-box"></span>
+                  <span class="dev-txt">Ler cap.8 p.112-118 (vence 04/08)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="blk blk-res">
+              <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
+              <div class="blk-body">Sartre e Simone de Beauvoir são os principais nomes do existencialismo francês do pós-guerra. Em "O Existencialismo é um Humanismo" (1946), Sartre defende que "a existência precede a essência": primeiro existimos, depois nos definimos pelas escolhas. Não existe natureza humana fixa: somos aquilo que fazemos de nós mesmos. Isso implica responsabilidade total — não dá para culpar Deus, a biologia ou o passado.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ CARD 2: GEOGRAFIA ═══ -->
+      <div class="card open" style="--cor:#a8c08a;animation-delay:0.1s" id="card-1">
+        <div class="card-glow"></div>
+        <div class="c-head" onclick="toggleCard(1)">
+          <div class="c-icon">🌍</div>
+          <div class="c-meta">
+            <div class="c-subj">Geografia</div>
+            <div class="c-prof">Gabriel Fonseca</div>
+          </div>
+          <span class="c-chevron">⌄</span>
+        </div>
+        <div class="c-body">
+          <div class="c-body-in">
+
+            <div class="blk blk-aula">
+              <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+              <div class="blk-body">Geopolítica contemporânea: conflitos no Oriente Médio e o papel das potências mundiais.</div>
+            </div>
+
+            <div class="blk blk-teste">
+              <div class="blk-head"><span class="blk-ic">🎯</span><span class="blk-label">Matéria para o teste</span></div>
+              <div class="blk-body">Geopolítica e conflitos mundiais</div>
+            </div>
+
+            <div class="blk blk-dev">
+              <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+              <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
+              <div class="muted">Nenhum dever pendente das aulas anteriores.</div>
+            </div>
+
+            <div class="blk blk-dev-novo">
+              <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
+              <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
+              <div class="dev-group">
+                <label class="dev-check">
+                  <input type="checkbox" data-devid="chk_Geografia_aula_demo3" onchange="toggleDever('chk_Geografia_aula_demo3',this)">
+                  <span class="dev-box"></span>
+                  <span class="dev-txt">Exercícios p.45-47 (vence 04/08)</span>
+                </label>
+                <label class="dev-check">
+                  <input type="checkbox" data-devid="chk_Geografia_aula_demo4" onchange="toggleDever('chk_Geografia_aula_demo4',this)">
+                  <span class="dev-box"></span>
+                  <span class="dev-txt">Mapa da apostila p.50 (vence 06/08)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="blk blk-res">
+              <div class="blk-head"><span class="blk-ic">📖</span><span class="blk-label">Resumo da matéria do teste</span></div>
+              <div class="blk-body">A geopolítica do Oriente Médio é marcada por disputas territoriais, recursos energéticos (petróleo) e diferenças religiosas e étnicas. Os principais conflitos atuais envolvem Israel-Palestina, Irã e os países do Golfo. As potências mundiais (EUA, Rússia e China) atuam na região por meio de alianças estratégicas, bases militares e influência econômica, tornando o Oriente Médio um dos principais palcos da disputa global de poder.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ CARD 3: PROG. LIDERE ═══ -->
+      <div class="card open" style="--cor:#e0b876;animation-delay:0.2s" id="card-2">
+        <div class="card-glow"></div>
+        <div class="c-head" onclick="toggleCard(2)">
+          <div class="c-icon">🎯</div>
+          <div class="c-meta">
+            <div class="c-subj">Prog. Lidere</div>
+            <div class="c-prof">Lenon Soares</div>
+          </div>
+          <span class="c-chevron">⌄</span>
+        </div>
+        <div class="c-body">
+          <div class="c-body-in">
+
+            <div class="blk blk-aula">
+              <div class="blk-head"><span class="blk-ic">📅</span><span class="blk-label">Aula de hoje</span></div>
+              <div class="blk-body">Projeto de liderança: dinâmica de grupo e apresentação.</div>
+            </div>
+
+            <div class="blk blk-dev">
+              <div class="blk-head"><span class="blk-ic">⚡</span><span class="blk-label">Deveres pendentes</span></div>
+              <div class="blk-sub">De aulas anteriores, ainda em aberto</div>
+              <div class="muted">Nenhum dever pendente das aulas anteriores.</div>
+            </div>
+
+            <div class="blk blk-dev-novo">
+              <div class="blk-head"><span class="blk-ic">📌</span><span class="blk-label">Deveres desta aula (para a próxima semana)</span></div>
+              <div class="blk-sub">Passados nesta aula, para entregar na próxima semana</div>
+              <div class="dev-group">
+                <label class="dev-check">
+                  <input type="checkbox" data-devid="chk_Prog_Lidere_aula_demo5" onchange="toggleDever('chk_Prog_Lidere_aula_demo5',this)">
+                  <span class="dev-box"></span>
+                  <span class="dev-txt">Completar atividade no Plurall até 04/08</span>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">CNS Anglo · 31/07/2026</div>
+
+    </div>
+  </main>
+
+  <!-- ═══ MODAL MÚSICA ═══ -->
+  <div class="rep-overlay" id="modalMusica">
+    <div class="rep-modal">
+      <button class="modal-close" onclick="fecharModal('modalMusica')">✕</button>
+      <div class="modal-head">Música de fundo</div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:16px;">Toque para ativar a música de fundo enquanto estuda.</p>
+      <button class="modal-btn" onclick="toggleMusica()"><span id="musicaBtnText">▶ Ativar música</span></button>
+      <button class="modal-btn modal-btn-cancel" onclick="fecharModal('modalMusica')">Fechar</button>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL REDAÇÃO ═══ -->
+  <div id="redacaoOverlay" class="rep-overlay">
+    <div class="rep-modal red-modal">
+      <div class="rep-title">✍️ Corrigir redação</div>
+      <div class="rep-sub">Cole sua redação abaixo. Se tiver o tema, informe também para deixar a C2 mais precisa. 1 correção por dia.</div>
+      <textarea id="redacaoTema" class="rep-textarea red-tema" placeholder="Tema da redação (opcional, mas recomendado)…" maxlength="300"></textarea>
+      <textarea id="redacaoTexto" class="rep-textarea red-textarea" placeholder="Cole aqui o texto da sua redação…" maxlength="6000" oninput="contarRedacao()"></textarea>
+      <div class="red-conta"><span id="redacaoCount">0</span> / 6000 caracteres</div>
+      <div class="rep-acoes">
+        <button class="rep-cancelar" onclick="fecharRedacao()">Fechar</button>
+        <button class="rep-enviar" id="redacaoBtn" onclick="enviarRedacao()">Corrigir</button>
+      </div>
+      <div class="rep-msg" id="redacaoMsg"></div>
+      <div id="redacaoResultado" class="red-result"></div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL REPORT ═══ -->
+  <div class="rep-overlay" id="modalReport">
+    <div class="rep-modal">
+      <button class="modal-close" onclick="fecharModal('modalReport')">✕</button>
+      <div class="modal-head">Reportar erro</div>
+
+      <div class="modal-section">
+        <label class="modal-label">Dia</label>
+        <div class="modal-chips" id="chipsDia">
+          <div class="chip ativo" onclick="selecionarDia(this, 'Segunda')">Segunda-feira</div>
+          <div class="chip" onclick="selecionarDia(this, 'Terça')">Terça-feira</div>
+          <div class="chip" onclick="selecionarDia(this, 'Quarta')">Quarta-feira</div>
+          <div class="chip" onclick="selecionarDia(this, 'Quinta')">Quinta-feira</div>
+          <div class="chip" onclick="selecionarDia(this, 'Sexta')">Sexta-feira</div>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <label class="modal-label">Matéria</label>
+        <div class="modal-chips" id="chipsMateria">
+          <div class="chip ativo" onclick="selecionarMateria(this, 'Filosofia')">Filosofia</div>
+          <div class="chip" onclick="selecionarMateria(this, 'Geografia')">Geografia</div>
+          <div class="chip" onclick="selecionarMateria(this, 'Prog. Lidere')">Prog. Lidere</div>
+          <div class="chip" onclick="selecionarMateria(this, 'Matemática A')">Matemática A</div>
+          <div class="chip" onclick="selecionarMateria(this, 'Redação')">Redação</div>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <label class="modal-label">Descrição do erro</label>
+        <textarea class="modal-textarea" id="reportText" placeholder="Descreva o problema que encontrou..."></textarea>
+      </div>
+
+      <button class="modal-btn" onclick="enviarReport()">Enviar report</button>
+      <button class="modal-btn modal-btn-cancel" onclick="fecharModal('modalReport')">Cancelar</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Relógio fake (fixo em 14:32 para o vídeo) — só pra parecer ativo
+document.getElementById('clock').textContent='14:32';
+
+// Marca d'água (igual ao app real)
+(function(){
+  const wm=document.getElementById('watermark');
+  if(!wm)return;
+  const text='CARLOS DEMO';
+  let html='';
+  for(let i=0;i<10;i++){
+    html+='<div class="wm-row">';
+    for(let j=0;j<6;j++)html+='<span class="wm-text">'+text+'</span>';
+    html+='</div>';
+  }
+  wm.innerHTML=html;
+})();
+
+// Toggle de card (fecha outros ao abrir)
+function toggleCard(idx){
+  const alvo=document.getElementById('card-'+idx);
+  if(!alvo)return;
+  const jaAberto=alvo.classList.contains('open');
+  document.querySelectorAll('.card.open').forEach(c=>c.classList.remove('open'));
+  if(!jaAberto)alvo.classList.add('open');
+}
+
+// Toggle de dever (idêntico ao app real — sincroniza data-devid)
+function toggleDever(id,el){
+  const feito=el.checked;
+  if(feito)localStorage.setItem(id,'1');
+  else localStorage.removeItem(id);
+  document.querySelectorAll(`input[data-devid="${id}"]`).forEach(inp=>{
+    if(inp!==el)inp.checked=feito;
+    const lbl=inp.closest('.dev-check');
+    if(lbl)lbl.classList.toggle('feito',feito);
+  });
+  atualizarProgressoDeveres();
+}
+
+// Atualiza progresso "X/Y feitos" da central
+function atualizarProgressoDeveres(){
+  const prog=document.getElementById('cdProg');
+  if(!prog)return;
+  const checks=document.querySelectorAll('#centralDeveres .dev-check input[type="checkbox"]');
+  const total=checks.length;
+  let feitos=0;
+  checks.forEach(c=>{if(c.checked)feitos++;});
+  prog.textContent=feitos+'/'+total+' feitos';
+}
+
+// Inicializa o contador da central
+atualizarProgressoDeveres();
+
+// ═══ MODAIS ═══
+function abrirModal(id){
+  const m=document.getElementById(id);
+  if(m)m.classList.add('aberto');
+}
+function fecharModal(id){
+  const m=document.getElementById(id);
+  if(m)m.classList.remove('aberto');
+}
+
+// Fechar modal ao clicar no overlay (fora do modal)
+document.querySelectorAll('.rep-overlay').forEach(ov=>{
+  ov.addEventListener('click',function(e){
+    if(e.target===ov)ov.classList.remove('aberto');
+  });
+});
+
+// ═══ BOTÃO MÚSICA ═══
+let musicaTocando=false;
+document.querySelector('.music-btn-mini').addEventListener('click',function(){
+  musicaTocando=!musicaTocando;
+  this.classList.toggle('playing',musicaTocando);
+  const icon=this.querySelector('.note-icon');
+  if(musicaTocando){
+    icon.style.transform='scale(1.1)';
+    this.innerHTML='<svg class="note-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+  }else{
+    this.innerHTML='<svg class="note-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle><path d="M9 18V5l12-2v13"></path></svg>';
+  }
+});
+
+// ═══ BOTÃO REDAÇÃO ═══
+document.querySelector('.redacao-btn-mini').addEventListener('click',function(){
+  abrirRedacao();
+});
+
+function abrirRedacao(){
+  const ov=document.getElementById('redacaoOverlay');
+  ov.classList.add('aberto');
+  document.body.style.overflow='hidden';
+  document.getElementById('redacaoMsg').textContent='';
+  document.getElementById('redacaoResultado').innerHTML='';
+  const btn=document.getElementById('redacaoBtn');
+  btn.disabled=false;btn.textContent='Corrigir';
+  contarRedacao();
+  setTimeout(()=>document.getElementById('redacaoTexto').focus(),100);
+}
+
+function fecharRedacao(){
+  document.getElementById('redacaoOverlay').classList.remove('aberto');
+  document.body.style.overflow='';
+}
+
+function contarRedacao(){
+  const t=document.getElementById('redacaoTexto');
+  document.getElementById('redacaoCount').textContent=t?t.value.length:0;
+}
+
+function enviarRedacao(){
+  const btn=document.getElementById('redacaoBtn');
+  const msg=document.getElementById('redacaoMsg');
+  btn.disabled=true;btn.textContent='Corrigindo...';
+  setTimeout(()=>{
+    msg.className='rep-msg ok';
+    msg.textContent='Demonstração: correção simulada.';
+    btn.textContent='Corrigido';
+  },2000);
+}
+
+// ═══ BOTÃO REPORT ═══
+document.querySelector('.report-btn-mini').addEventListener('click',function(){
+  abrirModal('modalReport');
+});
+
+function selecionarDia(chip,dia){
+  document.querySelectorAll('#chipsDia .chip').forEach(c=>c.classList.remove('ativo'));
+  chip.classList.add('ativo');
+}
+
+function selecionarMateria(chip,mat){
+  document.querySelectorAll('#chipsMateria .chip').forEach(c=>c.classList.remove('ativo'));
+  chip.classList.add('ativo');
+}
+
+function enviarReport(){
+  const txt=document.getElementById('reportText').value.trim();
+  if(!txt){alert('Descreva o problema.');return;}
+  fecharModal('modalReport');
+  alert('Report enviado! Obrigado. (demo)');
+}
+</script>
+</body>
+</html>
