@@ -991,42 +991,69 @@ function hojeStr() {
   return ('0'+b.getUTCDate()).slice(-2) + '/' + ('0'+(b.getUTCMonth()+1)).slice(-2) + '/' + b.getUTCFullYear();
 }
 
-async function callAnthropic(prompt, modelIndex, tentativa) {
+// Endpoints de IA: Avello (principal) + Anthropic oficial (fallback)
+const AI_ENDPOINTS = [
+  { url: 'https://avellogateway.online/v1/messages', key: process.env.AVELLO_API_KEY, auth: 'bearer', nome: 'Avello' },
+  { url: 'https://api.anthropic.com/v1/messages', key: process.env.ANTHROPIC_API_KEY, auth: 'x-api-key', nome: 'Anthropic' }
+].filter(e => e.key); // só inclui endpoints com chave configurada
+
+async function callAnthropic(prompt, modelIndex, tentativa, endpointIndex) {
   modelIndex = modelIndex || 0;
   tentativa = tentativa || 0;
+  endpointIndex = endpointIndex || 0;
   if (modelIndex >= MODELS.length) throw new Error('Nenhum modelo disponível');
+  if (!AI_ENDPOINTS.length) throw new Error('Nenhuma chave de API configurada (AVELLO_API_KEY ou ANTHROPIC_API_KEY)');
+  const endpoint = AI_ENDPOINTS[Math.min(endpointIndex, AI_ENDPOINTS.length - 1)];
   const model = MODELS[modelIndex];
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({ model, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] }),
-    signal: AbortSignal.timeout(45000)
-  });
-  const data = await res.json();
-  // qualquer erro da API: se for not_found (modelo não existe), tenta o próximo modelo
+  const headers = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+  if (endpoint.auth === 'bearer') headers['Authorization'] = 'Bearer ' + endpoint.key;
+  else headers['x-api-key'] = endpoint.key;
+
+  let res, data;
+  try {
+    res = await fetch(endpoint.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(45000)
+    });
+    data = await res.json();
+  } catch (fetchErr) {
+    // timeout ou erro de rede: tenta próximo endpoint (fallback)
+    if (endpointIndex + 1 < AI_ENDPOINTS.length) {
+      return callAnthropic(prompt, modelIndex, tentativa, endpointIndex + 1);
+    }
+    throw new Error('Falha de conexão com IA (' + endpoint.nome + '): ' + (fetchErr.message || ''));
+  }
+
+  // modelo não existe neste endpoint: tenta próximo modelo
   if (data.type === 'error' && data.error && data.error.type === 'not_found_error') {
-    if (modelIndex + 1 < MODELS.length) return callAnthropic(prompt, modelIndex + 1);
+    if (modelIndex + 1 < MODELS.length) return callAnthropic(prompt, modelIndex + 1, 0, endpointIndex);
+    // modelo não existe em nenhum: tenta fallback endpoint
+    if (endpointIndex + 1 < AI_ENDPOINTS.length) return callAnthropic(prompt, 0, 0, endpointIndex + 1);
     throw new Error('Modelo não encontrado: ' + (data.error.message || ''));
   }
   // rate limit (429) ou sobrecarga (529): espera e tenta de novo (até 3 vezes)
   if (data.type === 'error' && data.error && /rate_limit|overloaded/i.test(data.error.type || '')) {
     if (tentativa < 3) {
       await new Promise(r => setTimeout(r, 2000 * (tentativa + 1)));
-      return callAnthropic(prompt, modelIndex, tentativa + 1);
+      return callAnthropic(prompt, modelIndex, tentativa + 1, endpointIndex);
     }
+    // rate limit persistente: tenta fallback endpoint
+    if (endpointIndex + 1 < AI_ENDPOINTS.length) return callAnthropic(prompt, modelIndex, 0, endpointIndex + 1);
     throw new Error('IA sobrecarregada');
   }
-  // qualquer OUTRO erro da API (auth, permissão, billing, request inválido): expõe a
-  // mensagem real, em vez de "resposta inesperada". Isso facilita o diagnóstico.
+  // auth error no endpoint atual: tenta fallback
+  if (data.type === 'error' && data.error && /authentication|permission|invalid.*key/i.test(data.error.type || data.error.message || '')) {
+    if (endpointIndex + 1 < AI_ENDPOINTS.length) return callAnthropic(prompt, modelIndex, 0, endpointIndex + 1);
+    throw new Error('Erro de auth (' + endpoint.nome + '): ' + (data.error.message || ''));
+  }
+  // qualquer OUTRO erro da API
   if (data.type === 'error' && data.error) {
-    throw new Error('Erro da API [' + (data.error.type||'?') + ']: ' + (data.error.message || 'sem detalhe'));
+    throw new Error('Erro da API [' + endpoint.nome + '/' + (data.error.type||'?') + ']: ' + (data.error.message || 'sem detalhe'));
   }
   if (!data.content || !Array.isArray(data.content)) {
-    throw new Error('Resposta sem conteúdo: ' + JSON.stringify(data).slice(0, 300));
+    throw new Error('Resposta sem conteúdo (' + endpoint.nome + '): ' + JSON.stringify(data).slice(0, 300));
   }
   const raw = data.content.map(function(i){ return i.text || ''; }).join('').replace(/```json|```/g, '').trim();
   try {
@@ -1036,9 +1063,8 @@ async function callAnthropic(prompt, modelIndex, tentativa) {
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) { try { return JSON.parse(m[0]); } catch {} }
     // JSON inválido: tenta o PRÓXIMO modelo (mais capaz), em vez de desistir.
-    // isso resolve o caso do Haiku gerar JSON quebrado em blogs complexos.
     if (modelIndex + 1 < MODELS.length) {
-      return callAnthropic(prompt, modelIndex + 1, tentativa);
+      return callAnthropic(prompt, modelIndex + 1, tentativa, endpointIndex);
     }
     throw new Error('JSON inválido da IA');
   }
