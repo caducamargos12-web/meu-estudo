@@ -998,13 +998,13 @@ function sincronizarBimestre(bimestreAtivo,bimestreVersao){
   }
 }
 
-function textoComTurma(base){
-  const turmaNome=window._turmaAtual?.nome;
-  return `${base}${turmaNome?' · '+turmaNome:''}`;
-}
-
 function atualizarSubtitle(base){
-  document.getElementById('subtitle').textContent=textoComTurma(base);
+  const turmaNome=window._turmaAtual?.nome;
+  if(turmaNome){
+    document.getElementById('subtitle').innerHTML=turmaNome+'<br><span style="opacity:.7;font-size:0.9em">'+base+'</span>';
+  } else {
+    document.getElementById('subtitle').textContent=base;
+  }
 }
 
 function mostrarRecesso(msg){
