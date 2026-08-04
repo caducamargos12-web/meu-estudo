@@ -738,6 +738,42 @@ app.post('/api/login', (req, res) => {
   res.json({ token, user });
 });
 
+// ── revalidar dispositivo (chamado pelo front após login para garantir persistência) ────
+// Usa validação leve (só token, sem checar dispositivo) para resolver o caso circular:
+// se o dispositivo sumiu do disco, auth normal bloquearia este endpoint.
+app.post('/api/revalidar-dispositivo', (req, res) => {
+  const token = req.headers['x-session-token'] || req.query.token;
+  if (!token) return res.status(401).json({ error: 'Não autenticado' });
+  const dados = validarToken(token);
+  if (!dados) return res.status(401).json({ error: 'Token inválido' });
+  const registro = alunos[dados.user];
+  if (!registro) return res.status(401).json({ error: 'Conta não encontrada' });
+
+  const device = req.body.device || dados.device || '';
+  if (!device) return res.json({ error: 'Device ID ausente' });
+
+  // inicializa a lista se não existir
+  if (!dispositivosPorUser[dados.user]) dispositivosPorUser[dados.user] = [];
+  const lista = dispositivosPorUser[dados.user];
+
+  // verifica se já está registrado
+  const jaExiste = lista.some(d => d.id === device);
+  if (!jaExiste) {
+    // verifica limite de dispositivos
+    if (lista.length >= MAX_DISPOSITIVOS) {
+      return res.json({ error: 'Limite de dispositivos atingido', limite: true });
+    }
+    const aparelho = detectarAparelho(req.headers['user-agent']);
+    const data = new Date().toLocaleDateString('pt-BR');
+    lista.push({ id: device, aparelho, data });
+  }
+
+  // força salvar em disco (mesmo que o arquivo tenha desaparecido)
+  salvarDispositivos();
+
+  res.json({ ok: true, revalidado: !jaExiste });
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // GRADE
 // ════════════════════════════════════════════════════════════════════════════

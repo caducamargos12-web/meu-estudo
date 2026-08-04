@@ -1447,6 +1447,19 @@ async function fazerLogin(){
     if(data.error){erro.textContent=data.error;btn.disabled=false;btn.textContent='Entrar';return;}
     localStorage.setItem('sessionToken',data.token);
     localStorage.setItem('sessionUser',data.user);
+
+    // revalidar dispositivo no servidor para garantir persistência
+    const deviceId=getDeviceId();
+    try{
+      const revalRes=await fetch('/api/revalidar-dispositivo',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-session-token':data.token},
+        body:JSON.stringify({device:deviceId})
+      });
+      const revalData=await revalRes.json();
+      if(!revalData.ok){console.warn('Aviso: revalidação de dispositivo falhou');}
+    }catch(revalErr){console.warn('Erro ao revalidar dispositivo:',revalErr);}
+
     iniciarApp();
   }catch(e){erro.textContent='Erro de conexão. Tente novamente.';btn.disabled=false;btn.textContent='Entrar';}
 }
@@ -1485,6 +1498,13 @@ function iniciarApp(){
   montarBoasVindas();
   montarMarcaDagua();
   updateClock();setInterval(updateClock,1000);
+
+  // revalidar dispositivo para garantir que está registrado no servidor
+  // (cobre o caso onde o volume /data foi perdido e o usuário volta com token antigo)
+  const token=localStorage.getItem('sessionToken');
+  const deviceId=getDeviceId();
+  if(token){fetch('/api/revalidar-dispositivo',{method:'POST',headers:{'Content-Type':'application/json','x-session-token':token},body:JSON.stringify({device:deviceId})}).catch(e=>console.warn('Revalidação silenciosa falhou:',e));}
+
   loadDay();
 }
 
