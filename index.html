@@ -242,6 +242,7 @@
   .dev-check input:checked+.dev-box::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
   .dev-check.feito .dev-txt{text-decoration:line-through;color:var(--text-3)}
   .dev-txt{transition:all .2s}
+  .dev-venc{font-family:var(--mono);font-size:10.5px;color:var(--amber);font-weight:600;margin-left:5px;opacity:.85}
 
   /* central de deveres */
   .central-dev{background:var(--surface);border:1px solid var(--border-bright);border-radius:14px;padding:16px;margin-bottom:18px}
@@ -912,6 +913,28 @@ function toggleDever(id,el){
   atualizarProgressoDeveres();
 }
 
+// ===== DETECÇÃO DE DATA DE VENCIMENTO =====
+// Detecta menções a data de entrega no texto do dever ("para DD/MM", "até DD/MM", "vence DD/MM", etc)
+// Retorna {texto: textoLimpo, vencimento: 'DD/MM' ou ''}
+function extrairVencimento(texto){
+  if(!texto)return{texto:'',vencimento:''};
+  // padrões comuns: "para 05/08", "até 05/08", "vence 05/08", "entregar 05/08", "prazo 05/08"
+  const re=/(?:para|at[ée]|vence(?:m)?|entregar?|prazo:?)\s*(\d{1,2}\/\d{2})(?:\/\d{2,4})?/i;
+  const m=texto.match(re);
+  if(m&&m[1])return{texto:texto, vencimento:m[1]};
+  // tenta detectar padrão "(DD/MM)" no final do texto
+  const reFim=/\(?(\d{1,2}\/\d{2})\)?\s*$/;
+  const mFim=texto.match(reFim);
+  if(mFim&&mFim[1])return{texto:texto, vencimento:mFim[1]};
+  return{texto:texto, vencimento:''};
+}
+
+// Formata badge de vencimento visual
+function badgeVencimento(dataStr){
+  if(!dataStr)return '';
+  return `<span class="dev-venc">(vence ${dataStr})</span>`;
+}
+
 // ===== CENTRAL DE DEVERES =====
 // Gera a mesma chave de estado dos cards, para o "feito" ser compartilhado.
 function _devId(materia, grupo, texto){
@@ -959,10 +982,12 @@ function renderCentralDeveres(){
       const itensHtml=porMat[mat].map(d=>{
         const marcado=localStorage.getItem(d.id)==='1';
         const dataTag=d.data?`<span class="cd-data">${d.data}</span>`:'';
+        const {vencimento}=extrairVencimento(d.texto);
+        const vencHtml=badgeVencimento(vencimento);
         return `<label class="dev-check cd-item ${marcado?'feito':''}">
           <input type="checkbox" data-devid="${d.id}" ${marcado?'checked':''} onchange="toggleDever('${d.id}',this)">
           <span class="dev-box"></span>
-          <span class="dev-txt">${dataTag}${d.texto}</span>
+          <span class="dev-txt">${dataTag}${d.texto}${vencHtml}</span>
         </label>`;
       }).join('');
       return `<div class="cd-grupo"><div class="cd-mat">${emoji} ${mat}</div>${itensHtml}</div>`;
@@ -1095,10 +1120,12 @@ function renderCard(item, idx, ehPrevia, dataRef){
     function devCheckComb(texto, grupo, chaveDev){
       const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
       const marcado=localStorage.getItem(id)==='1';
+      const {vencimento}=extrairVencimento(texto);
+      const vencHtml=badgeVencimento(vencimento);
       return `<label class="dev-check ${marcado?'feito':''}">
         <input type="checkbox" data-devid="${id}" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
         <span class="dev-box"></span>
-        <span class="dev-txt">${texto}</span>
+        <span class="dev-txt">${texto}${vencHtml}</span>
       </label>`;
     }
     const secoesHtml=item.secoes.map(sec=>{
@@ -1178,10 +1205,12 @@ function renderCard(item, idx, ehPrevia, dataRef){
   function devCheck(texto, grupo){
     const id=`chk_${chaveDev}_${grupo}_${btoa(unescape(encodeURIComponent(texto))).slice(0,16).replace(/[^a-zA-Z0-9]/g,'')}`;
     const marcado=localStorage.getItem(id)==='1';
+    const {vencimento}=extrairVencimento(texto);
+    const vencHtml=badgeVencimento(vencimento);
     return `<label class="dev-check ${marcado?'feito':''}">
       <input type="checkbox" data-devid="${id}" ${marcado?'checked':''} onchange="toggleDever('${id}',this)">
       <span class="dev-box"></span>
-      <span class="dev-txt">${texto}</span>
+      <span class="dev-txt">${texto}${vencHtml}</span>
     </label>`;
   }
 
@@ -1362,6 +1391,7 @@ function loadDay(){
       total=msg.total;
       fimDeSemana=msg.fimDeSemana;
       window._turmaAtual={id:msg.turmaId,nome:msg.turmaNome};
+      window._diaAtual=msg.dayLabel||''; // guarda dia da semana para subtitle final
       atualizarSubtitle(fimDeSemana?'Prévia de segunda':msg.dayLabel);
       const cards=document.getElementById('cards');
       cards.innerHTML='';
@@ -1407,7 +1437,9 @@ function loadDay(){
       if(estaEmRecesso)return;
       esconderBoasVindas();
       if(total>0){
-        atualizarSubtitle(fimDeSemana?'Prévia de segunda':`${total} matérias`);
+        // mostra dia da semana no subtitle (como no demo-video)
+        const _diaLabel=window._diaAtual||'';
+        atualizarSubtitle(fimDeSemana?'Prévia de segunda':(_diaLabel?_diaLabel+'-feira':`${total} matérias`));
         document.getElementById('cards').insertAdjacentHTML('beforeend',
           `<div class="foot">CNS Anglo · ${new Date().toLocaleDateString('pt-BR')}</div>`);
         // abre a primeira matéria automaticamente
