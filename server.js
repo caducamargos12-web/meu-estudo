@@ -1655,7 +1655,7 @@ async function processarTestesPorData(materia, professor, blogText, dataRef) {
   const refNum = dataParaNum(ref);
 
   // extrai todos os "DD/MM - TESTE N - CONTEÚDO" (para no próximo "DD/MM -" ou fim)
-  const matches = [...(blogText || '').matchAll(/(\d{1,2}\/\d{1,2})\s*[-–]\s*TESTE\s+[IVXLC0-9]+\s*[-–]\s*(.+?)(?=\s+\d{1,2}\/\d{1,2}\s*[-–]|\s*\\n|$)/gi)];
+  const matches = [...(blogText || '').matchAll(/(\d{1,2}\/\d{1,2})\s*[-–]\s*TESTE\s+[IVXLC0-9]+\s*[-–]\s*(.+?)(?=\s+\d{1,2}\/\d{1,2}\s*[-–]|\s*\n|$)/gi)];
   const testes = matches
     .map(m => ({ data: m[1], num: dataParaNum(m[1]), conteudo: m[2].trim().replace(/\s+/g,' ') }))
     .filter(t => t.num > 0 && t.conteudo && !ehEventoEscolar(t.conteudo))
