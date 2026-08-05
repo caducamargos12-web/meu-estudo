@@ -3224,10 +3224,18 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // desativa buffering em proxies (nginx/Railway)
+  res.flushHeaders(); // força envio imediato dos headers (inicia o SSE sem esperar body)
 
   // Marca se o cliente desconectou (evita writes em conexão morta que explodem o Promise.all)
   let clienteDesconectou = false;
   req.on('close', () => { clienteDesconectou = true; });
+
+  // Keepalive: envia comentário SSE a cada 15s para manter a conexão viva no proxy
+  const keepalive = setInterval(() => {
+    if (clienteDesconectou || res.writableEnded) return clearInterval(keepalive);
+    try { res.write(': keepalive\n\n'); } catch (_) { clienteDesconectou = true; }
+  }, 15000);
 
   // Helper seguro: só escreve se o cliente ainda está conectado
   function sseWrite(data) {
@@ -3289,6 +3297,7 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
       try { res.write('data: ' + JSON.stringify({ type:'error', message:'Erro interno. Recarregue a página.' }) + '\n\n'); } catch (_) {}
     }
   } finally {
+    clearInterval(keepalive);
     if (!res.writableEnded) try { res.end(); } catch (_) {}
   }
 });
