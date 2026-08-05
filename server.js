@@ -3302,6 +3302,40 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   }
 });
 
+// ── DEBUG: testa processamento de uma matéria específica ──────────────────────
+// Uso: GET /api/debug-processar?dia=ter&indice=0&token=TOKEN
+app.get('/api/debug-processar', rateLimitGeral, auth, async function(req, res) {
+  const dia = req.query.dia || 'ter';
+  const indice = parseInt(req.query.indice || '0', 10);
+  const turmaId = getTurmaIdDoUsuario(alunos[req.user] || null);
+  const grade = getGradePorId(turmaId);
+  const materias = grade[dia] || [];
+
+  if (!materias[indice]) {
+    return res.json({ error: `Índice ${indice} não encontrado para ${dia}. Total: ${materias.length}` });
+  }
+
+  const item = materias[indice];
+  res.json({ debug: true, dia, indice, materia: item.m, testando: 'processarMateria...' });
+
+  // Testa fetchBlog
+  try {
+    const blogText = await fetchBlog(item.url);
+    if (!blogText || blogText.length < 30) {
+      return res.json({ error: 'Blog não retornou conteúdo', url: item.url, tamanho: blogText ? blogText.length : 0 });
+    }
+
+    // Testa processWithAI
+    const dataRef = dataDoDia(dia);
+    const labelDia = DIAS_PT[dia];
+    const resultado = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior, item.testeNoDiaExato);
+
+    return res.json({ ok: true, resultado, blogTamanho: blogText.length });
+  } catch (e) {
+    return res.json({ error: e.message || String(e), stack: e.stack });
+  }
+});
+
 // ── limpa todo o cache manualmente (forçar reprocessamento) ──────────────────
 // uso: /api/limpar-cache?senha=ADMIN_SENHA
 app.get('/api/limpar-cache', (req, res) => {
