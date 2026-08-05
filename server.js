@@ -3291,10 +3291,12 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
 
   sseWrite({ type:'done' });
   } catch (e) {
-    console.error('[/api/today] Erro fatal no processamento SSE:', e && e.message ? e.message : e);
+    const erroMsg = e && e.message ? e.message : String(e);
+    console.error('[/api/today] Erro fatal no processamento SSE:', erroMsg);
+    if (e && e.stack) console.error('[/api/today] Stack:', e.stack.split('\n').slice(0, 3).join('\n'));
     // Tenta enviar erro ao cliente antes de fechar
     if (!clienteDesconectou && !res.writableEnded) {
-      try { res.write('data: ' + JSON.stringify({ type:'error', message:'Erro interno. Recarregue a página.' }) + '\n\n'); } catch (_) {}
+      try { res.write('data: ' + JSON.stringify({ type:'error', message: erroMsg || 'Erro interno desconhecido' }) + '\n\n'); } catch (_) {}
     }
   } finally {
     clearInterval(keepalive);
@@ -3316,13 +3318,12 @@ app.get('/api/debug-processar', rateLimitGeral, auth, async function(req, res) {
   }
 
   const item = materias[indice];
-  res.json({ debug: true, dia, indice, materia: item.m, testando: 'processarMateria...' });
 
   // Testa fetchBlog
   try {
     const blogText = await fetchBlog(item.url);
     if (!blogText || blogText.length < 30) {
-      return res.json({ error: 'Blog não retornou conteúdo', url: item.url, tamanho: blogText ? blogText.length : 0 });
+      return res.json({ error: 'Blog não retornou conteúdo', url: item.url, tamanho: blogText ? blogText.length : 0, materia: item.m });
     }
 
     // Testa processWithAI
@@ -3330,9 +3331,9 @@ app.get('/api/debug-processar', rateLimitGeral, auth, async function(req, res) {
     const labelDia = DIAS_PT[dia];
     const resultado = await processWithAI(item.m, item.p, blogText, item.filtro, dataRef, labelDia, item.tipo, item.maxDeveres, item.maxDiasDever, item.formato, item.ignorarAvaliacao, item.testeAulaAnterior, item.testeMarcado, item.interpretacaoComAnterior, item.testeNoDiaExato);
 
-    return res.json({ ok: true, resultado, blogTamanho: blogText.length });
+    return res.json({ ok: true, resultado, blogTamanho: blogText.length, materia: item.m });
   } catch (e) {
-    return res.json({ error: e.message || String(e), stack: e.stack });
+    return res.json({ error: e.message || String(e), stack: (e.stack || '').split('\n').slice(0, 5).join('\n'), materia: item.m });
   }
 });
 
