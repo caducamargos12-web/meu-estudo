@@ -2527,13 +2527,13 @@ async function processarDia(res, grade, turmaId, dayKey, ehPrevia, offsetIndex) 
           data_prova: dataProvaSec || ''
         });
         if (naJanela) dados = Object.assign({}, dados, { materia_teste:'', tem_avaliacao:false, resumo:'', questoes:[], semana_provas:true });
-        else if (ehRecessoAtivo()) dados = Object.assign({}, dados, { materia_teste:'', materia_teste_data:'', tem_avaliacao:false, avaliacao_final:'', semana_provas:false, data_prova:'' });
+        else if (emRecesso()) dados = Object.assign({}, dados, { materia_teste:'', materia_teste_data:'', tem_avaliacao:false, avaliacao_final:'', semana_provas:false, data_prova:'' });
         dados = Object.assign({}, dados, { deveres_pendentes: dedupDeveres(dados.deveres_pendentes) });
         return Object.assign({}, sec, { dados });
       });
       let base = Object.assign({}, result, { materiais: lista, secoes });
       if (naJanela) base = Object.assign({}, base, { semana_provas:true });
-      else if (ehRecessoAtivo()) base = Object.assign({}, base, { semana_provas:false });
+      else if (emRecesso()) base = Object.assign({}, base, { semana_provas:false });
       return base;
     }
     // card normal
@@ -2548,7 +2548,7 @@ async function processarDia(res, grade, turmaId, dayKey, ehPrevia, offsetIndex) 
     base = aplicarRegrasProva(base);
     // RECESSO: esconde matéria do teste, avaliação e prova durante o período de recesso.
     // O aluno vê tela limpa (sem aula, sem dever, sem teste) até o retorno.
-    if (ehRecessoAtivo()) {
+    if (emRecesso()) {
       base = Object.assign({}, base, {
         materia_teste: '',
         materia_teste_data: '',
