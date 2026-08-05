@@ -1524,18 +1524,22 @@ function montarMarcaDagua(){
   wm.innerHTML=linhas;
 }
 
-function iniciarApp(){
+async function iniciarApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   montarBoasVindas();
   montarMarcaDagua();
   updateClock();setInterval(updateClock,1000);
 
-  // revalidar dispositivo para garantir que está registrado no servidor
-  // (cobre o caso onde o volume /data foi perdido e o usuário volta com token antigo)
+  // revalidar dispositivo ANTES de carregar o dia
+  // (garante que o dispositivo está registrado no servidor antes do SSE)
   const token=localStorage.getItem('sessionToken');
   const deviceId=getDeviceId();
-  if(token){fetch('/api/revalidar-dispositivo',{method:'POST',headers:{'Content-Type':'application/json','x-session-token':token},body:JSON.stringify({device:deviceId})}).catch(e=>console.warn('Revalidação silenciosa falhou:',e));}
+  if(token){
+    try{
+      await fetch('/api/revalidar-dispositivo',{method:'POST',headers:{'Content-Type':'application/json','x-session-token':token},body:JSON.stringify({device:deviceId})});
+    }catch(e){console.warn('Revalidação falhou:',e);}
+  }
 
   loadDay();
 }
