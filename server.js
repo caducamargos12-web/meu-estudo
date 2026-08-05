@@ -3225,18 +3225,29 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  // Marca se o cliente desconectou (evita writes em conexão morta que explodem o Promise.all)
+  let clienteDesconectou = false;
+  req.on('close', () => { clienteDesconectou = true; });
+
+  // Helper seguro: só escreve se o cliente ainda está conectado
+  function sseWrite(data) {
+    if (clienteDesconectou || res.writableEnded) return;
+    try { res.write('data: ' + JSON.stringify(data) + '\n\n'); } catch (e) { clienteDesconectou = true; }
+  }
+
   if (emRecesso()) {
-    res.write('data: ' + JSON.stringify({
+    sseWrite({
       type:'recesso',
       bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao,
       turmaId, turmaNome: turma.nome,
       recesso: recessoConfig,
       mensagem: 'Em recesso. Aulas voltam em ' + dataIsoParaBR(recessoConfig.fim) + '.'
-    }) + '\n\n');
-    res.write('data: ' + JSON.stringify({ type:'done', bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao }) + '\n\n');
+    });
+    sseWrite({ type:'done', bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao });
     return res.end();
   }
 
+  try {
   // define o dia principal e o dia da prévia
   let diaPrincipal, diaPrevia;
   if (hojeDay >= 1 && hojeDay <= 5) {
@@ -3253,13 +3264,13 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   // calcula o total de matérias para o front montar os placeholders
   const totalMaterias = (diaPrincipal ? (grade[diaPrincipal] || []).length : 0) + (diaPrevia ? (grade[diaPrevia] || []).length : 0);
 
-  res.write('data: ' + JSON.stringify({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao, turmaId, turmaNome: turma.nome }) + '\n\n');
+  sseWrite({ type:'start', fimDeSemana: !diaPrincipal, dayLabel: diaPrincipal ? DIAS_PT[diaPrincipal] : 'Prévia de segunda', total: totalMaterias, bimestreAtivo: estadoBimestre.numero, bimestreVersao: estadoBimestre.versao, turmaId, turmaNome: turma.nome });
 
   let offset = 0;
-  if (diaPrincipal) {
+  if (diaPrincipal && !clienteDesconectou) {
     offset = await processarDia(res, grade, turmaId, diaPrincipal, false, offset);
   }
-  if (diaPrevia) {
+  if (diaPrevia && !clienteDesconectou) {
     offset = await processarDia(res, grade, turmaId, diaPrevia, true, offset);
   }
 
@@ -3270,8 +3281,16 @@ app.get('/api/today', rateLimitGeral, auth, async function(req, res) {
   });
   salvarCache();
 
-  res.write('data: ' + JSON.stringify({ type:'done' }) + '\n\n');
-  res.end();
+  sseWrite({ type:'done' });
+  } catch (e) {
+    console.error('[/api/today] Erro fatal no processamento SSE:', e && e.message ? e.message : e);
+    // Tenta enviar erro ao cliente antes de fechar
+    if (!clienteDesconectou && !res.writableEnded) {
+      try { res.write('data: ' + JSON.stringify({ type:'error', message:'Erro interno. Recarregue a página.' }) + '\n\n'); } catch (_) {}
+    }
+  } finally {
+    if (!res.writableEnded) try { res.end(); } catch (_) {}
+  }
 });
 
 // ── limpa todo o cache manualmente (forçar reprocessamento) ──────────────────
